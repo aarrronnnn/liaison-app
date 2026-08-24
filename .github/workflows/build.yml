@@ -1,0 +1,59 @@
+name: Construire et publier Liaison
+
+# Pousse un tag (git tag v0.4.0 && git push --tags) et GitHub construit
+# le .dmg et le .exe tout seul, puis les attache a la release.
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            script: dist:mac
+          - os: windows-latest
+            script: dist:win
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run ${{ matrix.script }}
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
+      - uses: actions/upload-artifact@v4
+        with:
+          name: liaison-${{ matrix.os }}
+          path: |
+            dist/*.dmg
+            dist/*.exe
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: dist, merge-multiple: true }
+      - run: ls -lh dist
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/*.dmg
+            dist/*.exe
+          name: Liaison ${{ github.ref_name }}
+          body: |
+            Widget de cabine pour DJ.
+
+            **macOS** : ouvre le .dmg, glisse Liaison dans Applications, puis clic droit sur l'app → Ouvrir.
+            **Windows** : lance le .exe, puis « Informations complémentaires » → « Exécuter quand même ».
+
+            Une fois ouverte, l'app te propose l'abonnement ou la saisie d'un code.

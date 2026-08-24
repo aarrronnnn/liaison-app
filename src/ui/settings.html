@@ -1,0 +1,362 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<title>Liaison — reglages</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+:root{--paper:#EDEDEF;--card:#fff;--ink:#0E1013;--ink2:#575C63;--ink3:#8A9099;--line:#DBDBE0;--blue:#1B27D4;--rose:#C0392B;
+--d:Syne,"Helvetica Neue",Arial,sans-serif;--b:"Instrument Sans",system-ui,sans-serif;--m:"DM Mono",ui-monospace,Menlo,monospace}
+*{box-sizing:border-box}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font-size:14px;line-height:1.5}
+.wrap{max-width:940px;margin:0 auto;padding:26px 28px 60px}
+h1{font-family:var(--d);font-weight:800;font-size:26px;letter-spacing:-.03em;margin:0 0 4px;display:flex;align-items:center;gap:10px}
+h1 svg{width:30px;height:19px}
+p.sub{color:var(--ink2);margin:0 0 24px;font-size:14px}
+h2{font-family:var(--d);font-weight:700;font-size:15px;margin:0 0 12px;letter-spacing:-.01em}
+.card{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:20px;margin-bottom:14px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media(max-width:520px){.two{grid-template-columns:1fr}}
+@media(max-width:760px){.grid{grid-template-columns:1fr}}
+label{display:block;font-family:var(--m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:14px 0 6px}
+select,input[type=text],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--ink);font:inherit;font-size:14px}
+button{font-family:var(--m);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:10px 15px;border-radius:2px;
+border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer}
+button.g{background:transparent;color:var(--ink);border-color:var(--line)}
+button.g:hover{border-color:var(--ink)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
+.state{font-family:var(--m);font-size:11px;color:var(--ink2);margin-top:10px}
+.state b{color:var(--blue);font-weight:400}
+.qrbox{display:flex;gap:18px;align-items:flex-start;margin-top:14px}
+.qrbox img{width:132px;height:132px;border:1px solid var(--line);border-radius:4px;background:#fff}
+.tips{font-size:13px;color:var(--ink2);line-height:1.6;margin:10px 0 0}
+.mono{font-family:var(--m);font-size:11.5px;color:var(--ink2);word-break:break-all}
+table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
+th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
+th{font-family:var(--m);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);font-weight:400}
+td.n{font-family:var(--m);color:var(--ink3);width:34px}
+.pill{font-family:var(--m);font-size:10px;padding:3px 7px;border:1px solid var(--line);border-radius:2px;color:var(--ink2)}
+.ok{color:var(--blue)}
+.bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px}
+.bar i{display:block;height:100%;background:var(--blue);width:0}
+.moments li{margin-bottom:6px;color:var(--ink2);font-size:13px}
+.moments b{color:var(--ink)}
+</style></head><body><div class="wrap">
+
+<h1><svg viewBox="0 0 44 26" fill="none"><path d="M5 16.5C5 5 39 5 39 16.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="5" cy="21.4" r="2.8" fill="currentColor"/><circle cx="39" cy="21.4" r="2.8" fill="currentColor"/></svg> Liaison</h1>
+<p class="sub">Reglages. Tout reste sur cette machine.</p>
+
+<div class="card" id="licCard">
+  <h2>Licence <span class="pill" id="licPill">—</span></h2>
+  <div class="grid">
+    <div>
+      <div class="state" id="licState" style="font-size:13.5px;line-height:1.7">—</div>
+      <label>Cle de licence</label>
+      <div class="row" style="margin-top:0">
+        <input type="text" id="licKey" placeholder="LSN-XXXX-XXXX-XXXX" style="flex:1;min-width:220px;text-transform:uppercase;font-family:var(--m)">
+        <button id="licGo">Activer cette machine</button>
+      </div>
+      <div class="state" id="licMsg"></div>
+      <div class="row">
+        <button class="g" id="licRefresh">Verifier maintenant</button>
+        <button class="g" id="licFree">Liberer cette machine</button>
+      </div>
+    </div>
+    <div>
+      <label>Pas encore de cle</label>
+      <p class="tips">L'essai dure 14 jours, toutes fonctions ouvertes. Ensuite, le widget continue de proposer un enchainement, mais les sessions invites et le rejeu de set se ferment.</p>
+      <div class="row">
+        <button id="buyRes">Resident — 19 €/mois</button>
+        <button class="g" id="buyPass">Pass soiree — 9 €</button>
+        <button class="g" id="buyCol">Collectif — 49 €/mois</button>
+      </div>
+      <p class="tips" id="licApi" style="margin-top:12px"></p>
+    </div>
+  </div>
+</div>
+
+<div class="grid">
+  <div class="card">
+    <h2>1 — Ta bibliotheque <span class="pill ok">automatique</span></h2>
+    <p class="tips">Liaison lit la base de ton logiciel la ou elle se trouve — Serato, Traktor, VirtualDJ, rekordbox. Rien a importer, rien a exporter, rien a pointer : tu ajoutes un morceau dans ton logiciel, il est la. Ce qui n'est pas encore analyse l'est en local, sans qu'aucun fichier ne quitte la machine.</p>
+    <table id="srcTable"><thead><tr><th>Sources trouvees</th><th style="width:90px">Type</th></tr></thead><tbody></tbody></table>
+    <div class="bar"><i id="bar"></i></div>
+    <div class="state" id="libState">Recherche en cours…</div>
+    <div class="row">
+      <button id="reScan">Relire maintenant</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>2 — Ton logiciel de mix <span class="pill ok">automatique</span></h2>
+    <p class="tips">Liaison surveille les logiciels ouverts. Le widget apparait quand tu lances ton logiciel et disparait quand tu le fermes ; la bonne source de detection est choisie toute seule.</p>
+    <div class="state" id="appState">Aucun logiciel de mix ouvert.</div>
+    <label style="margin-top:16px">Source de detection <span style="color:var(--ink3)">— laisse sur automatique</span></label>
+    <select id="source">
+      <option value="prolink">rekordbox / CDJ — Pro DJ Link (deck en direct)</option>
+      <option value="serato">Serato DJ Pro — historique de session</option>
+      <option value="virtualdj">VirtualDJ — tracklist du jour</option>
+      <option value="traktor">Traktor Pro — diffusion locale</option>
+    </select>
+    <div id="srcOpts"></div>
+    <p class="tips" id="srcHelp"></p>
+    <div class="state" id="srcState">—</div>
+    <label style="margin-top:16px">Comportement</label>
+    <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px">
+      <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
+        <input type="checkbox" id="optWidget"> Ouvrir le widget uniquement quand un logiciel de mix tourne</label>
+      <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
+        <input type="checkbox" id="optLogin"> Lancer Liaison au demarrage de la machine</label>
+      <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
+        <input type="checkbox" id="optAnnounce"> Pro DJ Link : se declarer sur le reseau si aucun paquet n'arrive</label>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>3 — Contexte de la soiree</h2>
+  <div class="grid">
+    <div>
+      <div class="two">
+        <div>
+          <label>Pays</label>
+          <select id="country"></select>
+        </div>
+        <div>
+          <label>Type d'evenement</label>
+          <select id="event"></select>
+        </div>
+      </div>
+      <p class="tips" id="packLine" style="margin:-2px 0 14px"></p>
+      <label>Nom de la session</label>
+      <input type="text" id="sessName" placeholder="Mariage Lea &amp; Sam">
+      <label>Poids des demandes invites <span id="gwv" class="mono"></span></label>
+      <input type="range" id="gw" min="0" max="100" step="5" style="width:100%">
+      <label>Liste rouge (un par ligne : artiste - titre)</label>
+      <input type="text" id="banned" placeholder="Darude - Sandstorm">
+    </div>
+    <div>
+      <label>Deroule attendu</label>
+      <ul class="moments" id="moments"></ul>
+      <p class="tips" id="packTips"></p>
+    </div>
+  </div>
+  <div class="row"><button id="saveCtx">Enregistrer le contexte</button></div>
+</div>
+
+<div class="card">
+  <h2>4 — Demandes des invites</h2>
+  <p class="tips">Liaison ouvre une page sur ton reseau local. Les invites scannent le QR ou recoivent le lien — aucun compte, aucune appli a installer.</p>
+  <div class="row"><button id="startSess">Ouvrir la session</button></div>
+  <div class="qrbox" id="qrbox" style="display:none">
+    <img id="qr" alt="QR de la session">
+    <div style="flex:1;min-width:0">
+      <div class="mono" id="url"></div>
+      <div class="row">
+        <button class="g" id="shWa">WhatsApp</button>
+        <button class="g" id="shSms">SMS</button>
+        <button class="g" id="shMail">E-mail</button>
+        <button class="g" id="shCopy">Copier le lien</button>
+        <button class="g" id="shQr">Enregistrer le QR</button>
+      </div>
+      <table id="reqTable"><thead><tr><th>Demandes</th><th style="width:60px">Nb</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>5 — Rejouer un set, autrement</h2>
+  <p class="tips">Reprends le vivier d'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l'ordre : jamais le meme enchainement deux fois, et la mixabilite tient toujours.</p>
+  <div class="grid">
+    <div>
+      <label>Set enregistre</label>
+      <select id="setSel"></select>
+      <label>Part du set a abandonner <span class="mono" id="dropv">20 %</span></label>
+      <input type="range" id="drop" min="0" max="60" step="5" value="20" style="width:100%">
+      <div class="row"><button id="replay">Reconstruire l'ordre</button></div>
+      <div class="state" id="replayState">—</div>
+    </div>
+    <div>
+      <table id="replayTable"><thead><tr><th></th><th>Titre</th><th style="width:70px">Key</th><th style="width:70px">BPM</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let C = null, PACK = null, share = null, qrData = null;
+
+const HELP = {
+  prolink: "rekordbox en mode PERFORMANCE avec Pro DJ Link actif, ou des CDJ sur le meme reseau. C'est la seule source qui annonce le morceau CHARGE sur un deck, avant meme qu'il soit joue. Le titre est retrouve en croisant l'identifiant rekordbox avec un export XML.",
+  serato: "Serato ecrit sa session en direct. Rien a configurer : lance Serato, joue un morceau, Liaison suit.",
+  virtualdj: "VirtualDJ ecrit la tracklist du jour dans Documents/VirtualDJ/Tracklists. Rien a configurer.",
+  traktor: "Dans Traktor : Preferences > Broadcasting. Address 127.0.0.1, Port 8000, Mount /liaison, Format Ogg. Clique Broadcast : Traktor envoie le titre a chaque changement."
+};
+
+async function renderPack() {
+  const p = await window.liaison.pack($('#country').value, $('#event').value);
+  if (!p) return;
+  PACK = p;
+  $('#moments').innerHTML = (p.moments || []).map(m => '<li><b>' + esc(m.label) + '</b> — ' + esc(m.brief) + '</li>').join('');
+  $('#packTips').textContent = p.tips || '';
+  const top = Object.entries(p.dna).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]);
+  $('#packLine').innerHTML = 'Ce que Liaison va privilegier : <b>' + top.map(esc).join(' · ') + '</b>'
+    + (p.avoid.length ? ' — ecarte : ' + p.avoid.map(esc).join(', ') : '');
+}
+function renderSrcOpts() {
+  const v = $('#source').value;
+  $('#srcHelp').textContent = HELP[v] || '';
+  $('#srcOpts').innerHTML = v === 'traktor'
+    ? '<label>Port d\'ecoute</label><input type="number" id="tport" value="' + ((C.config.sourceOpts || {}).port || 8000) + '">'
+    : '';
+  const tp = $('#tport');
+  if (tp) tp.onchange = () => window.liaison.setConfig({ source: 'traktor', sourceOpts: { port: Number(tp.value) } });
+}
+
+function renderLic(st){
+  if (!st) return;
+  $('#licPill').textContent = st.label + (st.tier === 'trial' ? ' · ' + st.trialLeft + ' j' : '');
+  $('#licPill').className = 'pill' + (st.tier === 'none' ? '' : ' ok');
+  const bits = [];
+  bits.push('Machine : <b>' + esc(st.deviceName) + '</b>');
+  if (st.key) bits.push('Cle : <b>' + esc(st.key) + '</b>');
+  if (st.tier === 'trial') bits.push('Essai — <b>' + st.trialLeft + ' jours</b> restants');
+  if (st.tier === 'none') bits.push("<b>Essai termine.</b> Le moteur ne propose plus qu'un seul enchainement.");
+  if (st.until) bits.push('Valide jusqu au <b>' + new Date(st.until).toLocaleDateString('fr-FR') + '</b>');
+  if (st.cacheUntil) bits.push('Fonctionne hors ligne jusqu au <b>' + new Date(st.cacheUntil).toLocaleDateString('fr-FR') + '</b>');
+  if (st.lastCheck) bits.push('Derniere verification : ' + new Date(st.lastCheck).toLocaleString('fr-FR'));
+  bits.push('Ouvert : ' + st.features.suggestions + ' suggestions · sessions ' + (st.features.sessions ? 'oui' : 'non') + ' · rejeu de set ' + (st.features.replay ? 'oui' : 'non'));
+  $('#licState').innerHTML = bits.join('<br>');
+  $('#licApi').textContent = 'Serveur de licences : ' + st.api;
+  if (st.key) $('#licKey').value = st.key;
+}
+$('#licGo').onclick = async () => {
+  $('#licMsg').textContent = 'Activation…';
+  const r = await window.liaison.licenseActivate($('#licKey').value.trim().toUpperCase());
+  if (r.ok) { $('#licMsg').innerHTML = '<b>Machine activee.</b>'; renderLic(r.status); }
+  else {
+    let m = r.error || 'Echec';
+    if (r.devices && r.devices.length) m += ' — ' + r.devices.map(d => d.name).join(', ');
+    $('#licMsg').textContent = m;
+  }
+};
+$('#licRefresh').onclick = async () => {
+  $('#licMsg').textContent = 'Verification…';
+  const r = await window.liaison.licenseRefresh();
+  $('#licMsg').textContent = r.offline ? 'Hors ligne — licence en cache conservee.' : (r.error || 'A jour.');
+  renderLic(r.status);
+};
+$('#licFree').onclick = async () => {
+  await window.liaison.licenseRelease();
+  $('#licMsg').textContent = 'Machine liberee. La cle peut servir ailleurs.';
+  renderLic(await window.liaison.licenseStatus());
+};
+$('#buyRes').onclick = () => window.liaison.licenseBuy('resident');
+$('#buyPass').onclick = () => window.liaison.licenseBuy('pass');
+$('#buyCol').onclick = () => window.liaison.licenseBuy('collectif');
+window.liaison.on('license', renderLic);
+
+$('#reScan').onclick = async () => { $('#libState').textContent = 'Relecture…'; await window.liaison.autoImport(); renderSources(); };
+async function renderSources(){
+  const list = await window.liaison.librarySources();
+  $('#srcTable').querySelector('tbody').innerHTML = list.length
+    ? list.map(x => '<tr><td class="mono">' + esc(x.path) + '</td><td><span class="pill ok">' + esc(x.kind) + '</span></td></tr>').join('')
+    : '<tr><td colspan="2" style="color:#8A9099">Recherche en cours — lance ton logiciel de mix au moins une fois pour qu\'il ecrive sa base.</td></tr>';
+}
+async function renderApps(){
+  const apps = await window.liaison.runningApps();
+  $('#appState').innerHTML = apps.length
+    ? 'En cours : <b>' + apps.map(a => esc(a.label)).join(', ') + '</b> — source <b>' + esc(apps[0].nowSource) + '</b>'
+    : 'Aucun logiciel de mix ouvert. Le widget attend.';
+}
+setInterval(renderApps, 5000);
+$('#source').onchange = () => { renderSrcOpts(); window.liaison.setConfig({ source: $('#source').value }); };
+$('#country').onchange = renderPack;
+$('#event').onchange = renderPack;
+$('#gw').oninput = () => $('#gwv').textContent = $('#gw').value + ' %';
+$('#drop').oninput = () => $('#dropv').textContent = $('#drop').value + ' %';
+
+['optWidget','optLogin','optAnnounce'].forEach(id => {
+  $('#' + id).onchange = () => window.liaison.setConfig({
+    autoWidget: $('#optWidget').checked,
+    launchAtLogin: $('#optLogin').checked,
+    prolinkAnnounce: $('#optAnnounce').checked
+  });
+});
+$('#saveCtx').onclick = async () => {
+  await window.liaison.setConfig({
+    pack: $('#country').value + '-' + $('#event').value,
+    sessionName: $('#sessName').value || 'Session',
+    guestWeight: Number($('#gw').value) / 100,
+    banned: $('#banned').value.split(/\n|;/).map(s => s.trim()).filter(Boolean)
+  });
+  $('#saveCtx').textContent = 'Enregistre';
+  setTimeout(() => $('#saveCtx').textContent = 'Enregistrer le contexte', 1400);
+};
+
+$('#startSess').onclick = async () => {
+  const r = await window.liaison.startSession();
+  if (r.locked) { alert(r.error); return; }
+  share = r.share; qrData = r.qr;
+  $('#qr').src = r.qr; $('#url').textContent = r.url; $('#qrbox').style.display = 'flex';
+  refreshReq();
+};
+$('#shWa').onclick = () => window.liaison.openExternal(share.whatsapp);
+$('#shSms').onclick = () => window.liaison.openExternal(share.sms);
+$('#shMail').onclick = () => window.liaison.openExternal(share.mail);
+$('#shCopy').onclick = () => { window.liaison.copy(share.text); $('#shCopy').textContent = 'Copie'; setTimeout(() => $('#shCopy').textContent = 'Copier le lien', 1400); };
+$('#shQr').onclick = () => window.liaison.saveQR(qrData);
+
+async function refreshReq() {
+  const rows = await window.liaison.requests();
+  $('#reqTable').querySelector('tbody').innerHTML = rows.length
+    ? rows.map(r => '<tr><td>' + esc(r.title) + ' <span class="pill">' + esc(r.artist) + '</span></td><td class="n">x' + r.n + '</td></tr>').join('')
+    : '<tr><td colspan="2" style="color:#8A9099">Aucune demande pour l instant.</td></tr>';
+}
+setInterval(() => { if (share) refreshReq(); }, 6000);
+
+$('#replay').onclick = async () => {
+  const id = Number($('#setSel').value);
+  const r = await window.liaison.replaySet({ id: id, drop: Number($('#drop').value) / 100 });
+  if (!r) return;
+  if (r.locked) { $('#replayState').innerHTML = '<b style="color:var(--rose)">' + esc(r.error) + '</b>'; return; }
+  if (r.error) { $('#replayState').textContent = r.error; return; }
+  $('#replayState').innerHTML = 'Nouveaute des enchainements <b>' + r.novelty + ' %</b> · deplacement moyen <b>' + r.movedAvg + ' places</b> · ' + r.kept + ' gardes, ' + r.added + ' ajoutes';
+  $('#replayTable').querySelector('tbody').innerHTML = r.order.map(t =>
+    '<tr><td class="n">' + t.n + '</td><td>' + esc(t.title) + ' <span class="pill">' + esc(t.artist) + '</span></td><td class="mono">' + esc(t.key || '?') + '</td><td class="mono">' + t.bpm + '</td></tr>').join('');
+};
+
+window.liaison.on('progress', p => {
+  $('#bar').style.width = p.total ? (p.done / p.total * 100) + '%' : '0';
+  $('#libState').textContent = p.phase + ' : ' + p.done + ' / ' + p.total;
+});
+window.liaison.on('library', l => { $('#libState').innerHTML = '<b>' + l.n + '</b> titres prets'; $('#bar').style.width = '100%'; });
+window.liaison.on('status', s => { $('#srcState').textContent = (s.ok ? '● ' : '○ ') + (s.msg || ''); });
+window.liaison.on('requests', () => refreshReq());
+window.liaison.on('app', () => renderApps());
+
+(async () => {
+  C = await window.liaison.getConfig();
+  $('#country').innerHTML = C.countries.map(c => '<option value="' + c.id + '">' + c.flag + '  ' + esc(c.label) + '</option>').join('');
+  $('#event').innerHTML = C.events.map(e => '<option value="' + e.id + '">' + esc(e.label) + '</option>').join('');
+  const cut = String(C.config.pack || 'fr-club').indexOf('-');
+  $('#country').value = String(C.config.pack || 'fr-club').slice(0, cut);
+  $('#event').value = String(C.config.pack || 'fr-club').slice(cut + 1);
+  if (!$('#country').value) $('#country').value = 'fr';
+  if (!$('#event').value) $('#event').value = 'club';
+  await renderPack();
+  $('#source').value = C.config.source; renderSrcOpts();
+  $('#sessName').value = C.config.sessionName || '';
+  $('#gw').value = Math.round((C.config.guestWeight || 0.5) * 100); $('#gwv').textContent = $('#gw').value + ' %';
+  $('#banned').value = (C.config.banned || []).join('; ');
+  if (C.libraryCount) $('#libState').innerHTML = '<b>' + C.libraryCount + '</b> titres prets — ' + esc(C.config.libraryPath || '');
+  renderLic(C.license);
+  $('#optWidget').checked = C.config.autoWidget !== false;
+  $('#optLogin').checked = C.config.launchAtLogin !== false;
+  $('#optAnnounce').checked = !!C.config.prolinkAnnounce;
+  renderSources(); renderApps();
+  const sets = await window.liaison.listSets();
+  $('#setSel').innerHTML = sets.length
+    ? sets.map(s => '<option value="' + s.id + '">' + esc(s.name) + ' — ' + new Date(s.at).toLocaleDateString('fr-FR') + ' (' + s.n + ' titres)</option>').join('')
+    : '<option value="">Aucun set enregistre</option>';
+})();
+</script></body></html>

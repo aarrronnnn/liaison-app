@@ -1,0 +1,3 @@
+'use strict';
+/* Signe Liaison en PNG 44x44, genere une fois, embarque pour la barre de menus. */
+module.exports = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACwAAAAsCAYAAAAehFoBAAAA/ElEQVR42u2X0Q3DIAxEswEjZISMwAgdISMwSkZghIzACBklIzREciRkEWGaBvNxT7qvFvc4jFGHAQAAAAAAgG6ZoizT1IsxF7VGbVFfoTZa41ps5EzLR+0VBkvaqab9t9Fwk9ZCaZWO/moVR2typxKeGjd0fLzoTJ89xVAtHsb6S33DUjiLjC+228jC2WpNh6TH5oaXeU7uSKhZdO3UKkwgm/y+KKyrFbzi2PRJaxTRTDeXstiwNmIfjqSNyMc5Sj4ko2hW5GNkz+7+8ux97MNnnkuvOCGKPsLN+94asY8l88VFwbDYh2G7C0oXr9rH1Mm/hF58AAAAAA05ANavkDMYOaQZAAAAAElFTkSuQmCC';

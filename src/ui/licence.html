@@ -1,0 +1,224 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<title>Liaison</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<style>
+:root{--paper:#EDEDEF;--card:#FFF;--card2:#F7F7F9;--ink:#0E1013;--ink2:#575C63;--ink3:#8A9099;
+--line:#DBDBE0;--blue:#1B27D4;--blue2:#141DA0;--rose:#C0392B;--ok:#1B7F4B;
+--d:Syne,"Helvetica Neue",Arial,sans-serif;--b:"Instrument Sans",system-ui,sans-serif;--m:"DM Mono",ui-monospace,Menlo,monospace}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0B0C0E;--card:#131519;--card2:#101216;--ink:#ECEDEF;--ink2:#9CA2AA;--ink3:#6D747D;--line:#242832;--blue:#6E7BFF;--blue2:#8C97FF;--rose:#E0654F;--ok:#6FCF97}}
+*{box-sizing:border-box}
+html,body{height:100%}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font-size:15px;line-height:1.55;
+-webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
+.drag{position:fixed;top:0;left:0;right:0;height:34px;-webkit-app-region:drag;z-index:5}
+.wrap{height:100%;overflow-y:auto;padding:34px 34px 30px}
+h1{font-family:var(--d);font-weight:800;font-size:29px;letter-spacing:-.04em;margin:0 0 8px;line-height:1.05}
+p.sub{color:var(--ink2);margin:0 0 26px;font-size:14.5px}
+.lbl{font-family:var(--m);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);display:block}
+
+.badge{display:flex;align-items:center;gap:12px;margin-bottom:26px}
+.badge img{width:46px;height:46px;border-radius:11px;flex:none}
+.badge .t{display:block;font-family:var(--d);font-weight:700;font-size:13px;letter-spacing:.26em;text-transform:uppercase;line-height:1.2}
+.badge .s{display:block;font-family:var(--m);font-size:10.5px;color:var(--ink3);margin-top:4px;letter-spacing:.04em}
+
+.view{display:none}
+.view.on{display:block}
+
+.plans{display:flex;flex-direction:column;gap:9px;margin-bottom:8px}
+.plan{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:15px 17px;border:1px solid var(--line);
+border-radius:5px;background:var(--card);cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,background .15s}
+.plan:hover{border-color:var(--ink3)}
+.plan.feat{border-color:var(--blue);background:var(--card2)}
+.plan .n{flex:1;min-width:0}
+.plan b{display:block;font-size:15px;font-weight:600}
+.plan small{display:block;color:var(--ink2);font-size:12.5px;margin-top:2px}
+.plan .p{font-family:var(--d);font-weight:700;font-size:19px;letter-spacing:-.03em;white-space:nowrap}
+.plan .p em{font-style:normal;font-family:var(--m);font-size:10px;color:var(--ink3);font-weight:400;display:block;text-align:right;letter-spacing:0}
+
+.btn{font-family:var(--m);font-size:11px;letter-spacing:.14em;text-transform:uppercase;padding:13px 18px;border-radius:3px;
+border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;width:100%;transition:.15s}
+.btn:hover{background:var(--blue2);border-color:var(--blue2)}
+.btn.g{background:transparent;color:var(--ink);border-color:var(--line)}
+.btn.g:hover{border-color:var(--ink)}
+.btn:disabled{opacity:.5;cursor:default}
+.row{display:flex;gap:9px;margin-top:12px}
+
+.link{background:none;border:0;padding:0;font:inherit;font-size:13.5px;color:var(--blue);cursor:pointer;text-decoration:underline;
+text-underline-offset:3px;margin-top:18px}
+.link:hover{color:var(--blue2)}
+
+input{width:100%;padding:16px 18px;border:1px solid var(--line);border-radius:5px;background:var(--card);color:var(--ink);
+font-family:var(--m);font-size:19px;letter-spacing:.09em;text-align:center;text-transform:uppercase;user-select:text}
+input:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:transparent}
+input::placeholder{color:var(--ink3);letter-spacing:.06em}
+
+.msg{font-size:13.5px;margin-top:14px;min-height:20px}
+.msg.err{color:var(--rose)}
+.msg.ok{color:var(--ok)}
+
+.done{text-align:center;padding-top:16px}
+.done .tick{width:66px;height:66px;margin:0 auto 22px;border-radius:50%;border:2px solid var(--ok);
+display:flex;align-items:center;justify-content:center}
+.done .tick svg{width:30px;height:30px;color:var(--ok)}
+.done h1{font-size:26px}
+.feat-list{display:flex;flex-direction:column;gap:7px;margin:22px 0 26px;text-align:left}
+.feat-list div{font-size:13.5px;color:var(--ink2);padding-left:16px;position:relative}
+.feat-list div::before{content:"";position:absolute;left:0;top:9px;width:8px;height:1px;background:var(--blue)}
+
+.foot{margin-top:22px;padding-top:16px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:12px}
+.foot .lbl{font-size:9.5px}
+.tiny{background:none;border:0;padding:0;font-family:var(--m);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
+color:var(--ink3);cursor:pointer}
+.tiny:hover{color:var(--ink)}
+</style></head><body>
+<div class="drag"></div>
+<div class="wrap">
+
+  <div class="badge">
+    <img id="ico" alt="">
+    <span><span class="t">Liaison</span><span class="s" id="state">—</span></span>
+  </div>
+
+  <!-- ============ accueil ============ -->
+  <section class="view" id="v-welcome">
+    <h1>Le morceau d'après,<br>avant que tu le cherches.</h1>
+    <p class="sub">Liaison lit ton deck en direct et ne retient que les titres qui s'enchaînent vraiment. Tu as <b id="trialDays">14 jours</b> pour l'essayer, tout est ouvert.</p>
+    <div class="feat-list">
+      <div>Il lit ta bibliothèque tout seul — rien à importer</div>
+      <div>Le widget s'ouvre avec ton logiciel de mix</div>
+      <div>Sessions invités, courbe de soirée, rejeu de set</div>
+      <div>Tout tourne en local, même sans réseau en cabine</div>
+    </div>
+    <button class="btn" id="goTrial">Commencer</button>
+    <button class="link" data-go="code">J'ai un code</button>
+  </section>
+
+  <!-- ============ offres ============ -->
+  <section class="view" id="v-plans">
+    <h1 id="plansTitle">Continuer avec Liaison</h1>
+    <p class="sub" id="plansSub">Choisis ta formule. Le paiement s'ouvre dans ton navigateur, tu reviens avec une clé.</p>
+    <div class="plans">
+      <button class="plan feat" data-plan="resident">
+        <span class="n"><b>Résident</b><small>Tout, deux machines. 14 jours d'essai.</small></span>
+        <span class="p">19 €<em>/ mois</em></span>
+      </button>
+      <button class="plan" data-plan="pass">
+        <span class="n"><b>Pass soirée</b><small>Une nuit complète, sans abonnement.</small></span>
+        <span class="p">9 €<em>/ 14 h</em></span>
+      </button>
+      <button class="plan" data-plan="collectif">
+        <span class="n"><b>Collectif</b><small>Jusqu'à cinq DJs, mode B2B.</small></span>
+        <span class="p">49 €<em>/ mois</em></span>
+      </button>
+    </div>
+    <button class="link" data-go="code">J'ai un code</button>
+    <div class="foot">
+      <span class="lbl">Paiement sécurisé par Stripe</span>
+      <button class="tiny" id="alreadyPaid">J'ai déjà payé</button>
+    </div>
+  </section>
+
+  <!-- ============ code ============ -->
+  <section class="view" id="v-code">
+    <h1>Entre ton code</h1>
+    <p class="sub">Un code amis, ou la clé reçue après ton paiement. Elle active cette machine.</p>
+    <input id="key" placeholder="LSN-XXXX-XXXX-XXXX" autocomplete="off" spellcheck="false">
+    <div class="msg" id="msg"></div>
+    <button class="btn" id="activate">Activer cette machine</button>
+    <div class="row"><button class="btn g" data-go="plans">Voir les formules</button></div>
+  </section>
+
+  <!-- ============ confirmation ============ -->
+  <section class="view" id="v-done">
+    <div class="done">
+      <div class="tick"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg></div>
+      <h1 id="doneTitle">Machine activée</h1>
+      <p class="sub" id="doneSub">Tout est ouvert.</p>
+      <button class="btn" id="close">Commencer à mixer</button>
+    </div>
+  </section>
+
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let ST = null;
+
+function go(view) {
+  document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
+  $('#v-' + view).classList.add('on');
+  if (view === 'code') setTimeout(() => $('#key').focus(), 60);
+  window.liaison.setHeight(view === 'plans' ? 620 : view === 'code' ? 470 : view === 'done' ? 430 : 600);
+}
+document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
+
+function renderState(st) {
+  ST = st;
+  const s = $('#state');
+  if (st.tier === 'trial') s.textContent = 'Essai — ' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + ' restants';
+  else if (st.tier === 'none') s.textContent = 'Essai terminé';
+  else s.textContent = 'Licence ' + st.label + ' — active';
+  $('#trialDays').textContent = st.trialLeft + ' jours';
+}
+
+/* --- offres --- */
+document.querySelectorAll('[data-plan]').forEach(b => b.onclick = () => {
+  window.liaison.licenseBuy(b.dataset.plan);
+  go('code');
+  $('#msg').className = 'msg';
+  $('#msg').textContent = 'Le paiement s\'est ouvert dans ton navigateur. Reviens ici avec la clé.';
+});
+$('#alreadyPaid').onclick = () => go('code');
+$('#goTrial').onclick = () => window.liaison.closeLicence();
+$('#close').onclick = () => window.liaison.closeLicence();
+
+/* --- saisie du code --- */
+const input = $('#key');
+input.addEventListener('input', () => {
+  $('#msg').className = 'msg';
+  $('#msg').textContent = '';
+});
+input.addEventListener('keydown', e => { if (e.key === 'Enter') $('#activate').click(); });
+
+$('#activate').onclick = async () => {
+  const key = input.value.trim().toUpperCase();
+  if (key.length < 8) { $('#msg').className = 'msg err'; $('#msg').textContent = 'Code trop court.'; return; }
+  $('#activate').disabled = true;
+  $('#msg').className = 'msg';
+  $('#msg').textContent = 'Activation…';
+  const r = await window.liaison.licenseActivate(key);
+  $('#activate').disabled = false;
+  if (r.ok) {
+    const st = r.status;
+    $('#doneTitle').textContent = st.tier === 'ami' ? 'Bienvenue' : 'Machine activée';
+    $('#doneSub').innerHTML = st.tier === 'ami'
+      ? 'Accès complet — tout est ouvert, sans limite de fonctions.'
+      : 'Licence <b>' + esc(st.label) + '</b>. Elle fonctionne hors ligne jusqu\'au ' +
+        new Date(st.cacheUntil).toLocaleDateString('fr-FR') + '.';
+    renderState(st);
+    go('done');
+  } else {
+    $('#msg').className = 'msg err';
+    let m = r.error || 'Activation impossible.';
+    if (r.devices && r.devices.length) m += ' Machines déjà actives : ' + r.devices.map(d => esc(d.name)).join(', ') + '.';
+    $('#msg').textContent = m;
+  }
+};
+
+window.liaison.on('license', renderState);
+
+(async () => {
+  $('#ico').src = await window.liaison.iconDataUrl();
+  const st = await window.liaison.licenseStatus();
+  renderState(st);
+  const view = new URLSearchParams(location.search).get('v')
+    || (st.tier === 'none' ? 'plans' : st.key ? 'plans' : 'welcome');
+  if (view === 'plans' && st.tier === 'none') {
+    $('#plansTitle').textContent = 'Ton essai est terminé';
+    $('#plansSub').textContent = 'Le widget continue de proposer un enchaînement, mais les sessions invités et le rejeu de set sont fermés.';
+  }
+  go(view);
+})();
+</script>
+</body></html>
