@@ -60,6 +60,9 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 /* Deja joue : ce soir en rouge (une faute), une autre fois en gris
    (une information). La couleur porte le poids, pas le texte. */
 .mm .deja{color:var(--cream3);font-weight:700}
+/* La cloture reservee, quand son heure est venue. Elle est en tete
+   parce que le moteur l'y met — l'etiquette dit pourquoi. */
+.mm .clo{color:var(--blueLit);font-weight:700}
 .mm .deja.grave{color:var(--redLit)}
 
 /* ---------- analyse de fond ----------
@@ -463,7 +466,7 @@ function renderSug(list) {
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
+        <span class="mm">${r.cloture ? '<span class="clo">CLÔTURE</span> · ' : ''}${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>

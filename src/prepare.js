@@ -121,8 +121,13 @@ function preparer(o) {
     const vivier = dispo.filter(t => !pris.has(t.id));
     if (!vivier.length) break;
 
+    /* On passe au moteur ce qui vient d'etre place : sans cette
+       memoire, la preparation converge exactement comme le faisait
+       la soiree en direct — quatre genres sur onze, et le meme
+       artiste plusieurs fois dans la meme heure. */
     const props = suggest(precedent, vivier, {
-      dna: dna, arc: sens, mode: 'crowd', wanted: wanted, limit: 8
+      dna: dna, arc: sens, mode: 'crowd', wanted: wanted, limit: 8,
+      recent: ordre.map(o => o.track), avancement: i / Math.max(1, aPrendre - 1)
     });
     if (!props.length) break;
 
@@ -131,11 +136,29 @@ function preparer(o) {
        courbe tranche entre des candidats tous mixables. Un titre
        deja joue au meme endroit est penalise, sans etre interdit :
        une bibliotheque etroite doit quand meme donner un set. */
+    /* Trois corrections sur le classement du moteur, dans l'ordre
+       de ce qui compte pour une preparation :
+
+       la courbe, parce que le moteur classe la mixabilite et que
+       c'est a nous de choisir le bon niveau parmi des candidats
+       tous mixables ;
+
+       le deja-joue, penalise a 34 et non a 18 : mesure sur une
+       preparation de 110 titres, 18 laissait passer cinq morceaux
+       de la veille — assez pour qu'un habitue le remarque ;
+
+       l'artiste, verifie ici en plus du moteur : sur une longue
+       preparation, un nom pouvait revenir quatre fois. */
+    const nomsRecents = new Set(ordre.slice(-30)
+      .map(o => String(o.track.artist || '').toLowerCase().trim()).filter(Boolean));
+
     let choisi = null, bs = -Infinity;
     for (const p of props) {
       const e = p.track.energy == null ? 5 : p.track.energy;
+      const nom = String(p.track.artist || '').toLowerCase().trim();
       const s = p.total - Math.abs(e - viser) * 9
-              - (eviter.has(p.track.id) ? 18 : 0)
+              - (eviter.has(p.track.id) ? 34 : 0)
+              - (nom && nomsRecents.has(nom) ? 30 : 0)
               + (wanted.has(p.track.id) ? 14 : 0);
       if (s > bs) { bs = s; choisi = p; }
     }

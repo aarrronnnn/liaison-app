@@ -238,14 +238,19 @@ class GuestServer {
     if (d.n >= this.maxPerDevice)
       return { ok: false, error: 'Tu as utilise tes ' + this.maxPerDevice + ' demandes. Laisse la place aux autres.' };
 
+    /* Le doublon se verifie AVANT le delai. Dans l'autre ordre, on
+       repond « attends 90 secondes » a quelqu'un dont la demande
+       sera refusee de toute facon : il attend pour rien, puis
+       apprend qu'il avait deja vote. Autant le lui dire tout de
+       suite — et lui laisser son delai intact pour un autre titre. */
+    const k = keyOf({ artist: artist, title: title });
+    if (d.voted.has(k))
+      return { ok: false, error: 'Tu as deja demande ce morceau — il est dans la liste.' };
+
     const since = (now - d.last) / 1000;
     if (d.last && since < this.cooldown)
       return { ok: false, reste: Math.ceil(this.cooldown - since),
                error: 'Encore un instant avant la prochaine.' };
-
-    const k = keyOf({ artist: artist, title: title });
-    if (d.voted.has(k))
-      return { ok: false, error: 'Tu as deja demande ce morceau — il est dans la liste.' };
 
     const cur = this.requests.get(k) || { title: title, artist: artist, n: 0, at: now, first: now };
     cur.n++; cur.at = now;

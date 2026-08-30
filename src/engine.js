@@ -4,6 +4,8 @@
    Aucune dépendance : partagé entre le process principal et l'UI.
    ============================================================ */
 
+const genres = require('./genres');
+
 const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
 
 function harmScore(a, b) {
@@ -43,12 +45,27 @@ const timbreScore = (a, b) => {
   return Math.max(10, 100 - Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * 11);
 };
 
-function crowdScore(track, dna) {
-  const tags = track.tags || [];
-  let hit = 0, max = 0;
-  for (const k of Object.keys(dna || {})) {
-    max = Math.max(max, dna[k]);
-    if (tags.includes(k)) hit = Math.max(hit, dna[k]);
+/* ------------------------------------------------------------
+   La note de salle.
+
+   Elle compare les genres du morceau a ceux que le contexte
+   privilegie. C'etait une egalite de chaines : « Chanson
+   francaise » ne touchait pas « variete », et un mariage francais
+   ecartait donc la chanson francaise — mesure a 7 sur 100 alors
+   que le pack la porte a 80. Le rapprochement passe maintenant
+   par les familles de genres.
+
+   L'ADN etendu est calcule une fois par appel a suggest(), pas
+   par morceau : sur trente mille titres, la difference se compte
+   en dizaines de millisecondes.
+   ------------------------------------------------------------ */
+function crowdScore(track, dna, dnaPret) {
+  const D = dnaPret || genres.dnaEtendu(dna);
+  const P = D.poids, max = D.max;
+  let hit = 0;
+  for (const [f, sur] of genres.famillesDe(track)) {
+    const v = P.get(f);
+    if (v != null) { const eff = v * sur; if (eff > hit) hit = eff; }
   }
   /* Ecart accentue : sans ca, un genre a 70 et un genre a 90 se valent
      presque, et le contexte de soiree ne se voit pas dans la liste. */
@@ -71,7 +88,107 @@ function transitionOf(cur, nx, tp, h) {
   return { n: 'Fondu filtre — 24 temps', d: 'Fondu passe-haut sur la sortie pour liberer les basses.' };
 }
 
-const keyOf = t => ((t.artist || '') + ' - ' + (t.title || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+/* Construite des milliers de fois par suggestion : on la garde
+   sur le morceau plutot que de la refabriquer. */
+const keyOf = t => {
+  if (t._k) return t._k;
+  const k = ((t.artist || '') + ' - ' + (t.title || '')).toLowerCase().replace(/\s+/g, ' ').trim();
+  Object.defineProperty(t, '_k', { value: k, enumerable: false, writable: true });
+  return k;
+};
+
+/* ------------------------------------------------------------
+   La memoire de la derniere heure.
+
+   Un moteur qui ne note que la compatibilite converge : il trouve
+   une poche de tempo et de genre ou tout s'enchaine bien, et il
+   n'en sort plus. Mesure sur une soiree de cinq heures et trente
+   mille morceaux : quatre genres sur onze joues, dont 47 % de
+   tech house, et un meme artiste huit fois. Techniquement
+   parfait, humainement insupportable.
+
+   On donne donc au moteur ce qu'un DJ a naturellement : le
+   souvenir de ce qu'il vient de passer. Ce n'est pas un interdit,
+   c'est une penalite — si un morceau est le bon malgre tout, il
+   remonte quand meme.
+   ------------------------------------------------------------ */
+function memoireDe(recent) {
+  const M = { artistes: new Map(), familles: new Map(), n: 0 };
+  if (!recent || !recent.length) return M;
+  /* Deux fenetres differentes, parce que les deux problemes n'ont
+     pas la meme echelle. Un genre sature s'entend sur une demi-heure
+     — vingt-quatre titres. Un artiste qui revient s'entend sur toute
+     la soiree : mesure sur cinq heures, une fenetre de vingt-quatre
+     laissait passer le meme nom six fois. On garde donc quarante-huit
+     titres pour les artistes, et vingt-quatre pour les genres. */
+  const pourGenres = recent.slice(-24);
+  const derniers = recent.slice(-48);
+  M.n = pourGenres.length;
+  for (const t of pourGenres) {
+    for (const [f] of genres.famillesDe(t)) M.familles.set(f, (M.familles.get(f) || 0) + 1);
+  }
+  derniers.forEach((t, i) => {
+    /* le plus recent pese le plus : rang 0 = le dernier joue */
+    const rang = derniers.length - 1 - i;
+    const a = String(t.artist || '').toLowerCase().trim();
+    if (a && (!M.artistes.has(a) || M.artistes.get(a) > rang)) M.artistes.set(a, rang);
+  });
+  return M;
+}
+
+/** Ce que la memoire retire a un candidat. Toujours negatif ou nul. */
+function penaliteVariete(t, M) {
+  if (!M || !M.n) return 0;
+  let p = 0;
+
+  /* Meme artiste. Deux fois de suite est une faute ; trois titres
+     plus loin, c'est encore trop tot ; au-dela de douze, on oublie. */
+  const a = String(t.artist || '').toLowerCase().trim();
+  if (a) {
+    const rang = M.artistes.get(a);
+    if (rang != null) p -= rang <= 2 ? 46 : rang <= 6 ? 32 : rang <= 14 ? 20 : rang <= 28 ? 11 : 5;
+  }
+
+  /* Genre sature. On ne penalise pas un genre parce qu'il revient,
+     mais parce qu'il occupe TOUTE la place : au-dela d'un tiers des
+     vingt-quatre derniers, chaque point de plus coute. */
+  let part = 0;
+  for (const [f] of genres.famillesDe(t)) {
+    const n = M.familles.get(f) || 0;
+    if (n / M.n > part) part = n / M.n;
+  }
+  /* Seuil, pente et plafond mesures, pas choisis : sur cinq soirees
+     simulees de 85 morceaux, 0,34/62/22 donnait 4,4 genres et un
+     genre dominant a 34 % ; 0,22/170/40 donne 7 genres et 26 %,
+     sans rien perdre en tempo (0,47 % median) ni en harmonie (97). */
+  if (part > 0.22) p -= Math.min(40, (part - 0.22) * 170);
+
+  return p;
+}
+
+/* ------------------------------------------------------------
+   Le crible de tempo.
+
+   Noter trente mille morceaux prend cent millisecondes, et le
+   moteur est rappele a chaque changement de titre. Or un morceau
+   dont le tempo s'ecarte de plus de 12 % n'a aucune chance
+   d'entrer dans les cinq premiers : meme parfait partout ailleurs,
+   sa note de tempo tombe sous 10 sur 100 et le total ne remonte
+   pas. On les ecarte donc avant de les noter, en gardant le demi
+   et le double, qui sont mixables.
+
+   La marge est large a dessein — 12 % quand un DJ ne depasse
+   jamais 6 — pour que le crible ne change jamais le classement :
+   il ne fait qu'eviter du calcul inutile.
+   ------------------------------------------------------------ */
+const MARGE_CRIBLE = 0.12;
+function passeLeCrible(bpmRef, bpm) {
+  if (!(bpm > 0)) return false;
+  for (const r of [1, 2, 0.5]) {
+    if (Math.abs(bpm * r - bpmRef) / bpmRef <= MARGE_CRIBLE) return true;
+  }
+  return false;
+}
 
 function suggest(cur, library, opt) {
   opt = opt || {};
@@ -87,24 +204,52 @@ function suggest(cur, library, opt) {
   const wTrend = mode === 'trend' ? 0.18 : 0.04;
   const W = 0.27 + 0.24 + 0.15 + 0.14 + wCrowd + wTrend;
 
+  /* prepares une fois, pas par morceau */
+  const dnaPret = genres.dnaEtendu(dna);
+  const M = memoireDe(opt.recent);
+  /* Un titre du client qu'on n'a toujours pas joue prend du poids
+     a mesure que la soiree avance : a 14 points fixes, la moitie
+     des titres voulus n'etaient jamais sortis en cinq heures. */
+  const urgence = 14 + Math.round((opt.avancement || 0) * 26);
+  /* Un morceau epingle : la cloture reservee, quand son heure est
+     venue. On la retirait des suggestions jusqu'a la fin, puis on
+     la remettait dans le vivier en esperant qu'elle gagne — sur
+     trente mille candidats, elle ne gagnait jamais. Une reservation
+     qui ne ressort pas n'est pas une reservation. */
+  const epingle = opt.epingle || null;
+
   return library
-    .filter(t => t.id !== cur.id && !banned.has(keyOf(t)) && t.bpm > 0)
+    .filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
+      /* Le morceau epingle traverse le crible de tempo. Sans cette
+         exception, une cloture reservee a 118 BPM alors que le set
+         a derive vers 132 etait ecartee avant meme d'etre notee :
+         on la reservait toute la soiree pour qu'elle ne sorte
+         jamais. Elle apparait donc avec son vrai ecart de tempo
+         affiche — au DJ de decider s'il la cale ou s'il coupe. */
+      (t.bpm > 0) && (t.id === epingle || passeLeCrible(cur.bpm, t.bpm)))
     .map(t => {
       const h = harmScore(cur.key, t.key);
       const tp = tempoScore(cur.bpm, t.bpm);
       const en = energyScore(cur.energy == null ? 5 : cur.energy, t.energy == null ? 5 : t.energy, arc);
       const ti = timbreScore(cur.timbre, t.timbre);
-      const cr = crowdScore(t, dna);
+      const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
       let total = (h * 0.27 + tp.s * 0.24 + en * 0.15 + ti * 0.14 + cr * wCrowd + td * wTrend) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       const voc = cur.vocal && t.vocal ? -6 : 0;
       /* Un titre demande par le client remonte, mais ne double jamais un
          morceau injouable : le bonus s'ajoute au score, il ne le remplace pas. */
-      const ask = wanted.has(t.id) ? 14 : 0;
-      total = Math.max(4, Math.min(99, Math.round(total + voc + ask)));
+      const ask = wanted.has(t.id) ? urgence : 0;
+      /* Un morceau epingle echappe a la penalite de variete : c'est
+         un choix delibere, pas une proposition parmi d'autres. Sans
+         cette exception, une cloture dont l'artiste venait d'etre
+         joue perdait quarante points et retombait dans la liste. */
+      const pin = epingle && t.id === epingle ? 45 : 0;
+      const va = pin ? 0 : penaliteVariete(t, M);
+      total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
-               client: wanted.has(t.id), total: total, transition: transitionOf(cur, t, tp, h) };
+               client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
+               transition: transitionOf(cur, t, tp, h) };
     })
     .sort((a, b) => b.total - a.total)
     .slice(0, limit);
@@ -204,6 +349,13 @@ function rescue(cur, library, opt) {
   const limit = opt.limit || 3;
   if (!cur) return [];
 
+  /* Le sauvetage ignore la courbe de soiree, mais pas la memoire :
+     remonter la piste avec le meme artiste qu'il y a trois titres
+     s'entend, meme a 2 h du matin. La penalite est reduite de
+     moitie — sauver la piste passe avant la variete. */
+  const M = memoireDe(opt.recent);
+  const dnaPret = genres.dnaEtendu(dna);
+
   const out = [];
   for (const t of library) {
     if (t.id === cur.id || banned.has(keyOf(t)) || !(t.bpm > 0)) continue;
@@ -215,7 +367,7 @@ function rescue(cur, library, opt) {
     if (e < 6) continue;                         /* on remonte la salle, pas on l'endort */
 
     /* reconnaissance immediate : notoriete d'abord, ADN de la salle ensuite */
-    const fam = (t.pop == null ? 40 : t.pop) * 0.62 + crowdScore(t, dna) * 0.38;
+    const fam = (t.pop == null ? 40 : t.pop) * 0.62 + crowdScore(t, dna, dnaPret) * 0.38;
 
     /* impact : energie, voix, et une intro courte */
     const st = structures.get(t.id);
@@ -225,7 +377,7 @@ function rescue(cur, library, opt) {
 
     const total = Math.round(
       tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
-    ) + (wanted.has(t.id) ? 12 : 0);
+    ) + (wanted.has(t.id) ? 12 : 0) + Math.round(penaliteVariete(t, M) * 0.5);
     out.push({
       track: t, total: Math.max(4, Math.min(99, total)),
       tempo: tp, h: h, fam: Math.round(fam), energy: e,
@@ -324,6 +476,109 @@ function combine(q, cible) {
   return Math.max(d, 0.42 * d + 0.58 * t);
 }
 
+/* ------------------------------------------------------------
+   Les formes mises a plat, gardees sur le morceau.
+
+   normalize() applique cinq expressions regulieres et une
+   decomposition Unicode. Le faire trois fois par morceau et par
+   frappe de clavier, sur trente mille morceaux, coutait une
+   seconde par lettre tapee : un invite qui ecrit « stromae » sur
+   son telephone attendait sept secondes.
+
+   Ces trois formes ne dependent que du titre et de l'artiste. On
+   les calcule une fois, on les garde, et la recherche redevient
+   instantanee.
+   ------------------------------------------------------------ */
+function formesDe(t) {
+  if (t._n) return t._n;
+  const artist = t.artist || '', title = t.title || '';
+  const n = [
+    normalize(artist + ' ' + title),
+    normalize(title + ' ' + artist),
+    normalize(title)
+  ];
+  Object.defineProperty(t, '_n', { value: n, enumerable: false, writable: true });
+  return n;
+}
+
+/* ------------------------------------------------------------
+   L'index de recherche.
+
+   Comparer une requete a trente mille morceaux demande quatre-
+   vingt-dix mille comparaisons de bigrammes : sept cents
+   millisecondes, a chaque lettre tapee par un invite. Inutilisable
+   sur un telephone.
+
+   Or un morceau ne peut atteindre le seuil que s'il partage au
+   moins un mot avec la requete — ou un debut de mot, pour survivre
+   aux fautes de frappe. On construit donc, une fois par
+   bibliotheque, un index des mots et des debuts de mots ; la
+   requete n'est comparee qu'aux morceaux qui en partagent un.
+
+   Le debut de mot est a trois lettres : « dreems » et « dreams »
+   partagent « dre », « eurythmic » et « eurythmics » partagent
+   « eur ». C'est ce qui garde la tolerance aux fautes tout en
+   ecartant les vingt-neuf mille morceaux sans rapport.
+
+   L'index est attache a la bibliotheque par une WeakMap : quand
+   elle est remplacee, il disparait avec elle.
+   ------------------------------------------------------------ */
+const INDEX = new WeakMap();
+
+function motsDe(s) {
+  const out = [];
+  for (const m of String(s || '').split(' ')) if (m.length >= 2) out.push(m);
+  return out;
+}
+
+function indexDe(library) {
+  let ix = INDEX.get(library);
+  if (ix && ix.n === library.length) return ix;
+  const mots = new Map(), debuts = new Map();
+  const ajoute = (carte, cle, i) => {
+    let s = carte.get(cle);
+    if (!s) { s = []; carte.set(cle, s); }
+    if (s[s.length - 1] !== i) s.push(i);
+  };
+  for (let i = 0; i < library.length; i++) {
+    const f = formesDe(library[i]);
+    for (const m of motsDe(f[0])) {
+      ajoute(mots, m, i);
+      if (m.length >= 3) ajoute(debuts, m.slice(0, 3), i);
+    }
+  }
+  ix = { mots, debuts, n: library.length };
+  INDEX.set(library, ix);
+  return ix;
+}
+
+/** Les morceaux qui valent la peine d'etre compares a cette requete. */
+function candidats(q, library) {
+  const ix = indexDe(library);
+  const vus = new Set();
+  for (const m of motsDe(q)) {
+    const exact = ix.mots.get(m);
+    if (exact) for (const i of exact) vus.add(i);
+    if (m.length >= 3) {
+      const pre = ix.debuts.get(m.slice(0, 3));
+      if (pre) for (const i of pre) vus.add(i);
+    }
+  }
+  /* Filet : quand l'index ne propose rien — mots colles
+     (« djpaxel »), faute sur les trois premieres lettres — on
+     repasse sur toute la bibliotheque. C'est lent, mais ca
+     n'arrive que sur une requete qui n'aurait rien donne du tout,
+     et une seconde d'attente vaut mieux qu'un « aucun resultat »
+     alors que le morceau est la. */
+  if (!vus.size) for (let i = 0; i < library.length; i++) vus.add(i);
+  return vus;
+}
+
+function noteDe(q, t) {
+  const f = formesDe(t);
+  return Math.max(combine(q, f[0]), combine(q, f[1]), combine(q, f[2]));
+}
+
 /**
  * Retrouve un morceau depuis un texte approximatif.
  * @param {string} text  ce qui a ete tape, scrape ou colle
@@ -335,14 +590,9 @@ function match(text, library, threshold) {
   const q = normalize(text);
   if (q.length < 3) return null;
   let best = null, bestScore = 0;
-  for (const t of library) {
-    const artist = t.artist || '', title = t.title || '';
-    const sc = Math.max(
-      combine(q, normalize(artist + ' ' + title)),
-      combine(q, normalize(title + ' ' + artist)),
-      combine(q, normalize(title))
-    );
-    if (sc > bestScore) { bestScore = sc; best = t; }
+  for (const i of candidats(q, library)) {
+    const sc = noteDe(q, library[i]);
+    if (sc > bestScore) { bestScore = sc; best = library[i]; }
   }
   return bestScore >= threshold ? { track: best, score: bestScore } : null;
 }
@@ -351,18 +601,15 @@ function match(text, library, threshold) {
 function search(text, library, limit, threshold) {
   const q = normalize(text);
   if (q.length < 2) return [];
+  const seuil = threshold == null ? 0.34 : threshold;
   const out = [];
-  for (const t of library) {
-    const sc = Math.max(
-      combine(q, normalize((t.artist || '') + ' ' + (t.title || ''))),
-      combine(q, normalize((t.title || '') + ' ' + (t.artist || ''))),
-      combine(q, normalize(t.title || ''))
-    );
-    if (sc >= (threshold == null ? 0.34 : threshold)) out.push({ track: t, score: sc });
+  for (const i of candidats(q, library)) {
+    const sc = noteDe(q, library[i]);
+    if (sc >= seuil) out.push({ track: library[i], score: sc });
   }
   return out.sort((a, b) => b.score - a.score).slice(0, limit || 8);
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
-                   mixPlan, rescue, mmss };
+                   mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, formesDe };

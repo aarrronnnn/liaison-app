@@ -407,6 +407,19 @@ function currentFilter() {
   };
 }
 
+/* La cloture a epingler maintenant, ou rien. Le resultat est garde
+   pour que le widget puisse dire au DJ qu'elle a change. */
+let clotureRevue = null;
+function clotureEpinglee(vivier, ph) {
+  if (!ph || !ph.liberer || !landPlan || !landPlan.closer || !current) { clotureRevue = null; return null; }
+  const r = landing.clotureMaintenant(landPlan, current, vivier, {
+    playedIds: setlog ? setlog.playedIds() : new Set(),
+    banned: bannedSet(), wanted: clientSet.wanted
+  });
+  clotureRevue = r;
+  return r && r.track ? r.track.id : null;
+}
+
 /** Ou en est le set par rapport au plan d'atterrissage. */
 function landingNow() {
   if (!landPlan || !landPlan.ok) return null;
@@ -444,7 +457,14 @@ function computeSuggestions(limit) {
   return engine.suggest(current, vivier, {
     dna: currentDNA(), arc: arc, mode: mode,
     banned: bannedSet(), wanted: clientSet.wanted,
-    trends: trends, limit: n
+    trends: trends, limit: n,
+    /* la memoire de la soiree : ce qui vient d'etre joue */
+    recent: setlog && setlog.current ? setlog.current.played : [],
+    avancement: ph && landPlan ? 1 : 0,
+    /* quand l'heure de la cloture est venue, on la fait remonter —
+       apres avoir verifie qu'elle est encore mixable depuis ce qui
+       tourne, et en la remplacant si elle ne l'est plus */
+    epingle: clotureEpinglee(vivier, ph)
   }).map(r => {
     ensureStructure(r.track);
     const plan = planFor(r.track);
@@ -457,6 +477,7 @@ function computeSuggestions(limit) {
       trend: r.trend, h: Math.round(r.h), tempoS: Math.round(r.tempo.s),
       crowd: r.crowd, timbre: Math.round(r.timbreScore),
       plan: plan, introBars: st && st.ok ? st.introBars : null, client: !!r.client,
+      cloture: !!r.cloture,
       /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
       deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
@@ -617,6 +638,7 @@ ipcMain.handle('rescue', () => {
     dna: currentDNA(),
     banned: bannedSet(), wanted: clientSet.wanted,
     structures: structures,
+    recent: setlog && setlog.current ? setlog.current.played : [],
     limit: 3
   }).map(r => {
     ensureStructure(r.track);
@@ -742,7 +764,9 @@ ipcMain.handle('landing:plan', (e, minutes) => {
 });
 
 ipcMain.handle('landing:get', () =>
-  landPlan && landPlan.ok ? Object.assign({}, landPlan, { phase: landingNow() }) : null);
+  landPlan && landPlan.ok
+    ? Object.assign({}, landPlan, { phase: landingNow(), revue: clotureRevue })
+    : null);
 
 ipcMain.handle('landing:clear', () => {
   landPlan = null; landAt = 0;

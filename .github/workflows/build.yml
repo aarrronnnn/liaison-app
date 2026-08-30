@@ -1,6 +1,6 @@
 name: Construire et publier Liaison
 
-# Pousse un tag (git tag v0.4.1 && git push --tags) et GitHub construit
+# Pousse un tag (git tag v0.9.0 && git push --tags) et GitHub construit
 # le .dmg et le .exe tout seul, puis les attache a la release.
 on:
   push:
@@ -13,29 +13,59 @@ permissions:
 jobs:
   build:
     strategy:
+      # Une architecture qui echoue ne doit pas emporter les autres :
+      # mieux vaut publier le .exe et le .dmg Apple Silicon que rien.
       fail-fast: false
       matrix:
         include:
           - os: macos-latest
-            script: dist:mac
+            nom: mac-arm64
+            args: --mac --arm64
+          - os: macos-13          # dernier runner Intel : on y construit le .dmg x64
+            nom: mac-x64
+            args: --mac --x64
           - os: windows-latest
-            script: dist:win
+            nom: windows
+            args: --win --x64
+    name: ${{ matrix.nom }}
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          # Node 20 est deprecie sur les runners : les actions basculent
+          # d'office sur 24 et l'avertissement revient a chaque build.
+          node-version: 22
           cache: npm
-      - run: npm ci
-      - run: npm run ${{ matrix.script }}
+
+      - name: Installer les dependances
+        run: npm ci
+
+      # Un diagnostic AVANT la construction : quand ca casse, on veut
+      # savoir sur quoi on tourne sans relancer le build a l'aveugle.
+      - name: Contexte
+        run: |
+          node -v
+          npm -v
+          echo "electron-builder : $(npx electron-builder --version)"
+          node -e "const p=require('./package.json');console.log('Liaison',p.version)"
+
+      - name: Construire
+        run: npx electron-builder ${{ matrix.args }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # electron-builder ne reclame plus rien
-          EP_PRE_RELEASE: false
+          DEBUG: electron-builder                # le journal complet en cas d'echec
+
+      # Ce qui a reellement ete produit. Sans cette etape, un dossier
+      # dist vide se voit seulement a l'etape suivante, sans dire pourquoi.
+      - name: Ce qui a ete produit
+        if: always()
+        shell: bash
+        run: ls -lh dist/ || echo "aucun dossier dist"
+
       - uses: actions/upload-artifact@v4
         with:
-          name: liaison-${{ matrix.os }}
+          name: liaison-${{ matrix.nom }}
           path: |
             dist/*.dmg
             dist/*.exe
@@ -43,6 +73,9 @@ jobs:
 
   release:
     needs: build
+    # On publie meme si une plateforme a echoue : les autres fichiers
+    # ont ete construits et n'ont pas a attendre.
+    if: always()
     runs-on: ubuntu-latest
     permissions:
       contents: write

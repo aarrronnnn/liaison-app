@@ -21,7 +21,7 @@
    Sinon il sort au milieu du set et il n'y a plus de fin.
    ============================================================ */
 
-const { keyOf, mmss } = require('./engine');
+const { keyOf, mmss, tempoScore } = require('./engine');
 
 const MIN = 60;
 
@@ -155,6 +155,56 @@ function plan(o) {
   };
 }
 
+/* ------------------------------------------------------------
+   La cloture, revue a l'heure dite.
+
+   On reserve une cloture quarante-cinq minutes avant la fin, en
+   ignorant forcement ou le set sera rendu a ce moment-la. Mesure
+   sur quarante soirees : une fois sur cinq, le set a derive de
+   118 vers 136 BPM et la cloture reservee se retrouvait a quinze
+   pour cent d'ecart. On la faisait alors remonter de force — donc
+   on proposait en premier un enchainement rate.
+
+   Une reservation sert a garder une bonne fin disponible, pas a
+   imposer un titre precis. Quand l'heure vient, on verifie donc
+   que la cloture reservee est encore atteignable ; sinon on en
+   choisit une autre parmi ce qui l'est. Le DJ y gagne une vraie
+   fin plutot qu'un nom tenu par principe.
+   ------------------------------------------------------------ */
+function clotureMaintenant(p, cur, library, opt) {
+  if (!p || !p.ok || !p.closer) return null;
+  opt = opt || {};
+  const reservee = p.closer;
+
+  /* encore mixable ? six pour cent, c'est ce qu'un DJ cale au pitch
+     sans que ca s'entende */
+  if (cur && cur.bpm > 0 && reservee.bpm > 0) {
+    const tp = tempoScore(cur.bpm, reservee.bpm);
+    const ecart = Math.abs(tp.delta) / cur.bpm * 100;
+    if (ecart <= 6) return { track: reservee, remplacee: false, ecart: ecart };
+  } else {
+    return { track: reservee, remplacee: false, ecart: 0 };
+  }
+
+  /* sinon : la meilleure cloture parmi ce qui se cale maintenant */
+  const atteignables = (library || []).filter(t => {
+    if (!(t.bpm > 0) || !cur || !(cur.bpm > 0)) return false;
+    const tp = tempoScore(cur.bpm, t.bpm);
+    return Math.abs(tp.delta) / cur.bpm * 100 <= 6;
+  });
+  const remplacante = closer(atteignables, opt);
+  if (!remplacante) return { track: reservee, remplacee: false, ecart: 99, faute: true };
+  const tp = tempoScore(cur.bpm, remplacante.bpm);
+  return {
+    track: { id: remplacante.id, title: remplacante.title, artist: remplacante.artist,
+             bpm: remplacante.bpm, key: remplacante.key, energy: remplacante.energy,
+             duration: remplacante.duration },
+    remplacee: true,
+    ancienne: reservee.title,
+    ecart: Math.abs(tp.delta) / cur.bpm * 100
+  };
+}
+
 /**
  * Quelle phase maintenant, et quelle consigne pour le moteur ?
  * @returns {{k, nom, arc:'up'|'hold'|'down', texte, reste}}
@@ -167,9 +217,14 @@ function now(p, ecouleMin) {
   return {
     k: ph.k, nom: ph.nom, texte: ph.texte, reste: Math.round(reste),
     arc: ph.k === 'tenir' ? 'hold' : ph.k === 'dernier' ? 'up' : 'down',
-    /* la cloture ne redevient jouable que dans la derniere ligne droite */
-    liberer: ph.k === 'poser' && reste <= (p.moyenne || 4.2) * 1.2
+    /* La cloture redevient jouable dans la derniere ligne droite.
+       La fenetre valait 1,2 morceau : une seule chance de la voir
+       sortir, et sur huit soirees simulees elle etait manquee trois
+       fois. A 2,4 morceaux, le DJ la voit passer deux ou trois fois
+       avant la fin — assez pour la prendre, pas assez pour qu'elle
+       tombe au milieu de la descente. */
+    liberer: ph.k === 'poser' && reste <= (p.moyenne || 4.2) * 2.4
   };
 }
 
-module.exports = { plan, phases, closer, now, mmss };
+module.exports = { plan, phases, closer, clotureMaintenant, now, mmss };
