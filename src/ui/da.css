@@ -1,0 +1,28 @@
+/* ============================================================
+   Liaison — direction artistique.
+   Editorial francais : titrage condense, etiquettes en monospace,
+   filets nets, aucun effet. Bleu et rouge de part et d'autre d'un
+   point blanc — le symbole de la liaison.
+   Les polices sont embarquees : le club n'a pas de wifi.
+   ============================================================ */
+@font-face{font-family:Anton;src:url('./fonts/anton-400.woff2') format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:'Space Grotesk';src:url('./fonts/grotesk-400.woff2') format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:'Space Grotesk';src:url('./fonts/grotesk-500.woff2') format('woff2');font-weight:500;font-display:block}
+@font-face{font-family:'Space Grotesk';src:url('./fonts/grotesk-700.woff2') format('woff2');font-weight:700;font-display:block}
+@font-face{font-family:'Space Mono';src:url('./fonts/mono-400.woff2') format('woff2');font-weight:400;font-display:block}
+@font-face{font-family:'Space Mono';src:url('./fonts/mono-700.woff2') format('woff2');font-weight:700;font-display:block}
+
+:root{
+  /* papier */
+  --paper:#F2EFE6; --paper2:#E7E3D7; --ink:#141518; --ink2:#5E6167; --ink3:#8E9198; --rule:#D5D0C2;
+  /* cabine */
+  --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#63666D;
+  --wire:#26282E; --wire2:#33363E;
+  /* drapeau */
+  --blue:#1F35D8; --blueLit:#4459FF; --red:#E8402A; --redLit:#FF5A42;
+  --d:Anton,'Arial Narrow',Impact,sans-serif;
+  --b:'Space Grotesk',system-ui,-apple-system,sans-serif;
+  --m:'Space Mono',ui-monospace,Menlo,monospace;
+}
+.lbl{font-family:var(--m);font-size:9px;letter-spacing:.2em;text-transform:uppercase}
+.dsp{font-family:var(--d);font-weight:400;text-transform:uppercase;letter-spacing:.01em;line-height:.92}

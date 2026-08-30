@@ -12,6 +12,7 @@ const { GuestServer, SetLog, qrPNG, shareLinks } = require('./session');
 const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
 const { AppWatcher } = require('./watcher');
+const { StructurePool, StructureCache } = require('./structure');
 const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
 
@@ -20,6 +21,7 @@ const CFG = () => path.join(DIR(), 'config.json');
 const CACHE = () => path.join(DIR(), 'analysis-cache.json');
 const SETS = () => path.join(DIR(), 'sets.json');
 const LIC = () => path.join(DIR(), 'license.json');
+const STRUCT = () => path.join(DIR(), 'structure-cache.json');
 
 const DEFAULTS = {
   source: null, sourceOpts: {},
@@ -42,6 +44,14 @@ const guests = new GuestServer();
 let setlog = null;
 let trends = new Map();
 let license = null;
+
+/* ---- structure des morceaux : points de mix ---- */
+const structPool = new StructurePool(2);
+let structCache = null;
+const structures = new Map();      /* id du morceau -> structure */
+const structBusy = new Set();
+let structTimer = null;
+
 const feat = () => (license ? license.features() : TIERS.trial);
 
 function loadConfig() {
@@ -144,6 +154,48 @@ async function autoImport(preferKind) {
 }
 
 /* ---------------- ADN de la session ---------------- */
+/* ============================================================
+   Structure a la demande.
+
+   On n'analyse pas la bibliotheque entiere : seulement le morceau
+   qui tourne et les titres proposes. C'est deux secondes de calcul
+   par morceau, dans un fil separe, et le resultat est garde sur
+   disque tant que le fichier ne change pas.
+   ============================================================ */
+function ensureStructure(track) {
+  if (!track || !track.path || structures.has(track.id) || structBusy.has(track.id)) return;
+  if (structCache) {
+    const hit = structCache.get(track);
+    if (hit) { structures.set(track.id, hit); return; }
+  }
+  structBusy.add(track.id);
+  structPool.run(track.path, track.bpm)
+    .then(r => {
+      structures.set(track.id, r);
+      if (structCache) { structCache.set(track, r); structCache.save(); }
+      scheduleStructRefresh();
+    })
+    .catch(() => { structures.set(track.id, { ok: false }); })
+    .then(() => { structBusy.delete(track.id); });
+}
+
+/* Une structure qui arrive change les reperes affiches : on renvoie
+   la liste, mais groupee, pour ne pas la reconstruire six fois. */
+function scheduleStructRefresh() {
+  if (structTimer) return;
+  structTimer = setTimeout(() => {
+    structTimer = null;
+    if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  }, 350);
+}
+
+function planFor(nextTrack) {
+  if (!current) return null;
+  const a = structures.get(current.id), b = structures.get(nextTrack.id);
+  if (!a || !b || !a.ok || !b.ok) return null;
+  return engine.mixPlan(current, nextTrack, a, b);
+}
+
 function currentDNA() {
   const pack = locales.byId(config.pack);
   const guestDNA = {};
@@ -163,22 +215,30 @@ function computeSuggestions(limit) {
     dna: currentDNA(), arc: config.arc, mode: mode,
     banned: new Set((config.banned || []).map(s => s.toLowerCase())),
     trends: trends, limit: n
-  }).map(r => ({
-    title: r.track.title, artist: r.track.artist, key: r.track.key, bpm: r.track.bpm,
-    energy: r.track.energy, id: r.track.id, path: r.track.path,
-    total: r.total, transition: r.transition.n, why: r.transition.d,
-    delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
-    trend: r.trend, h: Math.round(r.h), tempoS: Math.round(r.tempo.s),
-    crowd: r.crowd, timbre: Math.round(r.timbreScore)
-  }));
+  }).map(r => {
+    ensureStructure(r.track);
+    const plan = planFor(r.track);
+    const st = structures.get(r.track.id);
+    return {
+      title: r.track.title, artist: r.track.artist, key: r.track.key, bpm: r.track.bpm,
+      energy: r.track.energy, id: r.track.id, path: r.track.path,
+      total: r.total, transition: r.transition.n, why: r.transition.d,
+      delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
+      trend: r.trend, h: Math.round(r.h), tempoS: Math.round(r.tempo.s),
+      crowd: r.crowd, timbre: Math.round(r.timbreScore),
+      plan: plan, introBars: st && st.ok ? st.introBars : null
+    };
+  });
 }
 
 function setCurrent(track, how) {
   current = track;
+  ensureStructure(track);
   if (setlog) setlog.play(track, how || null);
   send('now', current ? {
-    title: current.title, artist: current.artist, key: current.key,
-    bpm: current.bpm, energy: current.energy, how: how || 'auto'
+    id: current.id, title: current.title, artist: current.artist, key: current.key,
+    bpm: current.bpm, energy: current.energy, how: how || 'auto',
+    structure: structures.get(current.id) || null
   } : null);
   send('suggestions', computeSuggestions(config.suggestCount || 3));
 }
@@ -227,7 +287,34 @@ ipcMain.handle('source:pickFile', async () => {
 });
 
 ipcMain.handle('suggest', () => computeSuggestions(config.suggestCount || 3));
-ipcMain.handle('now:get', () => current && { title: current.title, artist: current.artist, key: current.key, bpm: current.bpm, energy: current.energy });
+ipcMain.handle('structure:get', (e, id) => structures.get(id) || null);
+
+/* Le bouton de sauvetage : on ignore la courbe de soiree. */
+ipcMain.handle('rescue', () => {
+  if (!current) return [];
+  return engine.rescue(current, library, {
+    dna: currentDNA(),
+    banned: new Set((config.banned || []).map(s => s.toLowerCase())),
+    structures: structures,
+    limit: 3
+  }).map(r => {
+    ensureStructure(r.track);
+    return {
+      id: r.track.id, title: r.track.title, artist: r.track.artist,
+      key: r.track.key, bpm: r.track.bpm, energy: r.track.energy, path: r.track.path,
+      total: r.total, why: r.why, introBars: r.introBars,
+      transition: r.transition.n,
+      delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
+      plan: planFor(r.track)
+    };
+  });
+});
+
+ipcMain.handle('now:get', () => current && {
+  id: current.id, title: current.title, artist: current.artist, key: current.key,
+  bpm: current.bpm, energy: current.energy,
+  structure: structures.get(current.id) || null
+});
 
 /* Chargement : on met le titre dans le presse-papier, on ecrit une
    playlist M3U que le logiciel peut ouvrir, et on peut reveler le fichier. */
@@ -390,6 +477,7 @@ app.whenReady().then(async () => {
   license = new License(LIC());
   license.ensureTrial();
   setlog = new SetLog(SETS());
+  structCache = new StructureCache(STRUCT());
   createWidget();
   if (config.autoWidget) widget.hide();          // le widget attend son logiciel
   buildTray();
@@ -419,4 +507,10 @@ app.on('activate', () => {
   else if (settings && !settings.isDestroyed()) settings.focus();
   else openSettings();
 });
-app.on('before-quit', () => { app.isQuitting = true; watcher.stop(); now.stop(); guests.stop(); if (libraryWatcher) libraryWatcher.stop(); });
+app.on('before-quit', () => {
+  app.isQuitting = true;
+  watcher.stop(); now.stop(); guests.stop();
+  if (libraryWatcher) libraryWatcher.stop();
+  if (structCache) structCache.save();
+  structPool.close();
+});

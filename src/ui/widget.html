@@ -1,56 +1,123 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
 <title>Liaison</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./da.css">
 <style>
-:root{--bg:#13161B;--sunk:#0F1216;--line:#22272F;--line2:#2C333D;--ink:#E9EBEE;--dim:#79828D;--dim2:#525A64;--blue:#6E7BFF;--rose:#E0654F;
---d:Syne,"Helvetica Neue",Arial,sans-serif;--b:"Instrument Sans",system-ui,sans-serif;--m:"DM Mono",ui-monospace,Menlo,monospace}
 *{box-sizing:border-box}
 html,body{margin:0;height:100%}
-body{background:var(--bg);color:var(--ink);font-family:var(--b);font-size:13px;user-select:none;overflow:hidden;
-border:1px solid var(--line2);border-radius:8px}
-.lbl{font-family:var(--m);font-size:9px;letter-spacing:.18em;text-transform:uppercase;color:var(--dim2)}
+body{background:var(--deep);color:var(--cream);font-family:var(--b);font-size:13px;
+user-select:none;overflow:hidden;border:1px solid var(--wire2);border-radius:6px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
-.grip{display:flex;align-items:center;gap:8px;padding:10px 11px;border-bottom:1px solid var(--line);-webkit-app-region:drag}
-.grip .mk{display:flex;align-items:center;gap:7px}
-.grip svg{width:20px;height:12px}
-.grip .nm{font-family:var(--d);font-weight:700;font-size:9.5px;letter-spacing:.24em}
-.grip .act{margin-left:auto;display:flex;gap:2px;-webkit-app-region:no-drag}
-.grip .act button{padding:4px 7px;border-radius:3px;color:var(--dim2);font-family:var(--m);font-size:10px}
-.grip .act button:hover{background:var(--sunk);color:var(--ink)}
-.ref{padding:11px 12px;border-bottom:1px solid var(--line);background:var(--sunk)}
-.ref .t{font-size:13.5px;font-weight:600;margin-top:5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.ref .m{font-family:var(--m);font-size:10.5px;color:var(--dim);margin-top:4px;display:flex;gap:11px}
-.ref .m b{color:#A8AFB8;font-weight:400}
-.list{padding:5px;overflow:auto;max-height:330px}
-.row{display:grid;grid-template-columns:28px minmax(0,1fr) auto;gap:9px;align-items:center;padding:9px 8px;border:1px solid transparent;border-radius:4px}
-.row:hover{background:#171B21;border-color:var(--line)}
-.sc{font-family:var(--m);font-size:14px;text-align:center}
-.row.best .sc{color:var(--blue)}
-.n{font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm{font-family:var(--m);font-size:9.5px;color:#697280;margin-top:3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm .up{color:var(--blue)}
-.go{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;padding:6px 9px;border-radius:3px;border:1px solid var(--line2);color:#8C95A0;white-space:nowrap}
+.lbl{color:var(--cream3)}
+
+/* ---------- barre ---------- */
+.grip{display:flex;align-items:center;gap:9px;padding:9px 10px;border-bottom:1px solid var(--wire);-webkit-app-region:drag}
+.grip .mk{display:flex;align-items:center;gap:8px}
+.grip .mk svg{width:17px;height:17px;display:block}
+.grip .nm{font-family:var(--m);font-weight:700;font-size:9.5px;letter-spacing:.3em}
+.grip .act{margin-left:auto;display:flex;gap:1px;-webkit-app-region:no-drag}
+.grip .act button{width:24px;height:22px;border-radius:2px;color:var(--cream3);font-family:var(--m);font-size:12px;line-height:1}
+.grip .act button:hover{background:var(--deep3);color:var(--cream)}
+
+/* ---------- morceau en cours ---------- */
+.ref{padding:11px 12px 12px;border-bottom:1px solid var(--wire);background:var(--deep2)}
+.ref .top{display:flex;align-items:baseline;gap:8px}
+.ref .top .lbl{color:var(--blueLit)}
+.ref .t{font-family:var(--d);font-size:21px;line-height:.98;text-transform:uppercase;margin-top:7px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref .a{font-family:var(--m);font-size:10px;color:var(--cream3);margin-top:4px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ref .m{font-family:var(--m);font-size:10px;color:var(--cream2);margin-top:9px;display:flex;gap:13px}
+.ref .m i{font-style:normal;color:var(--cream3)}
+
+/* ---------- ruban de structure ---------- */
+.strip{margin-top:10px;height:16px;position:relative;background:var(--deep3);border-radius:2px;overflow:hidden}
+.strip .seg{position:absolute;top:0;bottom:0}
+.strip .body{background:linear-gradient(180deg,#243056,#1B2440)}
+.strip .brk{background:repeating-linear-gradient(90deg,var(--deep3) 0 3px,#20232A 3px 6px)}
+.strip .mk{position:absolute;top:0;bottom:0;width:2px}
+.strip .mk.s{background:var(--blueLit)}
+.strip .mk.w{background:var(--cream)}
+.strip .mk.o{background:var(--redLit)}
+.strip .cur{position:absolute;top:0;bottom:0;width:1px;background:#fff;opacity:.45}
+.striplbl{display:flex;justify-content:space-between;font-family:var(--m);font-size:8.5px;
+letter-spacing:.1em;color:var(--cream3);margin-top:4px;text-transform:uppercase}
+
+/* ---------- liste ---------- */
+.list{overflow:auto;max-height:334px;padding:4px}
+.row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:start;
+padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
+.row + .row{border-top:1px solid var(--wire)}
+.row:hover{background:var(--deep2);border-color:var(--wire2)}
+.sc{font-family:var(--d);font-size:25px;line-height:.85;text-align:right;color:var(--cream3);padding-top:1px}
+.row.best .sc{color:var(--blueLit)}
+.row.sos .sc{color:var(--redLit)}
+.n{display:block;font-family:var(--b);font-weight:700;font-size:12.5px;letter-spacing:-.01em;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mm{display:block;font-family:var(--m);font-size:9.5px;color:var(--cream3);margin-top:3px;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mm .up{color:var(--blueLit)}
+/* plan de mix */
+.plan{font-family:var(--m);font-size:9.5px;margin-top:6px;display:flex;gap:11px;
+padding-top:6px;border-top:1px solid var(--wire);white-space:nowrap;overflow:hidden}
+.plan b{font-weight:400;color:var(--cream3);letter-spacing:.1em;text-transform:uppercase;font-size:8.5px}
+.plan s{text-decoration:none;color:var(--cream)}
+.plan .k1 s{color:var(--blueLit)}
+.plan .k3 s{color:var(--redLit)}
+.plan.wait{color:var(--cream3);border-top-color:var(--wire);display:block}
+.go{font-family:var(--m);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;padding:6px 7px;
+border-radius:2px;border:1px solid var(--wire2);color:var(--cream3);white-space:nowrap}
 .go:hover{background:var(--blue);border-color:var(--blue);color:#fff}
-.foot{display:flex;align-items:center;gap:3px;padding:8px 9px;border-top:1px solid var(--line)}
-.chip{font-family:var(--m);font-size:9px;letter-spacing:.1em;text-transform:uppercase;padding:5px 8px;border-radius:2px;border:1px solid #262C35;color:#697280}
-.chip:hover{color:var(--ink)}
-.chip[aria-pressed=true]{background:var(--ink);border-color:var(--ink);color:#0D0F12}
-.foot .st{margin-left:auto;font-family:var(--m);font-size:9px;color:var(--dim2);max-width:118px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.empty{padding:26px 16px;color:var(--dim);font-size:12.5px;line-height:1.6;text-align:center}
-.search{padding:8px 9px;border-top:1px solid var(--line);display:none}
+.row.sos .go:hover{background:var(--red);border-color:var(--red)}
+
+.empty{padding:28px 18px;color:var(--cream3);font-size:12.5px;line-height:1.65;text-align:center}
+.empty b{display:block;font-family:var(--d);font-size:15px;color:var(--cream2);text-transform:uppercase;margin-bottom:8px}
+
+/* ---------- bandeau sauvetage ---------- */
+.sosbar{display:none;align-items:center;gap:9px;padding:8px 11px;background:var(--red);color:#fff;min-width:0}
+.sosbar.on{display:flex}
+.sosbar .lbl{color:#fff;opacity:.85}
+.sosbar .t{font-family:var(--d);font-size:13px;text-transform:uppercase}
+.sosbar button{margin-left:auto;font-family:var(--m);font-size:9px;letter-spacing:.12em;
+text-transform:uppercase;border:1px solid rgba(255,255,255,.5);padding:5px 8px;border-radius:2px}
+.sosbar button:hover{background:#fff;color:var(--red)}
+
+/* ---------- recherche ---------- */
+.search{padding:8px 9px;border-top:1px solid var(--wire);display:none}
 .search.on{display:block}
-.search input{width:100%;padding:9px 10px;border-radius:4px;border:1px solid var(--line2);background:var(--sunk);color:var(--ink);font:inherit;font-size:12.5px}
+.search input{width:100%;padding:9px 10px;border-radius:2px;border:1px solid var(--wire2);
+background:var(--deep2);color:var(--cream);font-family:var(--b);font-size:12.5px}
+.search input:focus{outline:none;border-color:var(--blueLit)}
 .sres{margin-top:5px;max-height:130px;overflow:auto}
-.sres div{padding:7px 9px;border-radius:3px;font-size:12.5px;cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.sres div:hover{background:#171B21}
-.toast{position:fixed;left:9px;right:9px;bottom:9px;background:var(--blue);color:#fff;font-family:var(--m);font-size:10px;letter-spacing:.08em;
-padding:9px 11px;border-radius:4px;opacity:0;transform:translateY(6px);transition:.2s;pointer-events:none}
+.sres div{padding:7px 9px;border-radius:2px;font-size:12.5px;cursor:pointer;
+white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sres div:hover{background:var(--deep2)}
+
+/* ---------- pied ---------- */
+.foot{display:flex;align-items:center;gap:3px;padding:7px 8px;border-top:1px solid var(--wire)}
+.chip{font-family:var(--m);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
+padding:6px 8px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3)}
+.chip:hover{color:var(--cream);border-color:var(--wire2)}
+.chip[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+.chip.sos{border-color:#4A2119;color:var(--redLit);margin-left:2px}
+.chip.sos:hover{background:var(--red);border-color:var(--red);color:#fff}
+.foot .st{margin-left:auto;font-family:var(--m);font-size:8.5px;color:var(--cream3);
+max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.licbar{display:none;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--wire)}
+.licbar.on{display:flex}
+.toast{position:fixed;left:8px;right:8px;bottom:8px;background:var(--blue);color:#fff;font-family:var(--m);
+font-size:9.5px;letter-spacing:.06em;padding:9px 11px;border-radius:2px;opacity:0;transform:translateY(6px);
+transition:.18s;pointer-events:none}
 .toast.on{opacity:1;transform:none}
+.toast.red{background:var(--red)}
 </style></head><body>
 
 <div class="grip">
   <span class="mk">
-    <svg viewBox="0 0 44 26" fill="none"><path d="M5 16.5C5 5 39 5 39 16.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="5" cy="21.4" r="2.8" fill="currentColor"/><circle cx="39" cy="21.4" r="2.8" fill="currentColor"/></svg>
+    <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <path d="M3.2 3.2C8.4 8 9.9 9.6 12 12c-2.1 2.4-3.6 4-8.8 8.8" stroke="#4459FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <path d="M20.8 3.2C15.6 8 14.1 9.6 12 12c2.1 2.4 3.6 4 8.8 8.8" stroke="#FF5A42" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="12" cy="12" r="2.5" fill="#EFEAE0"/>
+    </svg>
     <span class="nm">LIAISON</span>
   </span>
   <span class="act">
@@ -61,20 +128,36 @@ padding:9px 11px;border-radius:4px;opacity:0;transform:translateY(6px);transitio
 </div>
 
 <div class="ref">
-  <span class="lbl" id="refLbl">En attente du deck</span>
+  <div class="top"><span class="lbl" id="refLbl">En attente du deck</span></div>
   <div class="t" id="refT">—</div>
-  <div class="m"><span>KEY <b id="refK">—</b></span><span>BPM <b id="refB">—</b></span><span>É <b id="refE">—</b></span></div>
+  <div class="a" id="refA">—</div>
+  <div class="m">
+    <span>KEY <i id="refK">—</i></span>
+    <span>BPM <i id="refB">—</i></span>
+    <span>ÉNERGIE <i id="refE">—</i></span>
+    <span id="refD"></span>
+  </div>
+  <div class="strip" id="strip"></div>
+  <div class="striplbl" id="striplbl"><span>—</span><span>—</span></div>
 </div>
 
-<div class="list" id="list"><div class="empty">Charge un morceau dans ton logiciel,<br>ou declare-le avec le bouton loupe.</div></div>
+<div class="sosbar" id="sosbar">
+  <span class="t">Sauvetage</span>
+  <span class="lbl" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ce qui remonte la salle</span>
+  <button id="sosBack">Revenir</button>
+</div>
+
+<div class="list" id="list">
+  <div class="empty"><b>En attente</b>Charge un morceau dans ton logiciel,<br>ou declare-le avec la loupe.</div>
+</div>
 
 <div class="search" id="search">
   <input id="q" placeholder="Titre ou artiste en cours…" autocomplete="off">
   <div class="sres" id="sres"></div>
 </div>
 
-<div class="foot" id="licBar" style="display:none;border-top:1px solid var(--line);padding:9px 10px">
-  <span class="lbl" id="licTxt" style="color:var(--blue)"></span>
+<div class="licbar" id="licBar">
+  <span class="lbl" id="licTxt" style="color:var(--blueLit)"></span>
   <button class="chip" id="licBuy" style="margin-left:auto">Prendre une licence</button>
 </div>
 
@@ -82,7 +165,7 @@ padding:9px 11px;border-radius:4px;opacity:0;transform:translateY(6px);transitio
   <button class="chip" data-arc="up" aria-pressed="true">Monter</button>
   <button class="chip" data-arc="hold" aria-pressed="false">Tenir</button>
   <button class="chip" data-arc="down" aria-pressed="false">Baisser</button>
-  <button class="chip" data-mode="trend" aria-pressed="false">Tendance</button>
+  <button class="chip sos" id="btnSos" title="Le dancefloor se vide">SOS</button>
   <span class="st" id="st">—</span>
 </div>
 
@@ -92,39 +175,144 @@ padding:9px 11px;border-radius:4px;opacity:0;transform:translateY(6px);transitio
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const fmt = p => Math.abs(p) < 0.05 ? '±0,0 %' : (p > 0 ? '+' : '−') + Math.abs(p).toFixed(1).replace('.', ',') + ' %';
+const mmss = t => { if (!isFinite(t) || t < 0) t = 0; const m = Math.floor(t / 60), s = Math.round(t % 60);
+  return m + ':' + (s < 10 ? '0' : '') + (s === 60 ? 0 : s); };
 let cfg = { arc: 'up', mode: 'crowd' };
 
-function toast(msg) { const t = $('#toast'); t.textContent = msg; t.classList.add('on'); setTimeout(() => t.classList.remove('on'), 1900); }
+/* La fenetre epouse son contenu : trois propositions ou une seule,
+   le widget ne laisse jamais de vide noir au-dessus du logiciel. */
+let hTimer = null, lastH = 0;
+function fitHeight() {
+  clearTimeout(hTimer);
+  hTimer = setTimeout(() => {
+    const h = Math.ceil(document.body.getBoundingClientRect().height) + 2;
+    if (h && Math.abs(h - lastH) > 3 && window.liaison.setHeight) {
+      lastH = h;
+      window.liaison.setHeight(Math.max(180, Math.min(760, h)));
+    }
+  }, 60);
+}
+let sosMode = false, lastSug = [], curStruct = null;
+
+function toast(msg, red) {
+  const t = $('#toast'); t.textContent = msg;
+  t.className = 'toast on' + (red ? ' red' : '');
+  setTimeout(() => t.className = 'toast' + (red ? ' red' : ''), 1900);
+}
+
+/* ---------- ruban de structure ----------
+   Ce que le DJ doit voir d'un coup d'oeil : ou la batterie arrive,
+   ou elle part, et ou se trouvent les creux. Les trois reperes du
+   plan de mix de la meilleure proposition sont poses par-dessus. */
+function renderStrip(st, plan) {
+  const strip = $('#strip'), lab = $('#striplbl');
+  if (!st || !st.ok || !st.duration) {
+    strip.innerHTML = '';
+    lab.innerHTML = '<span>Analyse de la structure…</span><span></span>';
+    return;
+  }
+  const D = st.duration, pc = t => Math.max(0, Math.min(100, (t / D) * 100));
+  let h = '<div class="seg body" style="left:' + pc(st.readyAt) + '%;right:' + (100 - pc(st.outPoint)) + '%"></div>';
+  for (const b of st.breaks || [])
+    h += '<div class="seg brk" style="left:' + pc(b.start) + '%;right:' + (100 - pc(b.end)) + '%"></div>';
+  if (plan && plan.ok) {
+    h += '<div class="mk s" style="left:' + pc(plan.start) + '%" title="Lance B"></div>';
+    h += '<div class="mk w" style="left:' + pc(plan.swap) + '%" title="Bascule les basses"></div>';
+    h += '<div class="mk o" style="left:' + pc(plan.out) + '%" title="Sors A"></div>';
+  }
+  strip.innerHTML = h;
+  const ov = plan && plan.ok ? ' · Recouvrement ' + plan.overlapBars + ' mes.' : '';
+  lab.innerHTML = '<span>Intro ' + st.introBars + ' · Outro ' + st.outroBars + ov + '</span>' +
+                  '<span>' + mmss(D) + '</span>';
+}
 
 function renderNow(n) {
-  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Declare a la main' : 'Detecte sur le deck') : 'En attente du deck';
+  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck') : 'En attente du deck';
   $('#refT').textContent = n ? n.title : '—';
+  $('#refA').textContent = n ? (n.artist || '') : '—';
   $('#refK').textContent = n ? (n.key || '—') : '—';
   $('#refB').textContent = n ? Number(n.bpm).toFixed(1).replace('.', ',') : '—';
   $('#refE').textContent = n ? n.energy : '—';
+  if (n && n.structure) curStruct = n.structure;
+  if (!n) { curStruct = null; renderStrip(null); }
+  else renderStrip(curStruct, lastSug[0] && lastSug[0].plan);
 }
+
+function planHTML(r) {
+  if (!r.plan) return '<div class="plan wait">Points de mix en cours de calcul…</div>';
+  if (!r.plan.ok) return '<div class="plan wait">' + esc(r.plan.note || '') + '</div>';
+  const p = r.plan;
+  if (p.tight)
+    return '<div class="plan"><span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
+           '<span class="k3"><b>Coupe</b> <s>' + p.swapLabel + '</s></span>' +
+           '<span><b>Intro</b> <s>' + p.introPlayed + ' s</s></span></div>';
+  return '<div class="plan" title="Recouvrement ' + p.overlapBars + ' mesures">' +
+    '<span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
+    '<span class="k2"><b>Basses</b> <s>' + p.swapLabel + '</s></span>' +
+    '<span class="k3"><b>Sors</b> <s>' + p.outLabel + '</s></span></div>';
+}
+
 function renderSug(list) {
+  lastSug = list || [];
+  if (sosMode) return;
   const box = $('#list');
-  if (!list || !list.length) { box.innerHTML = '<div class="empty">Aucun enchainement pour le moment.<br>Importe ta bibliotheque dans les reglages.</div>'; return; }
+  if (!list || !list.length) {
+    box.innerHTML = '<div class="empty"><b>Rien a proposer</b>Importe ta bibliotheque dans les reglages.</div>';
+    return;
+  }
   box.innerHTML = list.map((r, i) => `
     <div class="row ${i === 0 ? 'best' : ''}">
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">↑</span>' : ''}</span>
+        <span class="mm">${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
+        ${planHTML(r)}
       </span>
-      <button class="go" data-id="${r.id}">Charger</button>
+      <button class="go" data-id="${r.id}">Copier</button>
     </div>`).join('');
+  renderStrip(curStruct, list[0] && list[0].plan);
+  fitHeight();
 }
 
+function renderSos(list) {
+  const box = $('#list');
+  if (!list || !list.length) {
+    box.innerHTML = '<div class="empty"><b>Rien de mixable</b>Aucun titre assez fort ne se cale sur ce tempo.<br>Passe par un morceau relais.</div>';
+    return;
+  }
+  box.innerHTML = list.map(r => `
+    <div class="row sos">
+      <span class="sc">${r.total}</span>
+      <span style="min-width:0">
+        <span class="n">${esc(r.title)}</span>
+        <span class="mm">${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span>
+        ${planHTML(r)}
+      </span>
+      <button class="go" data-id="${r.id}">Copier</button>
+    </div>`).join('');
+  fitHeight();
+}
+
+/* ---------- interactions ---------- */
 $('#list').addEventListener('click', async e => {
   const b = e.target.closest('.go'); if (!b) return;
   const r = await window.liaison.loadTrack(Number(b.dataset.id));
-  if (r && r.ok) toast('« ' + r.copied +' » copie — colle dans ta recherche');
+  if (r && r.ok) toast('« ' + r.copied + ' » copie — colle dans ta recherche', sosMode);
 });
 $('#btnSettings').onclick = () => window.liaison.openSettings();
 $('#btnHide').onclick = () => window.liaison.hideWidget();
-$('#btnSearch').onclick = () => { $('#search').classList.toggle('on'); $('#q').focus(); };
+$('#btnSearch').onclick = () => { $('#search').classList.toggle('on'); $('#q').focus(); fitHeight(); };
+
+async function enterSos() {
+  sosMode = true;
+  $('#sosbar').classList.add('on');
+  $('#list').innerHTML = '<div class="empty"><b>Sauvetage</b>Recherche…</div>';
+  try { renderSos(await window.liaison.rescue()); }
+  catch (e) { $('#list').innerHTML = '<div class="empty"><b>Indisponible</b>Charge d\'abord un morceau.</div>'; }
+}
+function exitSos() { sosMode = false; $('#sosbar').classList.remove('on'); renderSug(lastSug); fitHeight(); }
+$('#btnSos').onclick = () => (sosMode ? exitSos() : enterSos());
+$('#sosBack').onclick = exitSos;
 
 let tq;
 $('#q').addEventListener('input', e => {
@@ -132,7 +320,7 @@ $('#q').addEventListener('input', e => {
   const v = e.target.value;
   tq = setTimeout(async () => {
     const r = await window.liaison.searchTrack(v);
-    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}">${esc(x.title)} <span style="color:#697280">— ${esc(x.artist)} · ${esc(x.key || '?')} · ${x.bpm}</span></div>`).join('');
+    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}">${esc(x.title)} <span style="color:var(--cream3)">— ${esc(x.artist)} · ${esc(x.key || '?')} · ${x.bpm}</span></div>`).join('');
   }, 200);
 });
 $('#sres').addEventListener('click', async e => {
@@ -145,40 +333,36 @@ document.querySelectorAll('[data-arc]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', 'false'));
   b.setAttribute('aria-pressed', 'true');
   window.liaison.setConfig({ arc: b.dataset.arc });
+  if (sosMode) exitSos();
 });
-$('[data-mode]').onclick = function () {
-  const on = this.getAttribute('aria-pressed') !== 'true';
-  this.setAttribute('aria-pressed', on ? 'true' : 'false');
-  window.liaison.setConfig({ mode: on ? 'trend' : 'crowd' });
-};
+
+function licState(st) {
+  const bar = $('#licBar');
+  if (st.tier === 'trial') { bar.classList.add('on'); $('#licTxt').textContent = 'Essai — ' + st.trialLeft + ' jours'; }
+  else if (st.tier === 'none') { bar.classList.add('on'); $('#licTxt').textContent = 'Essai termine — 1 suggestion'; }
+  else bar.classList.remove('on');
+}
 
 window.liaison.on('now', renderNow);
 window.liaison.on('suggestions', renderSug);
 window.liaison.on('status', s => { $('#st').textContent = (s.ok ? '● ' : '○ ') + (s.msg || ''); });
 window.liaison.on('progress', p => { $('#st').textContent = p.phase + ' ' + p.done + '/' + p.total; });
 window.liaison.on('library', l => { $('#st').textContent = l.n + ' titres prets'; });
-window.liaison.on('license', st => {
-  const bar = $('#licBar');
-  if (st.tier === 'trial') { bar.style.display = 'flex'; $('#licTxt').textContent = 'Essai — ' + st.trialLeft + ' jours'; }
-  else if (st.tier === 'none') { bar.style.display = 'flex'; $('#licTxt').textContent = 'Essai termine — 1 suggestion'; }
-  else bar.style.display = 'none';
-});
-$('#licBuy').onclick = () => window.liaison.openLicence('plans');
+window.liaison.on('license', st => { licState(st); fitHeight(); });
 window.liaison.on('app', a => { $('#st').textContent = a.open ? '● ' + a.label : '○ ' + a.label + ' ferme'; });
 window.liaison.on('raw', r => { if (!r.matched) $('#st').textContent = r.text; });
+$('#licBuy').onclick = () => window.liaison.openLicence('plans');
 
 (async () => {
   const c = await window.liaison.getConfig();
   cfg = c.config;
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', o.dataset.arc === cfg.arc ? 'true' : 'false'));
-  $('[data-mode]').setAttribute('aria-pressed', cfg.mode === 'trend' ? 'true' : 'false');
-  if (c.license) {
-    const st = c.license, bar = $('#licBar');
-    if (st.tier === 'trial') { bar.style.display = 'flex'; $('#licTxt').textContent = 'Essai — ' + st.trialLeft + ' jours'; }
-    else if (st.tier === 'none') { bar.style.display = 'flex'; $('#licTxt').textContent = 'Essai termine — 1 suggestion'; }
-  }
-  renderNow(await window.liaison.nowPlaying());
+  if (c.license) licState(c.license);
+  const n = await window.liaison.nowPlaying();
+  if (n && n.id != null) { try { curStruct = await window.liaison.structure(n.id); } catch (e) {} }
+  renderNow(n);
   renderSug(await window.liaison.suggest());
   if (c.libraryCount) $('#st').textContent = c.libraryCount + ' titres prets';
+  fitHeight();
 })();
 </script></body></html>

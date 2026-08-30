@@ -1,11 +1,12 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
 <title>Liaison</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./da.css">
 <style>
-:root{--paper:#EDEDEF;--card:#FFF;--card2:#F7F7F9;--ink:#0E1013;--ink2:#575C63;--ink3:#8A9099;
---line:#DBDBE0;--blue:#1B27D4;--blue2:#141DA0;--rose:#C0392B;--ok:#1B7F4B;
---d:Syne,"Helvetica Neue",Arial,sans-serif;--b:"Instrument Sans",system-ui,sans-serif;--m:"DM Mono",ui-monospace,Menlo,monospace}
-@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0B0C0E;--card:#131519;--card2:#101216;--ink:#ECEDEF;--ink2:#9CA2AA;--ink3:#6D747D;--line:#242832;--blue:#6E7BFF;--blue2:#8C97FF;--rose:#E0654F;--ok:#6FCF97}}
+/* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
+   Aucune police distante : hors ligne, le club coupe tout. */
+:root{--card:#FFF;--card2:#EDEAE0;--line:var(--rule);--blue2:#141DA0;--rose:var(--red);--ok:#1B7F4B}
+h1,h2,h3{text-transform:uppercase;letter-spacing:.005em}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--paper:#0B0C0E;--card:#131519;--card2:#101216;--ink:#ECEDEF;--ink2:#9CA2AA;--ink3:#6D747D;--line:#242832;--blue:#4459FF;--blue2:#8C97FF;--rose:#FF5A42;--ok:#6FCF97;--card2:#101216}}
 *{box-sizing:border-box}
 html,body{height:100%}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font-size:15px;line-height:1.55;

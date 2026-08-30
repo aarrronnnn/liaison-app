@@ -106,6 +106,134 @@ function suggest(cur, library, opt) {
     .slice(0, limit);
 }
 
+
+/* ============================================================
+   Plan de mix — les instants, pas les intentions.
+
+   Une suggestion ne vaut rien si elle ne dit pas quand agir.
+   Avec la structure des deux morceaux, on calcule trois reperes
+   sur la timeline du morceau qui tourne :
+     lance   — ou demarrer la platine B
+     bascule — ou echanger les basses
+     sors    — ou couper A
+   Les durees de B sont converties au tempo reellement joue :
+   un morceau cale de 120 a 124 voit son intro raccourcir.
+   ============================================================ */
+const mmss = t => {
+  if (!isFinite(t) || t < 0) t = 0;
+  const m = Math.floor(t / 60), s = Math.round(t % 60);
+  return m + ':' + (s < 10 ? '0' : '') + (s === 60 ? 0 : s);
+};
+
+function mixPlan(cur, next, curS, nextS, tp) {
+  tp = tp || tempoScore(cur.bpm, next.bpm);
+  const ratio = tp.ratio || 1;
+  /* B joue au tempo de A : ses durees se contractent ou s'etirent */
+  const stretch = (next.bpm * ratio) / (cur.bpm || next.bpm);
+
+  if (!curS || !curS.ok || !nextS || !nextS.ok) {
+    return {
+      ok: false,
+      note: 'Analyse des points de mix en cours — les reperes arrivent dans un instant.'
+    };
+  }
+
+  const beat = 60 / (cur.bpm || 124);
+  const bar = beat * 4;
+  const phrase = beat * 32;
+
+  /* l'intro de B, telle qu'elle durera une fois calee sur A */
+  const introPlayed = Math.max(0, (nextS.readyAt - nextS.inPoint) / stretch);
+
+  /* on veut que la batterie de B arrive pile quand celle de A part */
+  let start = curS.outPoint - introPlayed;
+  const floor = curS.readyAt + phrase;                 /* jamais dans l'intro de A */
+  if (start < floor) start = floor;
+  /* Calage sur la grille de phrases de A, vers le bas.
+     Arrondir au plus proche ferait parfois entrer B apres la sortie
+     de A : un trou sans batterie, la faute qui vide une piste.
+     En arrondissant vers le bas, le pire cas est une phrase de
+     double batterie — exactement ce que gere la bascule de basses. */
+  const snap = curS.firstBeat + Math.floor((start - curS.firstBeat) / phrase) * phrase;
+  if (snap >= floor && snap < curS.duration) start = snap;
+
+  const swap = Math.max(start + bar, curS.outPoint);
+  const outAt = Math.min(curS.duration, Math.max(swap + phrase, curS.lastCall));
+  const overlapBars = Math.max(1, Math.round((outAt - start) / bar));
+
+  /* une intro courte ne laisse pas le temps de fondre */
+  const tight = introPlayed < bar * 4;
+
+  return {
+    ok: true,
+    start: Math.round(start * 10) / 10,
+    swap: Math.round(swap * 10) / 10,
+    out: Math.round(outAt * 10) / 10,
+    startLabel: mmss(start),
+    swapLabel: mmss(swap),
+    outLabel: mmss(outAt),
+    overlapBars: overlapBars,
+    introPlayed: Math.round(introPlayed),
+    outroBars: curS.outroBars,
+    tight: tight,
+    stretch: Math.round(stretch * 1000) / 1000,
+    text: tight
+      ? 'Lance a ' + mmss(start) + ', B entre vite — coupe A a ' + mmss(swap) + '.'
+      : 'Lance a ' + mmss(start) + ', bascule les basses a ' + mmss(swap) + ', sors A a ' + mmss(outAt) + '.'
+  };
+}
+
+/* ============================================================
+   Sauvetage — le dancefloor se vide.
+
+   On jette la courbe de soiree par la fenetre. Ce qui compte :
+   un titre que la salle reconnait des la premiere mesure, assez
+   fort, et mixable tout de suite depuis ce qui tourne. On penalise
+   les intros longues : a 2 h du matin, personne n'attend 45 s.
+   ============================================================ */
+function rescue(cur, library, opt) {
+  opt = opt || {};
+  const dna = opt.dna || {};
+  const banned = opt.banned || new Set();
+  const structures = opt.structures || new Map();
+  const limit = opt.limit || 3;
+  if (!cur) return [];
+
+  const out = [];
+  for (const t of library) {
+    if (t.id === cur.id || banned.has(keyOf(t)) || !(t.bpm > 0)) continue;
+    const tp = tempoScore(cur.bpm, t.bpm);
+    if (tp.s < 52) continue;                     /* injouable maintenant : on passe */
+
+    const h = harmScore(cur.key, t.key);
+    const e = t.energy == null ? 5 : t.energy;
+    if (e < 6) continue;                         /* on remonte la salle, pas on l'endort */
+
+    /* reconnaissance immediate : notoriete d'abord, ADN de la salle ensuite */
+    const fam = (t.pop == null ? 40 : t.pop) * 0.62 + crowdScore(t, dna) * 0.38;
+
+    /* impact : energie, voix, et une intro courte */
+    const st = structures.get(t.id);
+    const introBars = st && st.ok ? st.introBars : null;
+    const quick = introBars == null ? 60 : Math.max(0, 100 - Math.max(0, introBars - 4) * 9);
+    const impact = e * 7 + (t.vocal ? 14 : 0) + quick * 0.3;
+
+    const total = Math.round(
+      tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
+    );
+    out.push({
+      track: t, total: Math.max(4, Math.min(99, total)),
+      tempo: tp, h: h, fam: Math.round(fam), energy: e,
+      introBars: introBars,
+      why: introBars != null && introBars <= 4
+        ? 'Entre en ' + introBars + ' mesures'
+        : (t.pop >= 70 ? 'La salle la connait' : 'Energie ' + e + '/10'),
+      transition: transitionOf(cur, t, tp, h)
+    });
+  }
+  return out.sort((a, b) => b.total - a.total).slice(0, limit);
+}
+
 /* ---- correspondance floue : retrouver un morceau depuis un texte scrape ---- */
 function normalize(s) {
   return String(s || '')
@@ -142,4 +270,5 @@ function match(text, library, threshold) {
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
-                   transitionOf, suggest, keyOf, normalize, match, dice };
+                   transitionOf, suggest, keyOf, normalize, match, dice,
+                   mixPlan, rescue, mmss };

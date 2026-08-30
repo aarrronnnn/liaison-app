@@ -1,14 +1,16 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
 <title>Liaison — reglages</title>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=Instrument+Sans:wght@400;500;600&family=DM+Mono:wght@400;500&display=swap">
+<link rel="stylesheet" href="./da.css">
 <style>
-:root{--paper:#EDEDEF;--card:#fff;--ink:#0E1013;--ink2:#575C63;--ink3:#8A9099;--line:#DBDBE0;--blue:#1B27D4;--rose:#C0392B;
---d:Syne,"Helvetica Neue",Arial,sans-serif;--b:"Instrument Sans",system-ui,sans-serif;--m:"DM Mono",ui-monospace,Menlo,monospace}
+/* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
+   Aucune police distante : hors ligne, le club coupe tout. */
+:root{--card:#FFF;--card2:#EDEAE0;--line:var(--rule);--blue2:#141DA0;--rose:var(--red);--ok:#1B7F4B}
+h1,h2,h3{text-transform:uppercase;letter-spacing:.005em}
 *{box-sizing:border-box}
 body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font-size:14px;line-height:1.5}
 .wrap{max-width:940px;margin:0 auto;padding:26px 28px 60px}
 h1{font-family:var(--d);font-weight:800;font-size:26px;letter-spacing:-.03em;margin:0 0 4px;display:flex;align-items:center;gap:10px}
-h1 svg{width:30px;height:19px}
+h1 svg{width:26px;height:26px}
 p.sub{color:var(--ink2);margin:0 0 24px;font-size:14px}
 h2{font-family:var(--d);font-weight:700;font-size:15px;margin:0 0 12px;letter-spacing:-.01em}
 .card{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:20px;margin-bottom:14px}
@@ -41,7 +43,7 @@ td.n{font-family:var(--m);color:var(--ink3);width:34px}
 .moments b{color:var(--ink)}
 </style></head><body><div class="wrap">
 
-<h1><svg viewBox="0 0 44 26" fill="none"><path d="M5 16.5C5 5 39 5 39 16.5" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="5" cy="21.4" r="2.8" fill="currentColor"/><circle cx="39" cy="21.4" r="2.8" fill="currentColor"/></svg> Liaison</h1>
+<h1><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 3.4 10 12l-6.6 8.6" stroke="var(--blue)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.6 3.4 14 12l6.6 8.6" stroke="var(--rose)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg> Liaison</h1>
 <p class="sub">Reglages. Tout reste sur cette machine.</p>
 
 <div class="card" id="licCard">

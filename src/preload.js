@@ -10,6 +10,8 @@ contextBridge.exposeInMainWorld('liaison', {
   setConfig: patch => invoke('config:set', patch),
   pickLibrary: mode => invoke('library:pick', mode),
   suggest: () => invoke('suggest'),
+  rescue: () => invoke('rescue'),
+  structure: id => invoke('structure:get', id),
   nowPlaying: () => invoke('now:get'),
   loadTrack: id => invoke('track:load', id),
   searchTrack: q => invoke('track:search', q),

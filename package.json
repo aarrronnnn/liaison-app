@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "0.4.2",
+  "version": "0.5.0",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {
@@ -68,6 +68,13 @@
     },
     "extraMetadata": {
       "name": "liaison"
-    }
+    },
+    "asarUnpack": [
+      "src/structure-worker.js",
+      "src/structure.js",
+      "src/analyze.js",
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
+    ]
   }
 }
