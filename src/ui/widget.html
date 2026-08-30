@@ -62,6 +62,17 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mm .deja{color:var(--cream3);font-weight:700}
 .mm .deja.grave{color:var(--redLit)}
 
+/* ---------- analyse de fond ----------
+   Discret par construction : c'est une information, pas une
+   attente. Le DJ doit pouvoir l'ignorer et mixer. */
+.anbar{display:none;align-items:center;gap:8px;padding:6px 11px;
+border-bottom:1px solid var(--wire);background:var(--deep2)}
+.anbar.on{display:flex}
+.anbar .t{font-family:var(--m);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream3);white-space:nowrap}
+.anbar .hint{font-size:10px;color:var(--cream3);opacity:.7;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.anbar .track{margin-left:auto;width:74px;height:3px;background:var(--wire2);border-radius:2px;overflow:hidden;flex:none}
+.anbar .track i{display:block;height:100%;background:var(--blueLit);width:0;transition:width .4s ease}
+
 /* ---------- filtres de cabine ---------- */
 .filt{display:none;flex-wrap:wrap;align-items:center;gap:5px;padding:7px 10px;
 border-bottom:1px solid var(--wire);background:var(--deep2)}
@@ -82,7 +93,7 @@ background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-
 .land{display:none;padding:9px 11px;border-bottom:1px solid var(--wire);background:var(--deep2)}
 .land.on{display:block}
 .land .hd{display:flex;align-items:baseline;gap:8px}
-.land .ph{font-family:var(--d);font-size:14px;text-transform:uppercase;letter-spacing:.01em}
+.land .ph{font-family:var(--d);font-size:14px;text-transform:uppercase;letter-spacing:.04em}
 .land .ph.tenir{color:var(--cream)}
 .land .ph.dernier{color:var(--redLit)}
 .land .ph.poser{color:var(--blueLit)}
@@ -101,7 +112,7 @@ text-transform:uppercase;color:var(--cream3);border:1px solid var(--wire2);borde
 .land .ask{display:none}
 .land.asking .ask{display:block}
 .land.asking #lPlan{display:none}
-.land .ask .q{font-family:var(--d);font-size:14px;text-transform:uppercase}
+.land .ask .q{font-family:var(--d);font-size:14px;text-transform:uppercase;letter-spacing:.04em}
 .land .ask .opts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
 .land .ask .f{font-family:var(--m);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
 padding:5px 8px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream3)}
@@ -160,15 +171,21 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .sres div:hover{background:var(--deep2)}
 
 /* ---------- pied ---------- */
-.foot{display:flex;align-items:center;gap:3px;padding:7px 8px;border-top:1px solid var(--wire)}
+/* La barre du bas porte maintenant sept boutons. Sur un widget
+   etroit — et il est fait pour etre etroit, il vit par-dessus le
+   logiciel de mix — ils debordaient hors du cadre : le SOS,
+   justement celui qu'on cherche a 2 h du matin, sortait de la
+   fenetre. Elle passe donc a la ligne, et l'etat texte prend
+   toute la largeur en dessous plutot que de pousser les boutons. */
+.foot{display:flex;align-items:center;gap:3px;padding:7px 8px;border-top:1px solid var(--wire);flex-wrap:wrap}
 .chip{font-family:var(--m);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
-padding:6px 8px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3)}
+padding:6px 8px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
 .chip:hover{color:var(--cream);border-color:var(--wire2)}
 .chip[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
 .chip.sos{border-color:#4A2119;color:var(--redLit);margin-left:2px}
 .chip.sos:hover{background:var(--red);border-color:var(--red);color:#fff}
-.foot .st{margin-left:auto;font-family:var(--m);font-size:8.5px;color:var(--cream3);
-max-width:104px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.foot .st{flex:1 0 100%;order:9;margin-top:3px;font-family:var(--m);font-size:8.5px;color:var(--cream3);
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .licbar{display:none;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--wire)}
 .licbar.on{display:flex}
 .toast{position:fixed;left:8px;right:8px;bottom:8px;background:var(--blue);color:#fff;font-family:var(--m);
@@ -183,12 +200,13 @@ transition:.18s;pointer-events:none}
     <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
       <path d="M3.2 3.2C8.4 8 9.9 9.6 12 12c-2.1 2.4-3.6 4-8.8 8.8" stroke="#4459FF" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
       <path d="M20.8 3.2C15.6 8 14.1 9.6 12 12c2.1 2.4 3.6 4 8.8 8.8" stroke="#FF5A42" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
-      <circle cx="12" cy="12" r="2.5" fill="#EFEAE0"/>
+      <circle cx="12" cy="12" r="2.5" fill="var(--deep)"/>
     </svg>
     <span class="nm">LIAISON</span>
   </span>
   <span class="act">
     <button id="btnSearch" title="Declarer le morceau en cours">⌕</button>
+    <button id="btnTheme" title="Mode jour / mode nuit">☾</button>
     <button id="btnSettings" title="Reglages">≡</button>
     <button id="btnHide" title="Masquer">×</button>
   </span>
@@ -218,6 +236,12 @@ transition:.18s;pointer-events:none}
   <span class="t">Sauvetage</span>
   <span class="lbl" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ce qui remonte la salle</span>
   <button id="sosBack">Revenir</button>
+</div>
+
+<div class="anbar" id="anBar">
+  <span class="t" id="anTxt">Analyse</span>
+  <span class="hint">tu peux mixer pendant ce temps</span>
+  <div class="track"><i id="anFill"></i></div>
 </div>
 
 <div class="filt" id="filt">
@@ -251,7 +275,7 @@ transition:.18s;pointer-events:none}
 </div>
 
 <div class="list" id="list">
-  <div class="empty"><b>En attente</b>Charge un morceau dans ton logiciel,<br>ou declare-le avec la loupe.</div>
+  <div class="empty"><b>Demarrage</b>Liaison cherche ta bibliotheque<br>et ton logiciel de mix.</div>
 </div>
 
 <div class="search" id="search">
@@ -332,8 +356,11 @@ function renderStrip(st, plan) {
                   '<span>' + mmss(D) + '</span>';
 }
 
+let curNow = null;
 function renderNow(n) {
-  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck') : 'En attente du deck';
+  curNow = n;
+  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck')
+    : (etatAn.library ? 'Lance un morceau' : 'En attente');
   $('#refT').textContent = n ? n.title : '—';
   $('#refA').textContent = n ? (n.artist || '') : '—';
   $('#refK').textContent = n ? (n.key || '—') : '—';
@@ -358,6 +385,62 @@ function planHTML(r) {
     '<span class="k3"><b>Sors</b> <s>' + p.outLabel + '</s></span></div>';
 }
 
+/* ------------------------------------------------------------
+   Jour / nuit.
+
+   On ne repeint rien : on pose un attribut sur la racine et les
+   variables de da.css font le reste. Le choix suit le DJ d'une
+   soiree a l'autre, donc il est enregistre.
+   ------------------------------------------------------------ */
+function appliquerTheme(t) {
+  const jour = t === 'jour';
+  document.documentElement.setAttribute('data-theme', jour ? 'jour' : 'nuit');
+  /* la lune propose la nuit, le soleil propose le jour :
+     l'icone montre ce qu'on obtient en cliquant */
+  const b = $('#btnTheme');
+  b.textContent = jour ? '☾' : '☀';
+  b.title = jour ? 'Passer en mode nuit' : 'Passer en mode jour';
+}
+$('#btnTheme').onclick = () => {
+  cfg.theme = cfg.theme === 'jour' ? 'nuit' : 'jour';
+  appliquerTheme(cfg.theme);
+  window.liaison.setConfig({ theme: cfg.theme });
+};
+
+/* ------------------------------------------------------------
+   Dire pourquoi, pas seulement quoi.
+
+   « Rien a proposer » sans explication envoie le DJ chercher une
+   panne qui n'existe pas. Les trois causes reelles sont : pas de
+   bibliotheque, pas de morceau detecte, ou un filtre trop serre —
+   et chacune a sa reponse.
+   ------------------------------------------------------------ */
+let etatAn = { library: 0, analyses: 0, offline: 0, restants: 0, sansFils: false, importing: false };
+
+function etatVide() {
+  if (etatAn.importing)
+    return '<div class="empty"><b>Lecture de ta bibliotheque</b>Liaison lit la base de ton logiciel.<br>Quelques secondes.</div>';
+  if (!etatAn.library)
+    return '<div class="empty"><b>Aucune bibliotheque</b>Ouvre les reglages et lance la detection,<br>ou pointe ton dossier de musique.</div>';
+  if (!curNow)
+    return '<div class="empty"><b>Aucun morceau detecte</b>Lance un titre dans ton logiciel de mix,<br>ou declare-le avec la loupe ci-dessus.</div>';
+  if (etatAn.offline >= etatAn.library * 0.5 && etatAn.offline > 10)
+    return '<div class="empty"><b>Disque introuvable</b>' + etatAn.offline + ' morceaux pointent un disque<br>qui n\'est pas branche.</div>';
+  return '<div class="empty"><b>Rien ne se cale</b>Aucun titre ne s\'enchaine sur ce tempo.<br>Desserre les filtres, ou passe par un relais.</div>';
+}
+
+/* Le bandeau d'analyse : il dit que ca travaille, et surtout que
+   le DJ peut mixer pendant ce temps. */
+function renderAnalyse(p) {
+  const bar = $('#anBar');
+  if (!p || p.fini || !p.total || p.restants === 0) { bar.classList.remove('on'); fitHeight(); return; }
+  bar.classList.add('on');
+  const fait = p.total - p.restants;
+  $('#anTxt').textContent = 'Analyse ' + fait.toLocaleString('fr-FR') + ' / ' + p.total.toLocaleString('fr-FR');
+  $('#anFill').style.width = Math.round(fait / p.total * 100) + '%';
+  fitHeight();
+}
+
 /* « Tu l'as deja passe ». Ce soir, c'est rouge : c'est la faute que
    personne ne pardonne. Une autre soiree, c'est gris : c'est une
    information, et parfois c'est meme une bonne raison de le rejouer. */
@@ -371,7 +454,8 @@ function renderSug(list) {
   if (view !== 'sug') return;
   const box = $('#list');
   if (!list || !list.length) {
-    box.innerHTML = '<div class="empty"><b>Rien a proposer</b>Importe ta bibliotheque dans les reglages.</div>';
+    box.innerHTML = etatVide();
+    fitHeight();
     return;
   }
   box.innerHTML = list.map((r, i) => `
@@ -391,7 +475,9 @@ function renderSug(list) {
 function renderSos(list) {
   const box = $('#list');
   if (!list || !list.length) {
-    box.innerHTML = '<div class="empty"><b>Rien de mixable</b>Aucun titre assez fort ne se cale sur ce tempo.<br>Passe par un morceau relais.</div>';
+    box.innerHTML = curNow
+      ? '<div class="empty"><b>Rien de mixable</b>Aucun titre assez fort ne se cale sur ce tempo.<br>Passe par un morceau relais.</div>'
+      : '<div class="empty"><b>Aucun morceau detecte</b>Le sauvetage part de ce qui tourne :<br>lance un titre, ou declare-le avec la loupe.</div>';
     return;
   }
   box.innerHTML = list.map(r => `
@@ -517,9 +603,13 @@ function renderFiltCount(r) {
   badge.style.background = r && r.vide ? 'var(--red)' : 'var(--wire2)';
   if (!r) { n.textContent = ''; return; }
   n.classList.toggle('warn', !!r.vide);
+  /* Espace insecable fine entre les milliers : « 22 000 », pas
+     « 22000 ». C'est la regle francaise, et sur un chiffre a cinq
+     positions ca change vraiment la lecture d'un coup d'oeil. */
+  const nb = x => Number(x || 0).toLocaleString('fr-FR');
   n.textContent = r.vide
     ? 'Trop etroit — filtres ignores'
-    : (actifs ? r.restants + ' / ' + r.total + ' titres' : r.total + ' titres');
+    : (actifs ? nb(r.restants) + ' / ' + nb(r.total) + ' titres' : nb(r.total) + ' titres');
 }
 
 function paintFilt() {
@@ -690,9 +780,19 @@ function licState(st) {
 
 window.liaison.on('now', renderNow);
 window.liaison.on('suggestions', renderSug);
+window.liaison.on('analysis', p => {
+  renderAnalyse(p);
+  if (p && p.total != null) { etatAn.restants = p.restants; etatAn.analyses = p.done; }
+  /* si la liste est vide, son message a peut-etre change */
+  if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
+});
 window.liaison.on('status', s => { $('#st').textContent = (s.ok ? '● ' : '○ ') + (s.msg || ''); });
 window.liaison.on('progress', p => { $('#st').textContent = p.phase + ' ' + p.done + '/' + p.total; });
-window.liaison.on('library', l => { $('#st').textContent = l.n + ' titres prets'; });
+window.liaison.on('library', async l => {
+  $('#st').textContent = l.n.toLocaleString('fr-FR') + ' titres prets';
+  try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
+  if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
+});
 window.liaison.on('license', st => { licState(st); fitHeight(); });
 window.liaison.on('app', a => { $('#st').textContent = a.open ? '● ' + a.label : '○ ' + a.label + ' ferme'; });
 window.liaison.on('raw', r => { if (!r.matched) $('#st').textContent = r.text; });
@@ -701,8 +801,11 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
 (async () => {
   const c = await window.liaison.getConfig();
   cfg = c.config;
+  appliquerTheme(cfg.theme);
   refreshLand();
   window.liaison.filters().then(renderFiltCount).catch(() => {});
+  try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
+  if (!lastSug.length) $('#list').innerHTML = etatVide();
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', o.dataset.arc === cfg.arc ? 'true' : 'false'));
   if (c.license) licState(c.license);
   const n = await window.liaison.nowPlaying();

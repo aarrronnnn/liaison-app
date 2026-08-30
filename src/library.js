@@ -112,26 +112,50 @@ function probe(file) {
   });
 }
 
+/* ------------------------------------------------------------
+   Lecture des tags d'un dossier.
+
+   Chaque fichier demande un ffprobe : quelques dizaines de
+   millisecondes, dont l'essentiel est de l'attente de disque, pas
+   du calcul. En serie, 22 000 fichiers font une demi-heure d'un
+   processeur qui ne fait rien. En parallele par huit, quatre
+   minutes — et sur un disque externe, la difference est bien plus
+   grande encore.
+
+   Huit et pas trente : au-dela, les processus se disputent la
+   tete de lecture et le total remonte.
+   ------------------------------------------------------------ */
 async function scanFolder(dir, onProgress) {
   const files = walk(dir, []);
-  const out = [];
-  for (let i = 0; i < files.length; i++) {
-    const f = files[i];
-    const info = await probe(f);
-    const t = info.tags || {};
-    out.push({
-      path: f,
-      title: t.title || path.basename(f, path.extname(f)),
-      artist: t.artist || t.album_artist || '',
-      genre: t.genre || '',
-      bpm: num(t.tbpm || t.bpm || 0),
-      key: toCamelot(t.initial_key || t.tkey || t.key),
-      duration: info.duration || 0,
-      pop: 40
-    });
-    if (onProgress && i % 10 === 0) onProgress({ phase: 'scan', done: i + 1, total: files.length });
+  const out = new Array(files.length);
+  let curseur = 0, faits = 0;
+  const PARALLELE = Math.min(8, Math.max(2, files.length));
+
+  async function coureur() {
+    while (curseur < files.length) {
+      const i = curseur++;
+      const f = files[i];
+      let info = {};
+      try { info = await probe(f); } catch (e) { info = {}; }
+      const t = info.tags || {};
+      out[i] = {
+        path: f,
+        title: t.title || path.basename(f, path.extname(f)),
+        artist: t.artist || t.album_artist || '',
+        genre: t.genre || '',
+        bpm: num(t.tbpm || t.bpm || 0),
+        key: toCamelot(t.initial_key || t.tkey || t.key),
+        duration: info.duration || 0,
+        pop: 40
+      };
+      faits++;
+      if (onProgress && faits % 25 === 0) onProgress({ phase: 'lecture', done: faits, total: files.length });
+    }
   }
-  return out;
+
+  await Promise.all(Array.from({ length: PARALLELE }, coureur));
+  if (onProgress) onProgress({ phase: 'lecture', done: files.length, total: files.length });
+  return out.filter(Boolean);
 }
 
 /* ---------- cache d'analyse ---------- */
@@ -191,6 +215,12 @@ async function analyzeAll(tracks, cacheFile, onProgress) {
   return tracks;
 }
 
+/* Un morceau est utilisable des que le logiciel de mix nous a
+   donne son titre, son artiste, son BPM et sa tonalite. L'energie
+   et le timbre affinent le classement mais ne le conditionnent
+   pas : on pose des valeurs neutres, l'analyse de fond les
+   remplacera morceau par morceau. C'est ce qui permet d'ouvrir le
+   widget en trois secondes au lieu d'une nuit. */
 function finalize(tracks) {
   return tracks
     .filter(t => t.bpm > 40 && t.bpm < 220)

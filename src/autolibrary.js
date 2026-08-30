@@ -91,9 +91,67 @@ function itunesPaths() {
   return out;
 }
 
+/* ---------- disques externes ----------
+   Beaucoup de DJs tiennent leur bibliotheque sur un SSD externe :
+   c'est le disque qu'on emporte en soiree, pas le portable. Un
+   dossier de musique qui ne cherche que dans le HOME ne trouve
+   donc rien chez eux.
+
+   On liste les volumes montes — /Volumes sur macOS, /media et
+   /mnt sur Linux, les lettres de lecteur sur Windows — et on y
+   cherche les dossiers de musique evidents, sans jamais descendre
+   dans tout le disque : un SSD de 2 To parcouru en entier prend
+   des minutes pour trouver ce qui est toujours a la racine. */
+function externalVolumes() {
+  const out = [];
+  if (win) {
+    for (const l of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
+      const r = l + ':\\';
+      if (exists(r)) out.push(r);
+    }
+    return out;
+  }
+  for (const base of ['/Volumes', '/media/' + (process.env.USER || ''), '/media', '/mnt']) {
+    let list = [];
+    try { list = fs.readdirSync(base); } catch (e) { continue; }
+    for (const d of list) {
+      if (d.startsWith('.')) continue;
+      const p = path.join(base, d);
+      /* le disque de demarrage est deja couvert par le HOME */
+      try { if (fs.realpathSync(p) === '/') continue; } catch (e) {}
+      out.push(p);
+    }
+  }
+  return out;
+}
+
+/* Les noms sous lesquels un DJ range sa musique, a la racine d'un
+   disque externe. On teste, on ne devine pas. */
+const NOMS_MUSIQUE = ['Music', 'Musique', 'Musik', 'Musica', 'DJ', 'DJ Music', 'Tracks',
+                      'Morceaux', 'Sons', 'Serato', 'rekordbox', 'Traktor', 'USB', 'Contents'];
+
 function musicFolders() {
-  return [path.join(HOME, 'Music'), path.join(HOME, 'Musique'), path.join(HOME, 'Downloads'), path.join(HOME, 'Téléchargements')]
-    .filter(exists);
+  const out = [path.join(HOME, 'Music'), path.join(HOME, 'Musique'),
+               path.join(HOME, 'Downloads'), path.join(HOME, 'Téléchargements')].filter(exists);
+
+  for (const v of externalVolumes()) {
+    let trouve = false;
+    for (const n of NOMS_MUSIQUE) {
+      const p = path.join(v, n);
+      if (exists(p)) { out.push(p); trouve = true; }
+    }
+    /* Rien de reconnaissable a la racine : on prend le volume
+       lui-meme, mais seulement s'il contient deja des fichiers
+       audio au premier niveau — sinon on ne fouille pas le disque
+       de sauvegarde de quelqu'un. */
+    if (!trouve) {
+      try {
+        const racine = fs.readdirSync(v);
+        if (racine.some(f => /\.(mp3|wav|aiff?|flac|m4a|aac|ogg)$/i.test(f))) out.push(v);
+      } catch (e) {}
+    }
+  }
+  return out;
 }
 
 /* ---------- Traktor collection.nml ---------- */
@@ -162,7 +220,11 @@ function detect() {
   for (const p of virtualdjPaths()) if (exists(p)) found.push({ kind: 'virtualdj', path: p, label: 'VirtualDJ — database.xml' });
   for (const p of rekordboxXmlPaths()) found.push({ kind: 'rekordbox', path: p, label: 'rekordbox — export XML' });
   for (const p of itunesPaths()) found.push({ kind: 'itunes', path: p, label: 'iTunes / Musique — bibliothèque XML' });
-  if (!found.length) for (const d of musicFolders()) found.push({ kind: 'folder', path: d, label: 'Dossier de musique — ' + path.basename(d) });
+  if (!found.length) for (const d of musicFolders()) {
+    const externe = /^\/Volumes\/|^\/media\/|^\/mnt\/|^[D-Z]:/i.test(d);
+    found.push({ kind: 'folder', path: d, externe: externe,
+      label: (externe ? 'Disque externe — ' : 'Dossier de musique — ') + path.basename(d) });
+  }
   return found;
 }
 
@@ -288,4 +350,4 @@ function watch(sources, onChange) {
 
 module.exports = { detect, readSource, merge, watch, parseTraktor, parseVirtualDJ, parseITunes,
                    seratoPaths, traktorPaths, virtualdjPaths, rekordboxXmlPaths, itunesPaths,
-                   musicFolders, fromFileURL };
+                   musicFolders, externalVolumes, fromFileURL };

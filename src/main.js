@@ -13,6 +13,7 @@ const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
 const { AppWatcher } = require('./watcher');
 const { StructurePool, StructureCache } = require('./structure');
+const { AnalysisService } = require('./analysis');
 const clientlist = require('./clientlist');
 const cratesmod = require('./crates');
 const filtersmod = require('./filters');
@@ -40,7 +41,9 @@ const DEFAULTS = {
   guestCooldown: 90, guestMax: 5,
   spotifyId: '', spotifySecret: '',
   /* les filtres de cabine — l'etat des quatre interrupteurs */
-  fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0
+  fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0,
+  /* nuit par defaut : une cabine est sombre */
+  theme: 'nuit'
 };
 
 let config = Object.assign({}, DEFAULTS);
@@ -59,6 +62,8 @@ let clientSet = { wanted: new Set(), banned: new Set(), dna: {}, stats: null };
 let license = null;
 /* les listes deja faites par le DJ, relues depuis ses sources */
 let crateList = [];
+/* l'analyse de fond : elle tourne pendant que le DJ mixe */
+let analyse = null;
 /* le plan d'atterrissage courant, et l'heure ou il a ete pose */
 let landPlan = null, landAt = 0;
 
@@ -131,13 +136,13 @@ async function importLibrary(mode, p) {
   let tracks = [];
   if (mode === 'rekordbox') tracks = lib.parseRekordboxXML(p);
   else tracks = await lib.scanFolder(p, onProgress);
-  send('progress', { phase: 'analyse', done: 0, total: tracks.length });
-  await lib.analyzeAll(tracks, CACHE(), onProgress);
   library = lib.finalize(tracks);
   rebuildClient();
   rebuildCrates([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
   config.libraryMode = mode; config.libraryPath = p; saveConfig();
   send('library', { n: library.length, crates: crateList.length });
+  /* la bibliotheque est jouable des maintenant ; l'analyse suit */
+  startAnalysis();
   return library.length;
 }
 
@@ -162,17 +167,78 @@ async function autoImport(preferKind) {
       catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
     }
     const merged = autolib.merge(lists);
-    send('progress', { phase: 'analyse', done: 0, total: merged.length });
-    await libmod.analyzeAll(merged, CACHE(), x => send('progress', x));
+    /* On ne fait plus attendre le DJ : la base du logiciel donne
+       deja titre, artiste, BPM et tonalite, et c'est tout ce qu'il
+       faut pour proposer un enchainement. L'energie et le timbre
+       arrivent ensuite, morceau par morceau, sans bloquer. */
     library = libmod.finalize(merged);
     rebuildClient();
     rebuildCrates(ordered);
     send('library', { n: library.length, crates: crateList.length,
                       sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
+    startAnalysis();
 
     if (libraryWatcher) libraryWatcher.stop();
     libraryWatcher = autolib.watch(ordered, () => autoImport(preferKind));
   } finally { importing = false; }
+}
+
+/* ============================================================
+   L'analyse de fond.
+
+   Elle demarre quand la bibliotheque est prete, et elle est
+   completement facultative : le widget fonctionne pendant qu'elle
+   tourne. Le morceau qui tourne et les suggestions passent devant
+   tout le reste, ce qui fait qu'en pratique l'analyse est deja
+   faite pour les morceaux que le DJ regarde.
+   ============================================================ */
+let dernierRapport = null;
+
+function startAnalysis() {
+  if (analyse) analyse.stop();
+  analyse = new AnalysisService(CACHE(), {
+    onProgress: p => {
+      dernierRapport = p;
+      send('analysis', p);
+    },
+    /* Un morceau qui vient d'etre analyse peut changer le
+       classement. On ne recalcule pas a chaque resultat — trois
+       par seconde feraient clignoter la liste — mais toutes les
+       quatre secondes, et seulement si quelque chose tourne. */
+    onTrack: () => scheduleResuggest()
+  });
+  const r = analyse.charger(library);
+  send('analysis', { phase: 'analyse', done: 0, total: r.aFaire, restants: r.aFaire,
+                     caches: r.caches, demarrage: true });
+  analyse.demarrer();
+  prioriserAnalyse();
+}
+
+let resugTimer = null;
+function scheduleResuggest() {
+  if (resugTimer || !current) return;
+  resugTimer = setTimeout(() => {
+    resugTimer = null;
+    if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  }, 4000);
+}
+
+/** Dit a l'analyse ce que le moteur est en train de regarder. */
+function prioriserAnalyse() {
+  if (!analyse) return;
+  if (current) analyse.prioriser([current.id], 2);
+  /* Les cent morceaux les plus proches en tempo : ce sont les
+     seuls que le moteur peut proposer dans l'immediat, donc les
+     seuls dont l'energie change quelque chose maintenant. */
+  if (current && current.bpm > 0) {
+    const proches = library
+      .filter(t => t.id !== current.id && t.bpm > 0 && !t.analyzed)
+      .map(t => ({ id: t.id, d: Math.abs(t.bpm - current.bpm) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, 100)
+      .map(x => x.id);
+    analyse.prioriser(proches, 1);
+  }
 }
 
 /* Les listes deja faites par le DJ. On les relit apres chaque import :
@@ -376,6 +442,7 @@ function computeSuggestions(limit) {
 function setCurrent(track, how) {
   current = track;
   ensureStructure(track);
+  prioriserAnalyse();
   if (setlog) setlog.play(track, how || null);
   send('now', current ? {
     id: current.id, title: current.title, artist: current.artist, key: current.key,
@@ -491,6 +558,21 @@ ipcMain.handle('client:remove', (e, opt) => {
 });
 
 ipcMain.handle('structure:get', (e, id) => structures.get(id) || null);
+
+/* Ou en est l'analyse de fond, et pourquoi le widget dit ce qu'il dit. */
+ipcMain.handle('analysis:state', () => {
+  const n = library.length;
+  const pret = library.filter(t => t.analyzed).length;
+  return {
+    library: n,
+    analyses: pret,
+    offline: analyse ? analyse.compterAbsents() : 0,
+    restants: dernierRapport ? dernierRapport.restants : (analyse ? analyse.file.size : 0),
+    fils: analyse ? analyse.workers.length : 0,
+    sansFils: analyse ? !!analyse.sansFils : false,
+    importing: importing
+  };
+});
 
 /* Le bouton de sauvetage : on ignore la courbe de soiree.
    On respecte en revanche le crate, les BPM et les paroles — ce sont
@@ -795,8 +877,106 @@ function wireWatcher() {
 }
 
 /* ---------------- demarrage ---------------- */
+/* ============================================================
+   Le menu de l'application.
+
+   Sans menu explicite, Electron en fabrique un en anglais :
+   File / Edit / View / Window. Sur une app francaise vendue a des
+   DJs francais, c'est la premiere chose qu'on lit et la premiere
+   qui trahit. On le reecrit donc entierement — en gardant les
+   roles natifs, qui portent les raccourcis clavier et le
+   comportement systeme corrects dans chaque langue.
+   ============================================================ */
+function buildMenu() {
+  const mac = process.platform === 'darwin';
+  const modele = [];
+
+  if (mac) modele.push({
+    label: 'Liaison',
+    submenu: [
+      { label: 'À propos de Liaison', role: 'about' },
+      { type: 'separator' },
+      { label: 'Réglages…', accelerator: 'Cmd+,', click: () => openSettings() },
+      { label: 'Licence…', click: () => openLicence('plans') },
+      { type: 'separator' },
+      { label: 'Masquer Liaison', role: 'hide' },
+      { label: 'Masquer les autres', role: 'hideOthers' },
+      { label: 'Tout afficher', role: 'unhide' },
+      { type: 'separator' },
+      { label: 'Quitter Liaison', role: 'quit' }
+    ]
+  });
+
+  modele.push({
+    label: 'Fichier',
+    submenu: [
+      { label: 'Relire ma bibliothèque', click: () => autoImport(activeApp && activeApp.librarySource) },
+      { label: 'Choisir un dossier de musique…', click: () => openSettings() },
+      { type: 'separator' },
+      ...(mac ? [{ label: 'Fermer la fenêtre', role: 'close' }]
+              : [{ label: 'Réglages…', accelerator: 'Ctrl+,', click: () => openSettings() },
+                 { label: 'Licence…', click: () => openLicence('plans') },
+                 { type: 'separator' },
+                 { label: 'Quitter', role: 'quit' }])
+    ]
+  });
+
+  modele.push({
+    label: 'Édition',
+    submenu: [
+      { label: 'Annuler', role: 'undo' },
+      { label: 'Rétablir', role: 'redo' },
+      { type: 'separator' },
+      { label: 'Couper', role: 'cut' },
+      { label: 'Copier', role: 'copy' },
+      { label: 'Coller', role: 'paste' },
+      ...(mac ? [{ label: 'Coller en adaptant le style', role: 'pasteAndMatchStyle' }] : []),
+      { label: 'Tout sélectionner', role: 'selectAll' }
+    ]
+  });
+
+  modele.push({
+    label: 'Affichage',
+    submenu: [
+      { label: 'Afficher le widget', click: () => { if (widget) { widget.show(); widget.focus(); } } },
+      { label: 'Masquer le widget', click: () => { if (widget) widget.hide(); } },
+      { type: 'separator' },
+      { label: 'Taille réelle', role: 'resetZoom' },
+      { label: 'Agrandir', role: 'zoomIn' },
+      { label: 'Réduire', role: 'zoomOut' },
+      { type: 'separator' },
+      { label: 'Plein écran', role: 'togglefullscreen' },
+      { label: 'Outils de développement', role: 'toggleDevTools' }
+    ]
+  });
+
+  modele.push({
+    label: 'Fenêtre',
+    submenu: [
+      { label: 'Réduire', role: 'minimize' },
+      ...(mac ? [{ label: 'Placer en zoom', role: 'zoom' },
+                 { type: 'separator' },
+                 { label: 'Tout ramener au premier plan', role: 'front' }]
+              : [{ label: 'Fermer', role: 'close' }])
+    ]
+  });
+
+  modele.push({
+    label: 'Aide',
+    submenu: [
+      { label: 'Première ouverture', click: () => shell.openExternal(API + '/premiere-ouverture.html') },
+      { label: 'Site de Liaison', click: () => shell.openExternal(API) },
+      { type: 'separator' },
+      { label: 'Nous écrire', click: () => shell.openExternal('mailto:contact@liaison.dj?subject=Liaison%20' + app.getVersion()) }
+    ]
+  });
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(modele));
+}
+
 app.whenReady().then(async () => {
   loadConfig();
+  buildMenu();
   license = new License(LIC());
   license.ensureTrial();
   setlog = new SetLog(SETS());

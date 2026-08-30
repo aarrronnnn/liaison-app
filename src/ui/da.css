@@ -24,5 +24,29 @@
   --b:'Space Grotesk',system-ui,-apple-system,sans-serif;
   --m:'Space Mono',ui-monospace,Menlo,monospace;
 }
+/* ============================================================
+   Mode jour.
+
+   Le widget est nocturne par defaut, et c'est le bon defaut : une
+   cabine est sombre, un ecran clair y eblouit et se reflete dans
+   les vitres. Mais tout le monde ne mixe pas la nuit — vin
+   d'honneur en terrasse, mariage l'apres-midi, preparation de set
+   a midi — et la, c'est l'inverse : un widget noir devient
+   illisible en plein soleil.
+
+   Le theme ne repeint pas les regles une par une : il ne redefinit
+   que les variables. Chaque valeur est verifiee au ratio de
+   contraste, pas choisie a l'oeil — le tertiaire passe de #8E9198
+   (2,75:1, illisible) a #6E7178 (4,25:1), et le bleu vif de nuit
+   redevient le bleu profond du drapeau, qui tient sur du papier.
+   ============================================================ */
+[data-theme="jour"]{
+  --deep:#F2EFE6; --deep2:#E9E5DA; --deep3:#DFDACB;
+  --cream:#141518; --cream2:#4E5157; --cream3:#6E7178;
+  --wire:#D5D0C2; --wire2:#BFB9A8;
+  --blueLit:#1F35D8; --redLit:#C4321F;
+}
 .lbl{font-family:var(--m);font-size:9px;letter-spacing:.2em;text-transform:uppercase}
-.dsp{font-family:var(--d);font-weight:400;text-transform:uppercase;letter-spacing:.01em;line-height:.92}
+/* Anton serre ses lettres par dessin : sous +0,03em, les paires
+   avec un T se touchent. Mesure au pixel, pas a l'oeil. */
+.dsp{font-family:var(--d);font-weight:400;text-transform:uppercase;letter-spacing:.035em;line-height:.92}

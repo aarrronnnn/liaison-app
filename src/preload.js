@@ -17,6 +17,7 @@ contextBridge.exposeInMainWorld('liaison', {
   clientShopping: () => invoke('client:shopping'),
   clientRemove: opt => invoke('client:remove', opt),
   structure: id => invoke('structure:get', id),
+  analysisState: () => invoke('analysis:state'),
   nowPlaying: () => invoke('now:get'),
   loadTrack: id => invoke('track:load', id),
   searchTrack: q => invoke('track:search', q),
