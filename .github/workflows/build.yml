@@ -18,10 +18,15 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # Il n'existe plus de runner macOS Intel : macos-13 a ete
+          # retire en decembre 2025, macos-14 suit en novembre 2026.
+          # Le .dmg x64 se construit donc en croise depuis un runner
+          # Apple Silicon — electron-builder telecharge l'Electron x64
+          # et empaquette ; seule la signature ad hoc reste locale.
           - os: macos-latest
             nom: mac-arm64
             args: --mac --arm64
-          - os: macos-13          # dernier runner Intel : on y construit le .dmg x64
+          - os: macos-latest
             nom: mac-x64
             args: --mac --x64
           - os: windows-latest
@@ -30,11 +35,13 @@ jobs:
     name: ${{ matrix.nom }}
     runs-on: ${{ matrix.os }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      # Ces trois actions sont epinglees sur les majeures qui tournent
+      # en Node 24. Les v4 tournaient en Node 20, que les runners
+      # forcent desormais sur Node 24 en le signalant a chaque build —
+      # et qui cessera un jour de fonctionner tout court.
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
-          # Node 20 est deprecie sur les runners : les actions basculent
-          # d'office sur 24 et l'avertissement revient a chaque build.
           node-version: 22
           cache: npm
 
@@ -54,7 +61,6 @@ jobs:
         run: npx electron-builder ${{ matrix.args }} --publish never
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
-          DEBUG: electron-builder                # le journal complet en cas d'echec
 
       # Ce qui a reellement ete produit. Sans cette etape, un dossier
       # dist vide se voit seulement a l'etape suivante, sans dire pourquoi.
@@ -63,7 +69,7 @@ jobs:
         shell: bash
         run: ls -lh dist/ || echo "aucun dossier dist"
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v6
         with:
           name: liaison-${{ matrix.nom }}
           path: |
@@ -80,7 +86,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/download-artifact@v4
+      # download-artifact doit rester sur la meme majeure que
+      # upload-artifact : les deux partagent le format de stockage.
+      - uses: actions/download-artifact@v6
         with: { path: dist, merge-multiple: true }
       - run: ls -lh dist
       - uses: softprops/action-gh-release@v2
