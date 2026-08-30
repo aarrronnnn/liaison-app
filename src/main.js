@@ -14,6 +14,8 @@ const autolib = require('./autolibrary');
 const { AppWatcher } = require('./watcher');
 const { StructurePool, StructureCache } = require('./structure');
 const { AnalysisService } = require('./analysis');
+const health = require('./health');
+const prepare = require('./prepare');
 const clientlist = require('./clientlist');
 const cratesmod = require('./crates');
 const filtersmod = require('./filters');
@@ -174,6 +176,7 @@ async function autoImport(preferKind) {
     library = libmod.finalize(merged);
     rebuildClient();
     rebuildCrates(ordered);
+    elaguerStructures();
     send('library', { n: library.length, crates: crateList.length,
                       sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
     startAnalysis();
@@ -195,7 +198,19 @@ async function autoImport(preferKind) {
 let dernierRapport = null;
 
 function startAnalysis() {
-  if (analyse) analyse.stop();
+  /* Une bibliotheque qui se resynchronise ne doit pas tuer
+     l'analyse en cours. Les identifiants etant desormais stables,
+     recharger revient a comparer deux listes : ce qui est deja
+     analyse le reste, seuls les nouveaux venus entrent dans la
+     file. Les fils continuent de tourner sans interruption. */
+  if (analyse) {
+    const r = analyse.charger(library);
+    analyse.demarrer();
+    prioriserAnalyse();
+    send('analysis', { phase: 'analyse', done: 0, total: r.aFaire, restants: r.aFaire,
+                       caches: r.caches, demarrage: true });
+    return;
+  }
   analyse = new AnalysisService(CACHE(), {
     onProgress: p => {
       dernierRapport = p;
@@ -245,6 +260,15 @@ function prioriserAnalyse() {
    une crate ajoutee dans Serato a midi doit etre la le soir meme.
    Si le filtre pointait une liste qui a disparu, on le relache plutot
    que de laisser un filtre fantome vider le widget. */
+/* Apres une resynchronisation, on oublie les morceaux qui ne sont
+   plus la. Sans ca, la memoire des points de mix garde tout ce que
+   le DJ a supprime depuis le lancement de l'app. */
+function elaguerStructures() {
+  if (!library.length) return;
+  const vivants = new Set(library.map(t => t.id));
+  for (const id of Array.from(structures.keys())) if (!vivants.has(id)) structures.delete(id);
+}
+
 function rebuildCrates(sources) {
   try { crateList = cratesmod.readAll(sources || librarySources, library); }
   catch (e) { crateList = []; }
@@ -724,6 +748,77 @@ ipcMain.handle('landing:clear', () => {
   landPlan = null; landAt = 0;
   if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
   return { ok: true };
+});
+
+/* ============================================================
+   La sante de la bibliotheque
+   ============================================================ */
+ipcMain.handle('health:scan', (e, opt) => {
+  const b = health.bilan(library, { verifierFichiers: !!(opt && opt.fichiers) });
+  return Object.assign(b, {
+    /* l'analyse de fond avance pendant qu'on regarde : on donne
+       son etat pour que le bilan se lise avec la bonne reserve */
+    enCours: analyse ? analyse.file.size : 0,
+    horsLigne: analyse ? analyse.compterAbsents() : 0
+  });
+});
+
+/* Ouvrir le fichier dans le Finder : le geste qui suit le constat. */
+ipcMain.handle('health:reveal', (e, id) => {
+  const t = library.find(x => x.id === id);
+  if (!t || !t.path) return { ok: false };
+  try { shell.showItemInFolder(t.path); return { ok: true }; }
+  catch (err) { return { ok: false, error: String(err.message || err) }; }
+});
+
+/* ============================================================
+   Le mode preparation
+   ============================================================ */
+let dernierePrepa = null;
+
+ipcMain.handle('prepare:build', (e, opt) => {
+  opt = opt || {};
+  const tam = currentFilter();
+  /* ce qui a deja ete joue dans une soiree du meme nom */
+  const eviter = new Set();
+  if (opt.eviterDejaJoues && setlog) {
+    const nom = String(config.sessionName || '').trim().toLowerCase();
+    for (const s of setlog.sets) {
+      if (nom && String(s.name || '').trim().toLowerCase() !== nom) continue;
+      for (const p of s.played) eviter.add(p.id);
+    }
+  }
+  dernierePrepa = prepare.preparer({
+    library: tam.tracks.tracks,
+    dureeMin: Number(opt.minutes) || 0,
+    pack: locales.byId(config.pack),
+    dna: currentDNA(),
+    wanted: clientSet.wanted,
+    banned: bannedSet(),
+    eviterIds: eviter,
+    marge: Number(opt.marge) || 1.6
+  });
+  return dernierePrepa;
+});
+
+ipcMain.handle('prepare:export', async (e, opt) => {
+  if (!dernierePrepa || !dernierePrepa.ok) return { ok: false, error: 'Rien a exporter.' };
+  const format = (opt && opt.format) === 'txt' ? 'txt' : 'm3u8';
+  const nom = String(config.sessionName || 'Preparation').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 50);
+  const r = await dialog.showSaveDialog({
+    title: 'Enregistrer la preparation',
+    defaultPath: nom + ' - ' + dernierePrepa.duree + ' min.' + format,
+    filters: [format === 'm3u8'
+      ? { name: 'Playlist a importer', extensions: ['m3u8', 'm3u'] }
+      : { name: 'Texte', extensions: ['txt'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(r.filePath,
+      format === 'm3u8' ? prepare.m3u(dernierePrepa) : prepare.texte(dernierePrepa, config.sessionName),
+      'utf8');
+  } catch (err) { return { ok: false, error: String(err.message || err) }; }
+  return { ok: true, path: r.filePath, n: dernierePrepa.ordre.length };
 });
 
 /* ============================================================

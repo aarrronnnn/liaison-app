@@ -18,6 +18,12 @@ contextBridge.exposeInMainWorld('liaison', {
   clientRemove: opt => invoke('client:remove', opt),
   structure: id => invoke('structure:get', id),
   analysisState: () => invoke('analysis:state'),
+  /* sante de la bibliotheque */
+  healthScan: opt => invoke('health:scan', opt),
+  healthReveal: id => invoke('health:reveal', id),
+  /* mode preparation */
+  prepareBuild: opt => invoke('prepare:build', opt),
+  prepareExport: opt => invoke('prepare:export', opt),
   nowPlaying: () => invoke('now:get'),
   loadTrack: id => invoke('track:load', id),
   searchTrack: q => invoke('track:search', q),

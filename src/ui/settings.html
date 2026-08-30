@@ -73,6 +73,20 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 .ok{color:var(--blue)}
 .bar{height:3px;background:var(--line);border-radius:2px;overflow:hidden;margin-top:10px}
 .bar i{display:block;height:100%;background:var(--blue);width:0}
+/* --- sante --- */
+.hcard{border-left:3px solid var(--line);padding:12px 0 12px 14px;margin-top:16px}
+.hcard h3{margin:0 0 5px;font-family:var(--d);font-weight:700;font-size:15px;letter-spacing:.04em;text-transform:uppercase}
+.hcard .eff{margin:0 0 4px;font-size:13.5px;color:var(--ink2);line-height:1.55}
+.hcard .ges{margin:0;font-size:13.5px;color:var(--ink);line-height:1.55}
+.hlist{margin-top:10px;border-top:1px solid var(--line)}
+.hx{padding:8px 0;border-bottom:1px solid var(--line);cursor:pointer}
+.hx:hover{background:var(--card2)}
+.hx .t{display:block;font-size:13.5px;font-weight:600}
+.hx .m{display:inline-block;font-family:var(--m);font-size:11px;color:var(--rose);margin-top:3px}
+.hx .p{display:block;font-family:var(--m);font-size:11px;color:var(--ink3);word-break:break-all;margin-top:3px}
+.hx .p i{font-style:normal;color:var(--ink2)}
+.hplus{padding:8px 0;font-family:var(--m);font-size:11px;color:var(--ink3)}
+.dur.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 .moments li{margin-bottom:6px;color:var(--ink2);font-size:13px}
 .moments b{color:var(--ink)}
 </style></head><body><div class="wrap">
@@ -238,7 +252,53 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 </div>
 
 <div class="card">
-  <h2>6 — Tes tracklists</h2>
+  <h2>6 — Sante de ta bibliotheque <span class="pill" id="hPill">non verifiee</span></h2>
+  <p class="tips">Sur des milliers de morceaux accumules pendant des annees, il y a forcement des fichiers disparus, des doublons, des tempos faux. Aucun logiciel de mix ne te dit lesquels. Liaison compare ce que dit ta base a ce qu'il mesure lui-meme, et te montre l'ecart.</p>
+  <div class="row">
+    <button id="hGo">Examiner</button>
+    <label style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
+      <input type="checkbox" id="hFiles" checked style="width:auto"> Verifier que chaque fichier existe encore
+    </label>
+  </div>
+  <div class="state" id="hState">—</div>
+  <div id="hOut"></div>
+</div>
+
+<div class="card">
+  <h2>7 — Preparer une soiree <span class="pill">avant de partir</span></h2>
+  <p class="tips">Beaucoup de soirees se jouent sur des CDJ, sans ordinateur en cabine — et la, le widget ne sert a rien. Liaison construit alors chez toi le vivier que tu aurais joue : un ordre mixable, cale sur la courbe du contexte choisi plus haut, qui respecte les listes du client. Tu l'exportes en playlist, ton logiciel l'ouvre, tu la mets sur ta cle.</p>
+  <div class="grid">
+    <div>
+      <label>Duree de la soiree</label>
+      <div class="row" style="margin-top:0">
+        <button class="g dur" data-min="120">2 h</button>
+        <button class="g dur" data-min="180">3 h</button>
+        <button class="dur on" data-min="240">4 h</button>
+        <button class="g dur" data-min="360">6 h</button>
+        <input type="number" id="pMin" min="15" max="720" value="240" style="width:90px">
+      </div>
+      <label style="margin-top:16px">
+        <span style="display:flex;gap:8px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink)">
+          <input type="checkbox" id="pEviter" checked style="width:auto"> Eviter ce que j'ai deja joue dans une soiree du meme nom
+        </span>
+      </label>
+      <div class="row">
+        <button id="pGo">Construire le vivier</button>
+        <button class="g" id="pM3u">Exporter en playlist</button>
+        <button class="g" id="pTxt">Exporter en texte</button>
+      </div>
+      <div class="state" id="pState">—</div>
+      <p class="tips" style="margin-top:14px">Ce n'est pas un set fige — un set fige ne survit pas au premier regard sur la piste. C'est un vivier <b>ordonne</b>, plus large que necessaire, range dans l'ordre ou il tiendrait.</p>
+      <p class="tips"><b>Liaison n'ecrit jamais dans la base de ton logiciel.</b> Elle t'appartient, et une ecriture ratee dedans coute une bibliotheque. On depose un fichier a cote, que tu importes toi-meme.</p>
+    </div>
+    <div>
+      <table id="pTable"><thead><tr><th style="width:34px">N</th><th style="width:56px">À</th><th>Titre</th><th style="width:56px">BPM</th><th style="width:50px">Key</th></tr></thead><tbody><tr><td colspan="5" style="color:#8A9099">Choisis une duree et construis le vivier.</td></tr></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>8 — Tes tracklists</h2>
   <p class="tips">Liaison note tout ce qui est passe, avec l'heure et la duree reelle de chaque morceau. De quoi repondre a « tu peux m'envoyer ta tracklist&nbsp;? » sans rien retaper, et remplir une declaration sans reconstituer la soiree de memoire.</p>
   <div class="grid">
     <div>
@@ -260,7 +320,7 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 </div>
 
 <div class="card">
-  <h2>7 — Rejouer un set, autrement</h2>
+  <h2>9 — Rejouer un set, autrement</h2>
   <p class="tips">Reprends le vivier d'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l'ordre : jamais le meme enchainement deux fois, et la mixabilite tient toujours.</p>
   <div class="grid">
     <div>
@@ -410,6 +470,123 @@ async function refreshReq() {
     : '<tr><td colspan="2" style="color:#8A9099">Aucune demande pour l instant.</td></tr>';
 }
 setInterval(() => { if (share) refreshReq(); }, 6000);
+
+/* ---------- sante de la bibliotheque ---------- */
+const GRAVITE = { haute: 'var(--rose)', moyenne: '#B8860B', basse: 'var(--ink3)' };
+
+function ligneExemple(x) {
+  return '<div class="hx" data-id="' + x.id + '">' +
+    '<span class="t">' + esc(x.title) + (x.artist ? ' <span class="pill">' + esc(x.artist) + '</span>' : '') + '</span>' +
+    (x.mesure != null ? '<span class="m">Liaison mesure ' + esc(x.mesure) + '</span>' : '') +
+    (x.path ? '<span class="p">' + esc(x.path) + '</span>' : '') + '</div>';
+}
+
+$('#hGo').onclick = async () => {
+  $('#hState').textContent = 'Examen en cours…';
+  $('#hGo').disabled = true;
+  let b;
+  try { b = await window.liaison.healthScan({ fichiers: $('#hFiles').checked }); }
+  finally { $('#hGo').disabled = false; }
+  if (!b || !b.total) { $('#hState').textContent = 'Aucune bibliotheque chargee.'; return; }
+
+  const pill = $('#hPill');
+  pill.textContent = b.score + '/100';
+  pill.className = 'pill' + (b.score >= 90 ? ' ok' : '');
+  pill.style.color = b.score >= 90 ? 'var(--ok)' : b.score >= 70 ? '' : 'var(--rose)';
+
+  $('#hState').innerHTML = '<b>' + b.total.toLocaleString('fr-FR') + '</b> morceaux · ' +
+    '<b>' + b.analyses.toLocaleString('fr-FR') + '</b> analyses' +
+    (b.enCours ? ' · ' + b.enCours.toLocaleString('fr-FR') + ' en attente' : '') +
+    (b.horsLigne ? ' · <b style="color:var(--rose)">' + b.horsLigne + '</b> sur un disque absent' : '') +
+    (b.deduits.bpm || b.deduits.key
+      ? ' · Liaison a comble ' + b.deduits.bpm + ' tempos et ' + b.deduits.key + ' tonalites' : '');
+
+  if (!b.actions.length) {
+    $('#hOut').innerHTML = '<p class="tips" style="color:var(--ok);font-weight:600;margin-top:16px">' +
+      esc(b.note) + '</p>';
+    return;
+  }
+
+  /* Chaque probleme : le nombre, ce qu'il coute, le geste. Les
+     exemples sont cliquables — un constat sans moyen d'agir ne
+     sert a rien a 2 h du matin comme a midi. */
+  const cartes = b.actions.map(a => {
+    const src = { bpm: b.sansBpm, key: b.sansKey, artiste: b.sansArtiste,
+                  fichiers: b.introuvables, tonalite: b.tonaliteDouteuse,
+                  tempo: b.tempoDouteux, illisibles: b.illisibles }[a.cle];
+    let corps = '';
+    if (a.cle === 'doublons') {
+      corps = b.doublons.groupes.map(g =>
+        '<div class="hx"><span class="t">' + esc(g.titre) + '</span>' +
+        g.copies.map(c => '<span class="p" data-id="' + c.id + '">' + esc(c.path) +
+          ' <i>' + c.duree + ' s</i></span>').join('') + '</div>').join('');
+    } else if (src && src.exemples) {
+      corps = src.exemples.map(ligneExemple).join('');
+    }
+    const reste = (src ? src.n : b.doublons.n) - (a.cle === 'doublons' ? b.doublons.groupes.length : (src ? src.exemples.length : 0));
+    return '<div class="hcard" style="border-left-color:' + GRAVITE[a.gravite] + '">' +
+      '<h3>' + esc(a.titre) + '</h3>' +
+      '<p class="eff">' + esc(a.effet) + '</p>' +
+      '<p class="ges">' + esc(a.geste) + '</p>' +
+      (corps ? '<div class="hlist">' + corps +
+        (reste > 0 ? '<div class="hplus">et ' + reste.toLocaleString('fr-FR') + ' autres</div>' : '') +
+        '</div>' : '') +
+      '</div>';
+  }).join('');
+  $('#hOut').innerHTML = cartes;
+};
+
+/* clic sur un exemple : on l'ouvre dans le Finder */
+$('#hOut').addEventListener('click', async ev => {
+  const el = ev.target.closest('[data-id]');
+  if (!el) return;
+  const r = await window.liaison.healthReveal(Number(el.dataset.id));
+  if (!r.ok) $('#hState').textContent = 'Fichier introuvable sur le disque.';
+});
+
+/* ---------- mode preparation ---------- */
+document.querySelectorAll('.dur').forEach(b => b.onclick = () => {
+  document.querySelectorAll('.dur').forEach(o => { o.className = 'g dur'; });
+  b.className = 'dur on';
+  $('#pMin').value = b.dataset.min;
+});
+$('#pMin').addEventListener('input', () => {
+  document.querySelectorAll('.dur').forEach(o => {
+    o.className = o.dataset.min === $('#pMin').value ? 'dur on' : 'g dur';
+  });
+});
+
+$('#pGo').onclick = async () => {
+  const minutes = parseInt($('#pMin').value, 10) || 0;
+  $('#pState').textContent = 'Construction…';
+  const p = await window.liaison.prepareBuild({ minutes: minutes, eviterDejaJoues: $('#pEviter').checked });
+  const tb = $('#pTable').querySelector('tbody');
+  if (!p || !p.ok) {
+    $('#pState').innerHTML = '<b style="color:var(--rose)">' + esc((p && p.note) || 'Echec') + '</b>';
+    tb.innerHTML = '<tr><td colspan="5" style="color:#8A9099">—</td></tr>';
+    return;
+  }
+  $('#pState').innerHTML = esc(p.note);
+  tb.innerHTML = p.ordre.map(x =>
+    '<tr' + (x.reserve ? ' style="opacity:.55"' : '') + '>' +
+    '<td class="n">' + x.n + '</td>' +
+    '<td class="mono">' + esc(x.a) + '</td>' +
+    '<td>' + esc(x.title) + ' <span class="pill">' + esc(x.artist || '') + '</span>' +
+      (x.client ? ' <span class="pill" style="color:var(--rose);border-color:var(--rose)">client</span>' : '') +
+      (x.reserve ? ' <span class="pill">reserve</span>' : '') + '</td>' +
+    '<td class="mono">' + esc(x.bpm) + '</td>' +
+    '<td class="mono">' + esc(x.key || '?') + '</td></tr>').join('');
+};
+$('#pM3u').onclick = () => exportPrep('m3u8');
+$('#pTxt').onclick = () => exportPrep('txt');
+async function exportPrep(format) {
+  const r = await window.liaison.prepareExport({ format: format });
+  if (!r || r.canceled) return;
+  $('#pState').innerHTML = r.ok
+    ? '<b style="color:var(--ok)">' + r.n + ' morceaux enregistres</b> — ' + esc(r.path) +
+      (format === 'm3u8' ? '<br>Importe ce fichier dans ton logiciel, puis exporte la playlist sur ta cle.' : '')
+    : '<b style="color:var(--rose)">' + esc(r.error || 'Echec') + '</b>';
+}
 
 /* ---------- les tracklists ---------- */
 const mmssFR = sec => sec == null ? '—' : Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');

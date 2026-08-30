@@ -26,8 +26,14 @@ parentPort.on('message', async job => {
       patch: {
         energy: r.energy,
         timbre: r.timbre,
-        key: r.key || null,
-        vocal: r.vocalish >= 5 ? 1 : 0
+        vocal: r.vocalish >= 5 ? 1 : 0,
+        /* Ce que Liaison mesure lui-meme, garde a part de ce que dit
+           le logiciel de mix. On ne remplace pas l'un par l'autre :
+           on les compare, et c'est cette comparaison qui revele les
+           morceaux mal tagues. */
+        mBpm: r.bpm || 0,
+        mKey: r.key || null,
+        mKeyConf: r.keyConfidence || 0
       }
     });
   } catch (e) {

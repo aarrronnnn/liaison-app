@@ -311,12 +311,19 @@ function parseITunes(file) {
   return out;
 }
 
-/** Fusionne plusieurs sources en dedoublonnant par chemin de fichier. */
+/** Fusionne plusieurs sources en dedoublonnant par chemin de fichier.
+
+    La comparaison passe par la meme mise a plat que les
+    identifiants : iTunes ecrit « file:///Users/... » avec des %20,
+    Serato « Users/... » sans slash initial, Traktor « /: » a la
+    place des « / ». Compares bruts, ces trois chemins font trois
+    morceaux differents — et un DJ qui a Serato ET iTunes voyait sa
+    bibliotheque comptee deux fois. */
 function merge(lists) {
   const byPath = new Map();
   for (const list of lists) {
     for (const t of list) {
-      const k = String(t.path).toLowerCase();
+      const k = lib.cleChemin(t.path);
       const prev = byPath.get(k);
       if (!prev) { byPath.set(k, t); continue; }
       if (!prev.bpm && t.bpm) prev.bpm = t.bpm;
@@ -332,20 +339,73 @@ function merge(lists) {
 }
 
 /** Surveille les fichiers de base : rappelle quand le DJ modifie sa bibliotheque. */
+/* ============================================================
+   Surveiller la base d'un logiciel de mix.
+
+   Naivement, on surveille le fichier. Ca ne marche pas : Serato,
+   rekordbox et iTunes n'ecrivent jamais par-dessus leur base. Ils
+   ecrivent a cote, puis renomment — c'est ce qui protege leurs
+   donnees d'une coupure. Or un renommage detruit l'inode que
+   fs.watch observait : le surveillant continue de tourner sans
+   plus jamais rien signaler. La bibliotheque cesse donc de se
+   synchroniser apres la premiere modification, en silence.
+
+   On surveille donc le DOSSIER, qui lui survit au renommage, et
+   on filtre sur le nom du fichier. Et parce qu'un dossier surveille
+   peut lui aussi disparaitre — un disque externe qu'on debranche —
+   on double d'un controle de date toutes les 30 secondes. La
+   surveillance est gratuite, le controle est negligeable, et entre
+   les deux plus rien ne passe a travers.
+   ============================================================ */
 function watch(sources, onChange) {
-  const watchers = [];
+  const vivants = [];
   let timer = null;
-  for (const s of sources) {
-    if (s.kind === 'folder') continue;
+  const surveilles = (sources || []).filter(s => s.kind !== 'folder');
+
+  const signaler = s => {
+    clearTimeout(timer);
+    /* on laisse le logiciel finir d'ecrire avant de relire */
+    timer = setTimeout(() => onChange(s), 4000);
+  };
+
+  for (const s of surveilles) {
+    const dossier = path.dirname(s.path);
+    const nom = path.basename(s.path);
     try {
-      const w = fs.watch(s.path, () => {
-        clearTimeout(timer);
-        timer = setTimeout(() => onChange(s), 4000);   // on laisse le logiciel finir d'ecrire
+      const w = fs.watch(dossier, (ev, f) => {
+        /* f est nul sur certains systemes : dans le doute on relit */
+        if (!f || f === nom || f.indexOf(nom) === 0) signaler(s);
       });
-      watchers.push(w);
-    } catch (e) {}
+      w.on('error', () => {});
+      vivants.push(w);
+    } catch (e) { /* dossier illisible : le controle de date prendra le relais */ }
   }
-  return { stop: () => watchers.forEach(w => { try { w.close(); } catch (e) {} }) };
+
+  /* Filet : la date de modification, relue regulierement. Il
+     rattrape le disque externe rebranche, le dossier recree, et
+     les systemes de fichiers reseau ou fs.watch ne dit rien. */
+  const dates = new Map();
+  for (const s of surveilles) {
+    try { dates.set(s.path, fs.statSync(s.path).mtimeMs); } catch (e) { dates.set(s.path, 0); }
+  }
+  const contro = setInterval(() => {
+    for (const s of surveilles) {
+      let m = 0;
+      try { m = fs.statSync(s.path).mtimeMs; } catch (e) { m = 0; }
+      const avant = dates.get(s.path) || 0;
+      if (m && m !== avant) { dates.set(s.path, m); signaler(s); }
+      else if (!m && avant) dates.set(s.path, 0);   /* fichier parti : on note, sans relire */
+    }
+  }, 30000);
+  if (contro.unref) contro.unref();
+
+  return {
+    stop: () => {
+      clearTimeout(timer);
+      clearInterval(contro);
+      vivants.forEach(w => { try { w.close(); } catch (e) {} });
+    }
+  };
 }
 
 module.exports = { detect, readSource, merge, watch, parseTraktor, parseVirtualDJ, parseITunes,

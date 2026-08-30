@@ -275,11 +275,23 @@ class AnalysisService {
 
     if (t && msg.ok) {
       const patch = msg.patch;
-      /* La tonalite de la base du logiciel prime toujours : elle a
-         ete posee par le DJ ou par un analyseur dedie. La notre
-         n'est qu'une estimation, elle ne sert qu'a combler un vide. */
-      if (t.key || !patch.key) delete patch.key;
       Object.assign(t, patch);
+
+      /* Ce que le logiciel de mix affirme prime toujours : sa
+         tonalite a ete posee par le DJ ou par un analyseur dedie,
+         et son BPM a servi a caler la grille. Notre mesure ne
+         remplace donc rien — elle comble les trous, et elle
+         signale les desaccords.
+
+         Combler : un morceau sans tonalite est invisible pour la
+         roue de Camelot, un morceau sans BPM est invisible tout
+         court. Mieux vaut une estimation qu'un vide.
+
+         Signaler : quand les deux valeurs existent et divergent,
+         on ne tranche pas — on marque, et la jauge de sante le
+         montre au DJ, qui ira reanalyser dans SON logiciel. */
+      if (!t.key && patch.mKey && patch.mKeyConf >= 0.6) { t.key = patch.mKey; t.keyDeduite = true; }
+      if (!(t.bpm > 0) && patch.mBpm > 40) { t.bpm = Math.round(patch.mBpm * 10) / 10; t.bpmDeduit = true; }
       t.analyzed = true;
       t.offline = false;
       if (e && e.stamp) this.cache.set(t.path, e.stamp, patch);

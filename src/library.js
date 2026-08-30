@@ -215,6 +215,51 @@ async function analyzeAll(tracks, cacheFile, onProgress) {
   return tracks;
 }
 
+/* ============================================================
+   L'identifiant d'un morceau.
+
+   Il etait le rang dans la liste : 1, 2, 3... Ca marche tant que
+   la liste ne bouge pas. Or elle bouge tout le temps — le DJ
+   achete un titre, et comme les bases sont triees, le nouveau
+   venu s'insere au milieu et decale tous les suivants.
+
+   Consequence, mesuree : un morceau joue mardi soir sous
+   l'identifiant 3 devient un autre morceau mercredi. Le « tu l'as
+   deja passe » designe le mauvais titre, la liste du client
+   protege le mauvais titre, le crate choisi n'est plus le bon,
+   et la cloture reservee bloque un morceau au hasard. En silence,
+   sans erreur, sans rien dans les journaux.
+
+   L'identifiant est donc calcule a partir du chemin du fichier :
+   le meme fichier garde le meme numero d'une soiree a l'autre, et
+   d'une version de l'app a la suivante.
+
+   Deux hachages FNV-1a de 32 bits, avec des germes differents,
+   combines en un entier de 53 bits — la limite de ce que
+   JavaScript compte exactement. Sur 100 000 morceaux, la
+   probabilite d'une collision est de l'ordre de 1 sur un
+   milliard ; on la traite quand meme, plus bas.
+   ============================================================ */
+function hash53(s) {
+  let a = 0x811c9dc5, b = 0x01000193;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    a ^= c; a = Math.imul(a, 0x01000193) >>> 0;
+    b ^= c; b = Math.imul(b, 0x85ebca6b) >>> 0;
+  }
+  /* 21 bits hauts + 32 bits bas = 53 bits, toujours positif */
+  return (a % 2097152) * 4294967296 + b;
+}
+
+/* Le chemin, mis a plat : meme fichier vu par deux logiciels
+   (l'un avec file://, l'autre sans, l'un en majuscules) doit
+   donner le meme identifiant. */
+function cleChemin(p) {
+  let x = String(p || '').replace(/\\/g, '/');
+  try { if (x.indexOf('file://') === 0) x = decodeURIComponent(x.replace(/^file:\/\/(localhost)?/, '')); } catch (e) {}
+  return x.replace(/\/:/g, '/').replace(/\/+/g, '/').toLowerCase();
+}
+
 /* Un morceau est utilisable des que le logiciel de mix nous a
    donne son titre, son artiste, son BPM et sa tonalite. L'energie
    et le timbre affinent le classement mais ne le conditionnent
@@ -222,10 +267,21 @@ async function analyzeAll(tracks, cacheFile, onProgress) {
    remplacera morceau par morceau. C'est ce qui permet d'ouvrir le
    widget en trois secondes au lieu d'une nuit. */
 function finalize(tracks) {
+  const pris = new Set();
   return tracks
     .filter(t => t.bpm > 40 && t.bpm < 220)
     .map((t, i) => {
-      t.id = i + 1;
+      /* Sans chemin — ca arrive avec une base incomplete — on se
+         rabat sur artiste + titre, qui est stable lui aussi. */
+      const base = t.path ? cleChemin(t.path)
+                          : 'meta:' + String(t.artist || '').toLowerCase() + '|' + String(t.title || '').toLowerCase();
+      let id = hash53(base);
+      /* collision : on avance jusqu'a une place libre, de facon
+         deterministe, pour que deux lancements donnent le meme
+         resultat sur la meme bibliotheque */
+      while (pris.has(id)) id = id + 1 <= Number.MAX_SAFE_INTEGER ? id + 1 : 1;
+      pris.add(id);
+      t.id = id;
       t.tags = String(t.genre || '')
         .toLowerCase().split(/[\/,;|]+/).map(s => s.trim()).filter(Boolean);
       t.out = t.duration > 300 ? 64 : t.duration > 180 ? 32 : 16;
@@ -235,4 +291,4 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk };
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin };
