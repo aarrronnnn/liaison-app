@@ -30,6 +30,22 @@ button.g:hover{border-color:var(--ink)}
 .qrbox{display:flex;gap:18px;align-items:flex-start;margin-top:14px}
 .qrbox img{width:132px;height:132px;border:1px solid var(--line);border-radius:4px;background:#fff}
 .tips{font-size:13px;color:var(--ink2);line-height:1.6;margin:10px 0 0}
+textarea{width:100%;padding:10px 11px;border:1.5px solid var(--line);background:var(--card);color:var(--ink);
+font-family:var(--m);font-size:12px;line-height:1.6;resize:vertical}
+textarea:focus{outline:none;border-color:var(--blue)}
+.miss{margin-top:14px;border-top:1px solid var(--line);padding-top:12px}
+.miss>b{font-family:var(--m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--rose);display:block}
+.mrow{padding:10px 0;border-bottom:1px solid var(--line)}
+.mrow:last-child{border-bottom:0}
+.mrow .t{font-size:13.5px;font-weight:600}
+.mrow .shops{margin-top:6px;display:flex;gap:6px;flex-wrap:wrap}
+.mrow .shops a{font-family:var(--m);font-size:10px;letter-spacing:.08em;padding:4px 8px;
+border:1px solid var(--line);color:var(--ink2);text-decoration:none;cursor:pointer}
+.mrow .shops a:hover{border-color:var(--blue);color:var(--blue)}
+.mrow .deja{margin-top:6px;font-size:12.5px;color:var(--ink2)}
+.mrow .deja b{color:var(--blue);font-weight:600}
+.pools{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;font-size:13px;color:var(--ink2);line-height:1.65}
+.pools a{color:var(--blue)}
 .mono{font-family:var(--m);font-size:11.5px;color:var(--ink2);word-break:break-all}
 table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
@@ -144,8 +160,47 @@ td.n{font-family:var(--m);color:var(--ink3);width:34px}
   <div class="row"><button id="saveCtx">Enregistrer le contexte</button></div>
 </div>
 
+<div class="card" id="clientCard">
+  <h2>4 — La soiree du client <span class="pill" id="cliPill">aucune liste</span></h2>
+  <p class="tips">Ce que le client veut entendre, et ce qu'il ne veut surtout pas. Les titres voulus passent devant dans le widget <b>et</b> tirent l'ambiance vers leurs genres : c'est ce qui fait qu'un mariage ne ressemble pas au mariage d'a cote. Les titres refuses sortent du moteur, sans discussion.</p>
+
+  <div class="grid" style="margin-top:14px">
+    <div>
+      <label>A passer — colle la liste, ou un lien de playlist Spotify</label>
+      <textarea id="cliWant" rows="5" placeholder="Daft Punk - Get Lucky&#10;Modjo - Lady (Hear Me Tonight)&#10;&#10;ou colle https://open.spotify.com/playlist/..."></textarea>
+      <div class="row">
+        <button id="cliAddWant">Ajouter a la liste</button>
+        <button class="g" id="cliClearWant">Vider</button>
+        <span class="mono" id="cliWantN" style="font-size:11px;color:var(--ink3)"></span>
+      </div>
+    </div>
+    <div>
+      <label>A eviter — meme chose, en negatif</label>
+      <textarea id="cliBan" rows="5" placeholder="Rick Astley - Never Gonna Give You Up"></textarea>
+      <div class="row">
+        <button id="cliAddBan">Ajouter a la liste</button>
+        <button class="g" id="cliClearBan">Vider</button>
+        <span class="mono" id="cliBanN" style="font-size:11px;color:var(--ink3)"></span>
+      </div>
+    </div>
+  </div>
+
+  <p class="tips" id="cliMsg" style="min-height:20px"></p>
+  <div id="cliMiss"></div>
+
+  <details style="margin-top:14px">
+    <summary class="mono" style="font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);cursor:pointer">Lire les playlists Spotify directement</summary>
+    <p class="tips">Spotify n'autorise aucune lecture anonyme : il faut un identifiant d'application, gratuit et cree en deux minutes sur <b>developer.spotify.com</b> — <i>Create app</i>, puis copie l'Client ID et le Client Secret ici. Sans ca, colle simplement les titres : dans l'appli Spotify, selectionne la playlist, <b>Ctrl/Cmd + A</b>, <b>Ctrl/Cmd + C</b>, et colle dans le cadre ci-dessus.</p>
+    <div class="two">
+      <div><label>Client ID</label><input type="text" id="spId" placeholder="a1b2c3..."></div>
+      <div><label>Client Secret</label><input type="password" id="spSecret" placeholder="••••••••"></div>
+    </div>
+    <div class="row"><button class="g" id="spSave">Enregistrer les identifiants</button></div>
+  </details>
+</div>
+
 <div class="card">
-  <h2>4 — Demandes des invites</h2>
+  <h2>5 — Demandes des invites</h2>
   <p class="tips">Liaison ouvre une page sur ton reseau local. Les invites scannent le QR ou recoivent le lien — aucun compte, aucune appli a installer.</p>
   <div class="row"><button id="startSess">Ouvrir la session</button></div>
   <div class="qrbox" id="qrbox" style="display:none">
@@ -165,7 +220,29 @@ td.n{font-family:var(--m);color:var(--ink3);width:34px}
 </div>
 
 <div class="card">
-  <h2>5 — Rejouer un set, autrement</h2>
+  <h2>6 — Tes tracklists</h2>
+  <p class="tips">Liaison note tout ce qui est passe, avec l'heure et la duree reelle de chaque morceau. De quoi repondre a « tu peux m'envoyer ta tracklist&nbsp;? » sans rien retaper, et remplir une declaration sans reconstituer la soiree de memoire.</p>
+  <div class="grid">
+    <div>
+      <label>Soiree</label>
+      <select id="tlSel"></select>
+      <div class="row" style="margin-top:12px">
+        <button id="tlCopy">Copier le texte</button>
+        <button class="g" id="tlCsv">Exporter en CSV</button>
+        <button class="g" id="tlTxt">Exporter en .txt</button>
+      </div>
+      <div class="state" id="tlState">—</div>
+      <p class="tips" style="margin-top:14px">Le CSV contient, par morceau&nbsp;: la date, le lieu, l'heure de passage, le titre, l'interprete, la duree d'utilisation, le BPM et la tonalite. C'est le detail que reclament la SACEM et les rapports de club.</p>
+      <p class="tips"><b>A savoir&nbsp;:</b> aucune societe de gestion ne publie de format d'import automatique. Ce fichier est une aide a la declaration — lisible par un humain et par un tableur — pas une declaration deposee a ta place.</p>
+    </div>
+    <div>
+      <table id="tlTable"><thead><tr><th style="width:52px">Heure</th><th>Titre</th><th style="width:66px">Duree</th><th style="width:56px">BPM</th></tr></thead><tbody></tbody></table>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>7 — Rejouer un set, autrement</h2>
   <p class="tips">Reprends le vivier d'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l'ordre : jamais le meme enchainement deux fois, et la mixabilite tient toujours.</p>
   <div class="grid">
     <div>
@@ -316,6 +393,43 @@ async function refreshReq() {
 }
 setInterval(() => { if (share) refreshReq(); }, 6000);
 
+/* ---------- les tracklists ---------- */
+const mmssFR = sec => sec == null ? '—' : Math.floor(sec / 60) + ':' + String(sec % 60).padStart(2, '0');
+
+async function renderTracklist() {
+  const id = Number($('#tlSel').value);
+  const tb = $('#tlTable').querySelector('tbody');
+  if (!id) { tb.innerHTML = '<tr><td colspan="4" style="color:#8A9099">Aucune soiree enregistree pour l instant.</td></tr>'; return; }
+  const t = await window.liaison.tracklist(id);
+  if (!t || !t.lignes.length) { tb.innerHTML = '<tr><td colspan="4" style="color:#8A9099">Cette soiree ne contient aucun morceau.</td></tr>'; return; }
+  tb.innerHTML = t.lignes.map(l =>
+    '<tr><td class="mono">' + esc(l.heure) + '</td>' +
+    '<td>' + esc(l.title) + ' <span class="pill">' + esc(l.artist) + '</span></td>' +
+    '<td class="mono">' + mmssFR(l.secondes) + '</td>' +
+    '<td class="mono">' + esc(l.bpm) + '</td></tr>').join('');
+  /* la duree du dernier morceau est inconnue : il tournait encore quand
+     la session s'est fermee. On le dit plutot que d'afficher un tiret muet. */
+  $('#tlState').innerHTML = '<b>' + t.lignes.length + '</b> morceaux' +
+    (t.lignes[t.lignes.length - 1].secondes == null
+      ? ' · la duree du dernier est inconnue (la session s\'est fermee pendant qu\'il tournait)' : '');
+}
+
+$('#tlSel').onchange = renderTracklist;
+$('#tlCopy').onclick = async () => {
+  const r = await window.liaison.copySet(Number($('#tlSel').value));
+  $('#tlState').textContent = r && r.ok ? 'Tracklist copiee — colle-la ou tu veux.' : 'Rien a copier.';
+};
+$('#tlCsv').onclick = () => exportTl('csv');
+$('#tlTxt').onclick = () => exportTl('txt');
+async function exportTl(format) {
+  const r = await window.liaison.exportSet({ id: Number($('#tlSel').value), format: format });
+  if (!r) return;
+  if (r.canceled) return;
+  $('#tlState').innerHTML = r.ok
+    ? '<b style="color:var(--ok)">' + r.n + ' morceaux enregistres</b> — ' + esc(r.path)
+    : '<b style="color:var(--rose)">' + esc(r.error || 'Echec de l enregistrement') + '</b>';
+}
+
 $('#replay').onclick = async () => {
   const id = Number($('#setSel').value);
   const r = await window.liaison.replaySet({ id: id, drop: Number($('#drop').value) / 100 });
@@ -357,8 +471,90 @@ window.liaison.on('app', () => renderApps());
   $('#optAnnounce').checked = !!C.config.prolinkAnnounce;
   renderSources(); renderApps();
   const sets = await window.liaison.listSets();
-  $('#setSel').innerHTML = sets.length
+  const opts = sets.length
     ? sets.map(s => '<option value="' + s.id + '">' + esc(s.name) + ' — ' + new Date(s.at).toLocaleDateString('fr-FR') + ' (' + s.n + ' titres)</option>').join('')
     : '<option value="">Aucun set enregistre</option>';
+  $('#setSel').innerHTML = opts;
+  $('#tlSel').innerHTML = opts;
+  renderTracklist();
 })();
+
+/* ---------- les listes du client ---------- */
+function renderClient(st) {
+  const pill = $('#cliPill');
+  if (!st || !st.stats) {
+    pill.textContent = 'aucune liste'; pill.className = 'pill';
+    $('#cliWantN').textContent = ''; $('#cliBanN').textContent = '';
+    $('#cliMiss').innerHTML = '';
+    return;
+  }
+  const w = st.stats.wanted, b = st.stats.banned;
+  $('#cliWantN').textContent = w.total ? w.trouves + ' sur ' + w.total + ' dans ta bibliotheque' : '';
+  $('#cliBanN').textContent = b.total ? b.trouves + ' sur ' + b.total + ' reperes et exclus' : '';
+  if (w.total || b.total) {
+    pill.textContent = w.trouves + ' a passer · ' + b.trouves + ' exclus';
+    pill.className = 'pill ok';
+  } else { pill.textContent = 'aucune liste'; pill.className = 'pill'; }
+
+  const miss = st.stats.manquants || [];
+  if (!miss.length) { $('#cliMiss').innerHTML = ''; return; }
+  $('#cliMiss').innerHTML =
+    '<div class="miss"><b>' + miss.length + ' titre' + (miss.length > 1 ? 's' : '') +
+    ' que tu n\'as pas — ta liste de courses</b>' +
+    miss.map(m => {
+      const deja = (m.deja || []).length
+        ? '<div class="deja">Tu as peut-être déjà : <b>' +
+          m.deja.map(d => esc(d.artist + ' — ' + d.title)).join('</b>, <b>') + '</b></div>'
+        : '';
+      const shops = (m.achats || [])
+        .map(a => '<a data-url="' + esc(a.url) + '" title="' + esc(a.note) + '">' + esc(a.name) + '</a>')
+        .join('');
+      return '<div class="mrow"><div class="t">' + esc((m.artist ? m.artist + ' — ' : '') + m.title) + '</div>' +
+             deja + '<div class="shops">' + shops + '</div></div>';
+    }).join('') +
+    '<div class="row"><button class="g" id="cliShop">Copier la liste</button>' +
+    '<span class="mono" id="cliShopN" style="font-size:11px;color:var(--ink3)"></span></div>' +
+    '<div class="pools" id="cliPools"></div></div>';
+}
+
+async function cliAdd(side, boxId) {
+  const box = $(boxId);
+  const raw = box.value.trim();
+  if (!raw) return;
+  const url = /open\.spotify\.com\/playlist|spotify:playlist/.test(raw) ? raw.split(/\s+/).find(x => /playlist/.test(x)) : null;
+  $('#cliMsg').textContent = url ? 'Lecture de la playlist Spotify…' : 'Lecture de la liste…';
+  const r = await window.liaison.clientImport(url ? { side: side, url: url } : { side: side, text: raw });
+  if (!r.ok) { $('#cliMsg').innerHTML = '<b style="color:var(--rose)">' + esc(r.error) + '</b>'; return; }
+  box.value = '';
+  $('#cliMsg').textContent = r.lus + ' titre' + (r.lus > 1 ? 's' : '') + ' lu' + (r.lus > 1 ? 's' : '') +
+    ', ' + r.ajoutes + ' ajoute' + (r.ajoutes > 1 ? 's' : '') + '.';
+  renderClient({ stats: r.stats });
+}
+
+/* Les boutiques s'ouvrent dans le navigateur, pas dans l'app. */
+$('#cliMiss').addEventListener('click', async e => {
+  const a = e.target.closest('a[data-url]');
+  if (a) { window.liaison.openExternal(a.dataset.url); return; }
+  if (e.target.id === 'cliShop') {
+    const r = await window.liaison.clientShopping();
+    $('#cliShopN').textContent = r.ok ? r.n + ' titres copies' : 'rien a copier';
+    $('#cliPools').innerHTML = '<b>Tu n\'as pas le temps d\'acheter ?</b> ' +
+      (r.pools || []).map(p => '<a data-url="' + esc(p.url) + '">' + esc(p.name) + '</a> — ' + esc(p.note)).join('<br>');
+  }
+});
+
+$('#cliAddWant').onclick = () => cliAdd('wanted', '#cliWant');
+$('#cliAddBan').onclick = () => cliAdd('banned', '#cliBan');
+$('#cliClearWant').onclick = async () => renderClient(await window.liaison.clientClear('wanted'));
+$('#cliClearBan').onclick = async () => renderClient(await window.liaison.clientClear('banned'));
+$('#spSave').onclick = async () => {
+  await window.liaison.setConfig({ spotifyId: $('#spId').value.trim(), spotifySecret: $('#spSecret').value.trim() });
+  $('#cliMsg').textContent = 'Identifiants Spotify enregistres.';
+};
+window.liaison.on('client', renderClient);
+
+window.liaison.clientGet().then(st => {
+  renderClient(st);
+  if (st.spotify) { $('#spId').placeholder = 'enregistre'; $('#spSecret').placeholder = 'enregistre'; }
+}).catch(() => {});
 </script></body></html>

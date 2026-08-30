@@ -56,6 +56,58 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mm{display:block;font-family:var(--m);font-size:9.5px;color:var(--cream3);margin-top:3px;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mm .up{color:var(--blueLit)}
+.mm .ask{color:var(--redLit);font-weight:700}
+/* Deja joue : ce soir en rouge (une faute), une autre fois en gris
+   (une information). La couleur porte le poids, pas le texte. */
+.mm .deja{color:var(--cream3);font-weight:700}
+.mm .deja.grave{color:var(--redLit)}
+
+/* ---------- filtres de cabine ---------- */
+.filt{display:none;flex-wrap:wrap;align-items:center;gap:5px;padding:7px 10px;
+border-bottom:1px solid var(--wire);background:var(--deep2)}
+.filt.on{display:flex}
+.filt .f{font-family:var(--m);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+padding:4px 7px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream3);cursor:pointer;white-space:nowrap}
+.filt .f:hover{color:var(--cream);border-color:var(--cream3)}
+.filt .f[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+.filt select{font-family:var(--m);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
+background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;
+padding:4px 5px;max-width:150px;cursor:pointer}
+.filt input{font-family:var(--m);font-size:9px;width:42px;text-align:center;
+background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;padding:4px 3px}
+.filt .n{margin-left:auto;font-family:var(--m);font-size:8.5px;letter-spacing:.08em;color:var(--cream3);white-space:nowrap}
+.filt .n.warn{color:var(--redLit)}
+
+/* ---------- atterrissage ---------- */
+.land{display:none;padding:9px 11px;border-bottom:1px solid var(--wire);background:var(--deep2)}
+.land.on{display:block}
+.land .hd{display:flex;align-items:baseline;gap:8px}
+.land .ph{font-family:var(--d);font-size:14px;text-transform:uppercase;letter-spacing:.01em}
+.land .ph.tenir{color:var(--cream)}
+.land .ph.dernier{color:var(--redLit)}
+.land .ph.poser{color:var(--blueLit)}
+.land .re{margin-left:auto;font-family:var(--m);font-size:10px;color:var(--cream3);white-space:nowrap}
+.land .tx{color:var(--cream2);font-size:11.5px;line-height:1.45;margin-top:4px}
+.land .cl{display:flex;align-items:center;gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid var(--wire)}
+.land .cl b{font-family:var(--m);font-size:8px;letter-spacing:.16em;color:var(--cream3);text-transform:uppercase}
+.land .cl s{text-decoration:none;font-weight:700;font-size:11.5px;min-width:0;overflow:hidden;
+text-overflow:ellipsis;white-space:nowrap}
+.land .cl button{margin-left:auto;font-family:var(--m);font-size:8px;letter-spacing:.12em;
+text-transform:uppercase;color:var(--cream3);border:1px solid var(--wire2);border-radius:2px;padding:3px 6px}
+.land .cl button:hover{color:var(--cream);border-color:var(--cream3)}
+.land .bars{display:flex;gap:2px;align-items:flex-end;height:22px;margin-top:8px}
+.land .bars i{flex:1;background:var(--wire2);border-radius:1px 1px 0 0;min-height:2px}
+.land .bars i.now{background:var(--blueLit)}
+.land .ask{display:none}
+.land.asking .ask{display:block}
+.land.asking #lPlan{display:none}
+.land .ask .q{font-family:var(--d);font-size:14px;text-transform:uppercase}
+.land .ask .opts{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.land .ask .f{font-family:var(--m);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;
+padding:5px 8px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream3)}
+.land .ask .f:hover{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+.land .ask input{font-family:var(--m);font-size:9px;width:56px;text-align:center;
+background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;padding:5px 4px}
 /* plan de mix */
 .plan{font-family:var(--m);font-size:9.5px;margin-top:6px;display:flex;gap:11px;
 padding-top:6px;border-top:1px solid var(--wire);white-space:nowrap;overflow:hidden}
@@ -71,6 +123,21 @@ border-radius:2px;border:1px solid var(--wire2);color:var(--cream3);white-space:
 
 .empty{padding:28px 18px;color:var(--cream3);font-size:12.5px;line-height:1.65;text-align:center}
 .empty b{display:block;font-family:var(--d);font-size:15px;color:var(--cream2);text-transform:uppercase;margin-bottom:8px}
+
+/* ---------- bandeau demandes ---------- */
+.reqbar{display:none;align-items:center;gap:9px;padding:8px 11px;background:var(--blue);color:#fff;min-width:0}
+.reqbar.on{display:flex}
+.reqbar .t{font-family:var(--d);font-size:13px;text-transform:uppercase}
+.reqbar .lbl{color:#fff;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.reqbar button{margin-left:auto;font-family:var(--m);font-size:9px;letter-spacing:.12em;
+text-transform:uppercase;border:1px solid rgba(255,255,255,.5);padding:5px 8px;border-radius:2px}
+.reqbar button:hover{background:#fff;color:var(--blue)}
+.row.req .sc{font-size:19px;color:var(--blueLit)}
+.row.req.hot .sc{color:var(--redLit)}
+.row .miss{font-family:var(--m);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream3)}
+.chip.req{position:relative}
+.chip .badge{position:absolute;top:-5px;right:-5px;min-width:14px;height:14px;border-radius:7px;
+background:var(--red);color:#fff;font-family:var(--m);font-size:8px;line-height:14px;text-align:center;padding:0 3px}
 
 /* ---------- bandeau sauvetage ---------- */
 .sosbar{display:none;align-items:center;gap:9px;padding:8px 11px;background:var(--red);color:#fff;min-width:0}
@@ -141,10 +208,46 @@ transition:.18s;pointer-events:none}
   <div class="striplbl" id="striplbl"><span>—</span><span>—</span></div>
 </div>
 
+<div class="reqbar" id="reqbar">
+  <span class="t">Demandes</span>
+  <span class="lbl" id="reqSub">Ce que la salle réclame</span>
+  <button id="reqBack">Revenir</button>
+</div>
+
 <div class="sosbar" id="sosbar">
   <span class="t">Sauvetage</span>
   <span class="lbl" style="white-space:nowrap;overflow:hidden;text-overflow:ellipsis">Ce qui remonte la salle</span>
   <button id="sosBack">Revenir</button>
+</div>
+
+<div class="filt" id="filt">
+  <select id="fCrate" title="Ne proposer que depuis cette liste"><option value="">Toute la bibliothèque</option></select>
+  <button class="f" id="fPlayed" aria-pressed="false" title="Ne plus proposer ce qui est déjà passé ce soir">Pas déjà joué</button>
+  <button class="f" id="fExpl" aria-pressed="false" title="Écarter ce qui est annoncé comme explicite">Sans gros mots</button>
+  <button class="f" id="fBpm" aria-pressed="false" title="Verrouiller une plage de tempo">BPM</button>
+  <input id="fMin" type="number" min="60" max="200" placeholder="min" style="display:none">
+  <input id="fMax" type="number" min="60" max="200" placeholder="max" style="display:none">
+  <span class="n" id="fN"></span>
+</div>
+
+<div class="land" id="land">
+  <div class="ask" id="lAsk">
+    <div class="q">Il te reste combien de temps&nbsp;?</div>
+    <div class="opts">
+      <button class="f" data-min="30">30 min</button>
+      <button class="f" data-min="45">45 min</button>
+      <button class="f" data-min="60">1 h</button>
+      <button class="f" data-min="90">1 h 30</button>
+      <button class="f" data-min="120">2 h</button>
+      <input id="lMin" type="number" min="1" max="600" placeholder="min">
+    </div>
+  </div>
+  <div id="lPlan">
+  <div class="hd"><span class="ph" id="lPh">—</span><span class="re" id="lRe"></span></div>
+  <div class="tx" id="lTx"></div>
+  <div class="bars" id="lBars"></div>
+  <div class="cl" id="lCl" style="display:none"><b>Clôture</b><s id="lClT"></s><button id="lClX">Changer</button></div>
+  </div>
 </div>
 
 <div class="list" id="list">
@@ -165,6 +268,9 @@ transition:.18s;pointer-events:none}
   <button class="chip" data-arc="up" aria-pressed="true">Monter</button>
   <button class="chip" data-arc="hold" aria-pressed="false">Tenir</button>
   <button class="chip" data-arc="down" aria-pressed="false">Baisser</button>
+  <button class="chip" id="btnFilt" aria-pressed="false" title="Filtres de cabine">Filtres<span class="badge" id="filtN" style="display:none">0</span></button>
+  <button class="chip" id="btnLand" aria-pressed="false" title="Temps restant et descente">Fin</button>
+  <button class="chip req" id="btnReq" title="Demandes des invites">Demandes<span class="badge" id="reqN" style="display:none">0</span></button>
   <button class="chip sos" id="btnSos" title="Le dancefloor se vide">SOS</button>
   <span class="st" id="st">—</span>
 </div>
@@ -192,7 +298,7 @@ function fitHeight() {
     }
   }, 60);
 }
-let sosMode = false, lastSug = [], curStruct = null;
+let view = 'sug', lastSug = [], lastReq = [], curStruct = null;
 
 function toast(msg, red) {
   const t = $('#toast'); t.textContent = msg;
@@ -252,9 +358,17 @@ function planHTML(r) {
     '<span class="k3"><b>Sors</b> <s>' + p.outLabel + '</s></span></div>';
 }
 
+/* « Tu l'as deja passe ». Ce soir, c'est rouge : c'est la faute que
+   personne ne pardonne. Une autre soiree, c'est gris : c'est une
+   information, et parfois c'est meme une bonne raison de le rejouer. */
+function dejaHTML(r) {
+  if (!r.deja || !r.deja.texte) return '';
+  return '<span class="deja' + (r.deja.grave ? ' grave' : '') + '">' + esc(r.deja.texte) + '</span> · ';
+}
+
 function renderSug(list) {
   lastSug = list || [];
-  if (sosMode) return;
+  if (view !== 'sug') return;
   const box = $('#list');
   if (!list || !list.length) {
     box.innerHTML = '<div class="empty"><b>Rien a proposer</b>Importe ta bibliotheque dans les reglages.</div>';
@@ -265,7 +379,7 @@ function renderSug(list) {
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
+        <span class="mm">${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -285,7 +399,7 @@ function renderSos(list) {
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span>
+        <span class="mm">${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -297,22 +411,70 @@ function renderSos(list) {
 $('#list').addEventListener('click', async e => {
   const b = e.target.closest('.go'); if (!b) return;
   const r = await window.liaison.loadTrack(Number(b.dataset.id));
-  if (r && r.ok) toast('« ' + r.copied + ' » copie — colle dans ta recherche', sosMode);
+  if (r && r.ok) toast('« ' + r.copied + ' » copie — colle dans ta recherche', view === 'sos');
 });
 $('#btnSettings').onclick = () => window.liaison.openSettings();
 $('#btnHide').onclick = () => window.liaison.hideWidget();
 $('#btnSearch').onclick = () => { $('#search').classList.toggle('on'); $('#q').focus(); fitHeight(); };
 
+function setView(v) {
+  view = v;
+  $('#sosbar').classList.toggle('on', v === 'sos');
+  $('#reqbar').classList.toggle('on', v === 'req');
+}
+
 async function enterSos() {
-  sosMode = true;
-  $('#sosbar').classList.add('on');
+  setView('sos');
   $('#list').innerHTML = '<div class="empty"><b>Sauvetage</b>Recherche…</div>';
   try { renderSos(await window.liaison.rescue()); }
   catch (e) { $('#list').innerHTML = '<div class="empty"><b>Indisponible</b>Charge d\'abord un morceau.</div>'; }
 }
-function exitSos() { sosMode = false; $('#sosbar').classList.remove('on'); renderSug(lastSug); fitHeight(); }
-$('#btnSos').onclick = () => (sosMode ? exitSos() : enterSos());
-$('#sosBack').onclick = exitSos;
+function backToSug() { setView('sug'); renderSug(lastSug); fitHeight(); }
+$('#btnSos').onclick = () => (view === 'sos' ? backToSug() : enterSos());
+$('#sosBack').onclick = backToSug;
+
+/* ---------- demandes des invites ----------
+   Le compte est un nombre de telephones distincts, pas de clics :
+   « 4 demandes » veut dire quatre personnes, et ca se lit autrement. */
+function renderReq(list) {
+  lastReq = list || [];
+  const hot = lastReq.filter(r => r.n >= 3).length;
+  const b = $('#reqN');
+  b.style.display = lastReq.length ? 'block' : 'none';
+  b.textContent = lastReq.length;
+  b.style.background = hot ? 'var(--red)' : 'var(--wire2)';
+  if (view !== 'req') return;
+
+  const box = $('#list');
+  if (!lastReq.length) {
+    box.innerHTML = '<div class="empty"><b>Aucune demande</b>Ouvre une session dans les reglages,<br>puis affiche le QR au bar.</div>';
+    fitHeight(); return;
+  }
+  $('#reqSub').textContent = lastReq.length + ' titre' + (lastReq.length > 1 ? 's' : '') +
+    (hot ? ' · ' + hot + ' très demandé' + (hot > 1 ? 's' : '') : '');
+  box.innerHTML = lastReq.map(r => `
+    <div class="row req ${r.n >= 3 ? 'hot' : ''}">
+      <span class="sc">${r.n}</span>
+      <span style="min-width:0">
+        <span class="n">${esc(r.title)}</span>
+        <span class="mm">${esc(r.artist || '')}${r.have
+          ? ' · ' + esc(r.match.key || '?') + ' · ' + Number(r.match.bpm).toFixed(1).replace('.', ',')
+          : ' · <span class="miss">pas dans ta bibliothèque</span>'}</span>
+      </span>
+      ${r.have ? `<button class="go" data-id="${r.id}">Copier</button>` : '<span class="go" style="opacity:.35">—</span>'}
+    </div>`).join('');
+  fitHeight();
+}
+
+async function enterReq() {
+  setView('req');
+  $('#list').innerHTML = '<div class="empty"><b>Demandes</b>Lecture…</div>';
+  try { renderReq(await window.liaison.requests()); }
+  catch (e) { renderReq([]); }
+}
+$('#btnReq').onclick = () => (view === 'req' ? backToSug() : enterReq());
+$('#reqBack').onclick = backToSug;
+window.liaison.on('requests', renderReq);
 
 let tq;
 $('#q').addEventListener('input', e => {
@@ -333,8 +495,191 @@ document.querySelectorAll('[data-arc]').forEach(b => b.onclick = () => {
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', 'false'));
   b.setAttribute('aria-pressed', 'true');
   window.liaison.setConfig({ arc: b.dataset.arc });
-  if (sosMode) exitSos();
+  if (view !== 'sug') backToSug();
 });
+
+/* ============================================================
+   Les filtres de cabine.
+
+   Quatre interrupteurs qui retirent des morceaux. Ils ne remontent
+   jamais rien : c'est ce qui les rend previsibles a 2 h du matin.
+   Le compte a droite dit combien de titres restent — s'il tombe
+   trop bas, on le dit en rouge plutot que de vider le widget.
+   ============================================================ */
+let fEtat = { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0 };
+
+function renderFiltCount(r) {
+  const n = $('#fN'), badge = $('#filtN');
+  const actifs = (fEtat.crate ? 1 : 0) + (fEtat.skipPlayed ? 1 : 0) +
+                 (fEtat.noExplicit ? 1 : 0) + ((fEtat.bpmMin || fEtat.bpmMax) ? 1 : 0);
+  badge.style.display = actifs ? 'block' : 'none';
+  badge.textContent = actifs;
+  badge.style.background = r && r.vide ? 'var(--red)' : 'var(--wire2)';
+  if (!r) { n.textContent = ''; return; }
+  n.classList.toggle('warn', !!r.vide);
+  n.textContent = r.vide
+    ? 'Trop etroit — filtres ignores'
+    : (actifs ? r.restants + ' / ' + r.total + ' titres' : r.total + ' titres');
+}
+
+function paintFilt() {
+  $('#fPlayed').setAttribute('aria-pressed', fEtat.skipPlayed ? 'true' : 'false');
+  $('#fExpl').setAttribute('aria-pressed', fEtat.noExplicit ? 'true' : 'false');
+  const bpmOn = !!(fEtat.bpmMin || fEtat.bpmMax);
+  $('#fBpm').setAttribute('aria-pressed', bpmOn ? 'true' : 'false');
+  $('#fMin').style.display = $('#fMax').style.display = bpmOn ? 'block' : 'none';
+  $('#fCrate').value = fEtat.crate || '';
+}
+
+async function pushFilt(patch) {
+  const r = await window.liaison.setFilters(patch);
+  renderFiltCount(r);
+  fitHeight();
+}
+
+async function loadFilt() {
+  const r = await window.liaison.filters();
+  fEtat = r.etat;
+  const sel = $('#fCrate');
+  sel.innerHTML = '<option value="">Toute la bibliothèque</option>' +
+    r.crates.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${c.n}</option>`).join('');
+  if (!r.crates.length) sel.innerHTML += '<option value="" disabled>Aucune liste trouvée</option>';
+  $('#fMin').value = fEtat.bpmMin || '';
+  $('#fMax').value = fEtat.bpmMax || '';
+  paintFilt();
+  renderFiltCount(r);
+}
+
+$('#btnFilt').onclick = async () => {
+  const on = !$('#filt').classList.contains('on');
+  $('#filt').classList.toggle('on', on);
+  $('#btnFilt').setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) await loadFilt();
+  fitHeight();
+};
+$('#fCrate').onchange = e => { fEtat.crate = e.target.value || null; paintFilt(); pushFilt({ fCrate: fEtat.crate }); };
+$('#fPlayed').onclick = () => { fEtat.skipPlayed = !fEtat.skipPlayed; paintFilt(); pushFilt({ fSkipPlayed: fEtat.skipPlayed }); };
+$('#fExpl').onclick = () => { fEtat.noExplicit = !fEtat.noExplicit; paintFilt(); pushFilt({ fNoExplicit: fEtat.noExplicit }); };
+$('#fBpm').onclick = async () => {
+  if (fEtat.bpmMin || fEtat.bpmMax) { fEtat.bpmMin = 0; fEtat.bpmMax = 0; }
+  else {
+    /* Un clic doit donner une plage utile tout de suite. On la centre sur
+       le tempo joue, a plus ou moins 6 % — au-dela, un morceau cale
+       s'entend. Sans morceau charge, on ouvre grand et le DJ ajuste. */
+    const r = await window.liaison.filters();
+    const b = r.bpm || 0;
+    fEtat.bpmMin = b ? Math.round(b * 0.94) : 110;
+    fEtat.bpmMax = b ? Math.round(b * 1.06) : 132;
+  }
+  $('#fMin').value = fEtat.bpmMin || '';
+  $('#fMax').value = fEtat.bpmMax || '';
+  paintFilt();
+  pushFilt({ fBpmMin: fEtat.bpmMin, fBpmMax: fEtat.bpmMax });
+};
+let fT;
+[['#fMin', 'fBpmMin'], ['#fMax', 'fBpmMax']].forEach(([sel, k]) => {
+  $(sel).addEventListener('input', e => {
+    clearTimeout(fT);
+    const v = Math.max(0, Math.min(220, parseInt(e.target.value, 10) || 0));
+    fEtat[k === 'fBpmMin' ? 'bpmMin' : 'bpmMax'] = v;
+    fT = setTimeout(() => pushFilt({ [k]: v }), 350);
+  });
+});
+window.liaison.on('filters', renderFiltCount);
+
+/* ============================================================
+   L'atterrissage de fin de set.
+
+   Le DJ annonce le temps qui reste ; Liaison decoupe la descente
+   et reserve la cloture. La barre se rafraichit toute seule :
+   c'est le seul endroit de l'app ou le temps qui passe change
+   l'affichage sans qu'un morceau ait bouge.
+   ============================================================ */
+let landTimer = null, landData = null;
+
+function renderLand(p) {
+  landData = p;
+  const box = $('#land');
+  if (!p || !p.ok || !p.phase) {
+    if (!box.classList.contains('asking')) {
+      box.classList.remove('on');
+      $('#btnLand').setAttribute('aria-pressed', 'false');
+    }
+    clearInterval(landTimer); landTimer = null;
+    landData = null;
+    fitHeight(); return;
+  }
+  box.classList.add('on');
+  box.classList.remove('asking');
+  $('#btnLand').setAttribute('aria-pressed', 'true');
+  const ph = p.phase;
+  $('#lPh').className = 'ph ' + ph.k;
+  $('#lPh').textContent = ph.nom;
+  $('#lRe').textContent = ph.reste + ' min · fin ' + p.fin;
+  $('#lTx').textContent = ph.texte;
+
+  /* la courbe visee, en barres : la barre courante s'allume */
+  const ecoule = p.restant - ph.reste;
+  $('#lBars').innerHTML = p.arc.map(a =>
+    `<i style="height:${Math.max(8, Math.round(a.e * 10))}%" class="${
+      Math.abs(a.min - ecoule) <= p.restant / 20 ? 'now' : ''}"></i>`).join('');
+
+  const cl = $('#lCl');
+  if (p.closer) {
+    cl.style.display = 'flex';
+    $('#lClT').textContent = (p.closer.artist ? p.closer.artist + ' — ' : '') + p.closer.title;
+    $('#lClT').style.color = ph.liberer ? 'var(--blueLit)' : 'var(--cream)';
+  } else cl.style.display = 'none';
+  fitHeight();
+}
+
+async function refreshLand() {
+  const p = await window.liaison.landingGet();
+  renderLand(p);
+  if (p && p.ok && !landTimer) landTimer = setInterval(refreshLand, 60000);
+}
+
+/* Electron n'a pas window.prompt : on demande dans le widget lui-meme,
+   avec les durees qu'un DJ annonce vraiment. Taper au clavier reste
+   possible, mais un clic doit suffire. */
+async function poserPlan(m) {
+  if (!(m > 0)) { toast('Donne un nombre de minutes', true); return; }
+  const p = await window.liaison.landingPlan(m);
+  $('#land').classList.remove('asking');
+  renderLand(p);
+  if (p && p.ok) toast(p.note);
+}
+
+$('#btnLand').onclick = () => {
+  const box = $('#land');
+  if (landData && landData.ok) {
+    window.liaison.landingClear();
+    renderLand(null);
+    toast('Plan de fin efface — retour a la courbe de la soiree');
+    return;
+  }
+  const on = !(box.classList.contains('on') && box.classList.contains('asking'));
+  box.classList.toggle('on', on);
+  box.classList.toggle('asking', on);
+  $('#btnLand').setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) setTimeout(() => $('#lMin').focus(), 40);
+  fitHeight();
+};
+$('#lAsk').addEventListener('click', e => {
+  const b = e.target.closest('[data-min]');
+  if (b) poserPlan(Number(b.dataset.min));
+});
+$('#lMin').addEventListener('keydown', e => {
+  if (e.key === 'Enter') poserPlan(parseInt(e.target.value, 10));
+  if (e.key === 'Escape') { $('#land').classList.remove('on', 'asking'); $('#btnLand').setAttribute('aria-pressed', 'false'); fitHeight(); }
+});
+$('#lClX').onclick = async () => {
+  /* Rejouer le plan : le moteur reprend la meilleure cloture restante,
+     celle qu'il vient de reserver etant desormais deja proposee. */
+  if (!landData || !landData.ok) return;
+  const p = await window.liaison.landingPlan(landData.phase ? landData.phase.reste : landData.restant);
+  renderLand(p);
+};
 
 function licState(st) {
   const bar = $('#licBar');
@@ -356,6 +701,8 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
 (async () => {
   const c = await window.liaison.getConfig();
   cfg = c.config;
+  refreshLand();
+  window.liaison.filters().then(renderFiltCount).catch(() => {});
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', o.dataset.arc === cfg.arc ? 'true' : 'false'));
   if (c.license) licState(c.license);
   const n = await window.liaison.nowPlaying();

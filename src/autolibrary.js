@@ -6,6 +6,7 @@
      Traktor   collection.nml               (XML)
      VirtualDJ database.xml                 (XML)
      rekordbox un export .xml s'il existe   (XML)
+     iTunes    iTunes Music Library.xml      (plist)
      sinon     scan des dossiers de musique
    ============================================================ */
 const fs = require('fs');
@@ -67,6 +68,29 @@ function rekordboxXmlPaths() {
   }
   return out;
 }
+/* ---------- iTunes / Musique ----------
+   Beaucoup de DJs tiennent tout dans iTunes et laissent rekordbox se
+   synchroniser dessus. Le XML n'existe que si « Partager la bibliotheque
+   XML avec d'autres applications » est coche — mais c'est justement la
+   case que rekordbox oblige a cocher, donc ces DJs l'ont deja. */
+function itunesPaths() {
+  const names = ['iTunes Music Library.xml', 'iTunes Library.xml', 'Music Library.xml'];
+  const dirs = [
+    path.join(HOME, 'Music', 'iTunes'),
+    path.join(HOME, 'Music', 'Music'),
+    path.join(HOME, 'Musique', 'iTunes'),
+    path.join(HOME, 'Musik', 'iTunes'),
+    win ? path.join(HOME, 'Music', 'iTunes') : '',
+    win ? path.join(process.env.USERPROFILE || '', 'Music', 'iTunes') : ''
+  ].filter(Boolean);
+  const out = [];
+  for (const d of dirs) for (const n of names) {
+    const f = path.join(d, n);
+    if (exists(f) && out.indexOf(f) < 0) out.push(f);
+  }
+  return out;
+}
+
 function musicFolders() {
   return [path.join(HOME, 'Music'), path.join(HOME, 'Musique'), path.join(HOME, 'Downloads'), path.join(HOME, 'Téléchargements')]
     .filter(exists);
@@ -137,6 +161,7 @@ function detect() {
   for (const p of traktorPaths()) found.push({ kind: 'traktor', path: p, label: 'Traktor — collection.nml' });
   for (const p of virtualdjPaths()) if (exists(p)) found.push({ kind: 'virtualdj', path: p, label: 'VirtualDJ — database.xml' });
   for (const p of rekordboxXmlPaths()) found.push({ kind: 'rekordbox', path: p, label: 'rekordbox — export XML' });
+  for (const p of itunesPaths()) found.push({ kind: 'itunes', path: p, label: 'iTunes / Musique — bibliothèque XML' });
   if (!found.length) for (const d of musicFolders()) found.push({ kind: 'folder', path: d, label: 'Dossier de musique — ' + path.basename(d) });
   return found;
 }
@@ -146,7 +171,82 @@ async function readSource(src, onProgress) {
   if (src.kind === 'traktor') return parseTraktor(src.path);
   if (src.kind === 'virtualdj') return parseVirtualDJ(src.path);
   if (src.kind === 'rekordbox') return lib.parseRekordboxXML(src.path);
+  if (src.kind === 'itunes') return parseITunes(src.path);
   return lib.scanFolder(src.path, onProgress);
+}
+
+/* ---------- lecture du plist iTunes ----------
+   Le fichier est un plist XML : une suite de <key> suivies de leur
+   valeur. On ne charge pas un analyseur complet — on parcourt le bloc
+   « Tracks » et on lit les cles qui nous interessent. Un plist iTunes
+   de 20 000 titres fait 30 Mo et se lit en moins d'une seconde ainsi. */
+function plistUnesc(s) {
+  return String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+    .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(+d));
+}
+
+/** file:///Users/... -> /Users/... , avec les %20 decodes. */
+function fromFileURL(u) {
+  if (!u) return '';
+  if (u.indexOf('file://') !== 0) return u;
+  let p = u.replace(/^file:\/\/(localhost)?/, '');
+  try { p = decodeURIComponent(p); } catch (e) {}
+  if (win) p = p.replace(/^\/([A-Za-z]:)/, '$1').replace(/\//g, '\\');
+  return p;
+}
+
+function parseITunes(file) {
+  const xml = fs.readFileSync(file, 'utf8');
+  const start = xml.indexOf('<key>Tracks</key>');
+  if (start < 0) return [];
+  const end = xml.indexOf('<key>Playlists</key>', start);
+  const body = xml.slice(start, end > 0 ? end : xml.length);
+
+  const out = [];
+  /* chaque piste est un <dict> a l'interieur du dictionnaire Tracks */
+  const re = /<dict>([\s\S]*?)<\/dict>/g;
+  let m;
+  while ((m = re.exec(body))) {
+    const d = m[1];
+    const val = key => {
+      const r = new RegExp('<key>' + key + '</key>\\s*<(string|integer|real|date|true|false)\\s*\\/?>([^<]*)', 'i');
+      const x = d.match(r);
+      if (!x) return '';
+      if (x[1] === 'true' || x[1] === 'false') return x[1];
+      return plistUnesc(x[2]);
+    };
+    const loc = val('Location');
+    const name = val('Name');
+    if (!name && !loc) continue;
+    /* on ecarte ce qui n'est pas de la musique jouable */
+    if (val('Podcast') === 'true' || val('Movie') === 'true' || val('TV Show') === 'true') continue;
+    const kind = val('Kind');
+    if (kind && /video|film|movie/i.test(kind)) continue;
+
+    const p = fromFileURL(loc);
+    const bpm = parseFloat(val('BPM')) || 0;
+    const plays = parseInt(val('Play Count'), 10) || 0;
+    const rating = parseInt(val('Rating'), 10) || 0;      /* 0..100 */
+    out.push({
+      path: p || ('itunes:' + val('Track ID')),
+      /* garde pour retrouver ce morceau dans les playlists du plist,
+         qui ne referencent que des identifiants */
+      itId: val('Track ID') || null,
+      /* iTunes est la seule source qui porte vraiment cette etiquette */
+      explicit: val('Explicit') === 'true' ? 1 : 0,
+      title: name || path.basename(p, path.extname(p)),
+      artist: val('Artist') || val('Album Artist') || '',
+      genre: val('Genre') || '',
+      bpm: bpm > 0 ? Math.round(bpm * 10) / 10 : 0,
+      key: null,
+      duration: (parseInt(val('Total Time'), 10) || 0) / 1000,
+      /* iTunes sait deux choses que les logiciels DJ ignorent :
+         combien de fois le morceau a ete joue, et la note du DJ. */
+      pop: Math.max(20, Math.min(95, 35 + Math.min(35, plays * 3) + Math.round(rating / 100 * 25)))
+    });
+  }
+  return out;
 }
 
 /** Fusionne plusieurs sources en dedoublonnant par chemin de fichier. */
@@ -160,6 +260,10 @@ function merge(lists) {
       if (!prev.bpm && t.bpm) prev.bpm = t.bpm;
       if (!prev.key && t.key) prev.key = t.key;
       if (!prev.genre && t.genre) prev.genre = t.genre;
+      /* les identifiants servent a rattacher les crates : un morceau vu
+         par deux sources doit garder les deux etiquettes */
+      if (prev.rbId == null && t.rbId != null) prev.rbId = t.rbId;
+      if (prev.itId == null && t.itId != null) prev.itId = t.itId;
     }
   }
   return Array.from(byPath.values());
@@ -182,5 +286,6 @@ function watch(sources, onChange) {
   return { stop: () => watchers.forEach(w => { try { w.close(); } catch (e) {} }) };
 }
 
-module.exports = { detect, readSource, merge, watch, parseTraktor, parseVirtualDJ,
-                   seratoPaths, traktorPaths, virtualdjPaths, rekordboxXmlPaths, musicFolders };
+module.exports = { detect, readSource, merge, watch, parseTraktor, parseVirtualDJ, parseITunes,
+                   seratoPaths, traktorPaths, virtualdjPaths, rekordboxXmlPaths, itunesPaths,
+                   musicFolders, fromFileURL };

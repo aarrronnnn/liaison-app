@@ -13,6 +13,11 @@ const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
 const { AppWatcher } = require('./watcher');
 const { StructurePool, StructureCache } = require('./structure');
+const clientlist = require('./clientlist');
+const cratesmod = require('./crates');
+const filtersmod = require('./filters');
+const landing = require('./landing');
+const acquire = require('./acquire');
 const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
 
@@ -29,7 +34,13 @@ const DEFAULTS = {
   libraryMode: null, libraryPath: null,
   pack: 'fr-club', sessionName: 'Session', guestWeight: 0.5,
   arc: 'up', mode: 'crowd', banned: [], guestPort: 7373,
-  revealOnLoad: false, opacity: 1
+  revealOnLoad: false, opacity: 1,
+  /* les listes du client : ce qu'il veut entendre, ce qu'il refuse */
+  clientWanted: [], clientBanned: [], clientName: '',
+  guestCooldown: 90, guestMax: 5,
+  spotifyId: '', spotifySecret: '',
+  /* les filtres de cabine — l'etat des quatre interrupteurs */
+  fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0
 };
 
 let config = Object.assign({}, DEFAULTS);
@@ -43,7 +54,13 @@ const now = new NowPlaying();
 const guests = new GuestServer();
 let setlog = null;
 let trends = new Map();
+/* listes du client, une fois rapprochees de la bibliotheque */
+let clientSet = { wanted: new Set(), banned: new Set(), dna: {}, stats: null };
 let license = null;
+/* les listes deja faites par le DJ, relues depuis ses sources */
+let crateList = [];
+/* le plan d'atterrissage courant, et l'heure ou il a ete pose */
+let landPlan = null, landAt = 0;
 
 /* ---- structure des morceaux : points de mix ---- */
 const structPool = new StructurePool(2);
@@ -117,8 +134,10 @@ async function importLibrary(mode, p) {
   send('progress', { phase: 'analyse', done: 0, total: tracks.length });
   await lib.analyzeAll(tracks, CACHE(), onProgress);
   library = lib.finalize(tracks);
+  rebuildClient();
+  rebuildCrates([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
   config.libraryMode = mode; config.libraryPath = p; saveConfig();
-  send('library', { n: library.length });
+  send('library', { n: library.length, crates: crateList.length });
   return library.length;
 }
 
@@ -146,11 +165,27 @@ async function autoImport(preferKind) {
     send('progress', { phase: 'analyse', done: 0, total: merged.length });
     await libmod.analyzeAll(merged, CACHE(), x => send('progress', x));
     library = libmod.finalize(merged);
-    send('library', { n: library.length, sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
+    rebuildClient();
+    rebuildCrates(ordered);
+    send('library', { n: library.length, crates: crateList.length,
+                      sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
 
     if (libraryWatcher) libraryWatcher.stop();
     libraryWatcher = autolib.watch(ordered, () => autoImport(preferKind));
   } finally { importing = false; }
+}
+
+/* Les listes deja faites par le DJ. On les relit apres chaque import :
+   une crate ajoutee dans Serato a midi doit etre la le soir meme.
+   Si le filtre pointait une liste qui a disparu, on le relache plutot
+   que de laisser un filtre fantome vider le widget. */
+function rebuildCrates(sources) {
+  try { crateList = cratesmod.readAll(sources || librarySources, library); }
+  catch (e) { crateList = []; }
+  if (config.fCrate && !crateList.some(c => c.id === config.fCrate)) {
+    config.fCrate = null;
+    saveConfig();
+  }
 }
 
 /* ---------------- ADN de la session ---------------- */
@@ -196,6 +231,98 @@ function planFor(nextTrack) {
   return engine.mixPlan(current, nextTrack, a, b);
 }
 
+/* ============================================================
+   Les listes du client.
+
+   Le client envoie ce qu'il veut entendre et ce qu'il ne veut pas.
+   Les titres voulus sont joues ET tirent l'ADN de la soiree vers
+   leurs genres : c'est ce qui fait qu'un mariage a Nantes ne
+   ressemble pas au mariage d'a cote. Les titres refuses sortent du
+   moteur, definitivement — un « surtout pas celle-la » ne se
+   negocie pas.
+   ============================================================ */
+function rebuildClient() {
+  const empty = { wanted: new Set(), banned: new Set(), dna: {}, stats: null };
+  if (!library.length) { clientSet = empty; return; }
+
+  const w = clientlist.resolve(config.clientWanted || [], library, engine.match);
+  const b = clientlist.resolve(config.clientBanned || [], library, engine.match);
+
+  clientSet = {
+    wanted: new Set(w.matched.map(m => m.track.id)),
+    banned: new Set(b.matched.map(m => engine.keyOf(m.track))),
+    dna: clientlist.dnaOf(w.matched.map(m => m.track)),
+    stats: {
+      wanted: { total: (config.clientWanted || []).length, trouves: w.matched.length, manquants: w.missing.length },
+      banned: { total: (config.clientBanned || []).length, trouves: b.matched.length, manquants: b.missing.length },
+      /* Chaque titre absent repart avec de quoi le trouver : les
+         boutiques ou il s'achete, et ce que le DJ possede peut-etre
+         deja sous une autre orthographe. */
+      manquants: w.missing.slice(0, 40).map(m => ({
+        artist: m.artist, title: m.title,
+        achats: acquire.buyLinks(m),
+        deja: acquire.nearMisses(m, library, engine.match, 2)
+      }))
+    }
+  };
+}
+
+/** Tout ce que le moteur doit exclure : la liste du DJ plus celle du client. */
+function bannedSet() {
+  const out = new Set((config.banned || []).map(x => String(x).toLowerCase()));
+  for (const k of clientSet.banned) out.add(k);
+  return out;
+}
+
+/* La file des invites, telle que le widget la montre : le compte de
+   telephones distincts, et le morceau de la bibliotheque qui correspond
+   — ou, s'il manque, de quoi l'acheter apres la soiree. */
+function requestList() {
+  return guests.top().slice(0, 12).map(r => {
+    const m = engine.match((r.artist ? r.artist + ' ' : '') + r.title, library, 0.5);
+    return {
+      title: r.title, artist: r.artist, n: r.n, at: r.at,
+      id: m ? m.track.id : null,
+      have: !!m,
+      match: m ? { title: m.track.title, artist: m.track.artist, bpm: m.track.bpm, key: m.track.key } : null
+    };
+  });
+}
+
+/* ------------------------------------------------------------
+   Les filtres de cabine.
+
+   Ils s'appliquent avant le moteur, jamais apres : un morceau
+   ecarte ne doit pas avoir de score, sinon il reapparait des que
+   le classement change. Le tamis est reconstruit a chaque appel
+   parce que « deja joue ce soir » bouge a chaque morceau.
+   ------------------------------------------------------------ */
+function currentFilter() {
+  const crate = config.fCrate ? crateList.find(c => c.id === config.fCrate) : null;
+  const f = {
+    crate: crate ? { name: crate.name, ids: crate.ids } : null,
+    skipPlayed: !!config.fSkipPlayed,
+    playedIds: setlog ? setlog.playedIds() : new Set(),
+    noExplicit: !!config.fNoExplicit,
+    bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0
+  };
+  /* la cloture reservee sort des suggestions jusqu'a son heure */
+  const ph = landingNow();
+  const reserve = landPlan && landPlan.closer && ph && !ph.liberer ? landPlan.closer.id : null;
+  const base = filtersmod.build(f);
+  return {
+    tracks: filtersmod.apply(library, f),
+    keep: reserve ? (t => base.keep(t) && t.id !== reserve) : base.keep,
+    reserve: reserve
+  };
+}
+
+/** Ou en est le set par rapport au plan d'atterrissage. */
+function landingNow() {
+  if (!landPlan || !landPlan.ok) return null;
+  return landing.now(landPlan, (Date.now() - landAt) / 60000);
+}
+
 function currentDNA() {
   const pack = locales.byId(config.pack);
   const guestDNA = {};
@@ -203,7 +330,10 @@ function currentDNA() {
     const m = engine.match(r.artist + ' ' + r.title, library, 0.5);
     if (m) for (const tag of m.track.tags || []) guestDNA[tag] = Math.min(100, (guestDNA[tag] || 40) + r.n * 8);
   }
-  return locales.blendDNA(pack, guestDNA, Object.keys(guestDNA).length ? config.guestWeight : 0);
+  let dna = locales.blendDNA(pack, guestDNA, Object.keys(guestDNA).length ? config.guestWeight : 0);
+  /* Le client passe avant le pack de pays : c'est sa soiree. */
+  if (Object.keys(clientSet.dna).length) dna = locales.blendDNA({ dna: dna }, clientSet.dna, 0.45);
+  return dna;
 }
 
 function computeSuggestions(limit) {
@@ -211,9 +341,19 @@ function computeSuggestions(limit) {
   const f = feat();
   const n = Math.min(limit || config.suggestCount || 3, f.suggestions);
   const mode = (config.mode === 'trend' && !f.trends) ? 'crowd' : config.mode;
-  return engine.suggest(current, library, {
-    dna: currentDNA(), arc: config.arc, mode: mode,
-    banned: new Set((config.banned || []).map(s => s.toLowerCase())),
+
+  const tam = currentFilter();
+  let vivier = tam.tracks.tracks;
+  if (tam.reserve) vivier = vivier.filter(t => t.id !== tam.reserve);
+
+  /* Pendant l'atterrissage, c'est le plan qui commande la courbe :
+     le DJ a annonce une heure de fin, elle prime sur le pack. */
+  const ph = landingNow();
+  const arc = ph ? ph.arc : config.arc;
+
+  return engine.suggest(current, vivier, {
+    dna: currentDNA(), arc: arc, mode: mode,
+    banned: bannedSet(), wanted: clientSet.wanted,
     trends: trends, limit: n
   }).map(r => {
     ensureStructure(r.track);
@@ -226,7 +366,9 @@ function computeSuggestions(limit) {
       delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
       trend: r.trend, h: Math.round(r.h), tempoS: Math.round(r.tempo.s),
       crowd: r.crowd, timbre: Math.round(r.timbreScore),
-      plan: plan, introBars: st && st.ok ? st.introBars : null
+      plan: plan, introBars: st && st.ok ? st.introBars : null, client: !!r.client,
+      /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
+      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
   });
 }
@@ -287,14 +429,87 @@ ipcMain.handle('source:pickFile', async () => {
 });
 
 ipcMain.handle('suggest', () => computeSuggestions(config.suggestCount || 3));
+/* ---------------- listes du client ---------------- */
+ipcMain.handle('client:get', () => ({
+  name: config.clientName || '',
+  wanted: config.clientWanted || [],
+  banned: config.clientBanned || [],
+  stats: clientSet.stats,
+  dna: clientSet.dna,
+  spotify: !!(config.spotifyId && config.spotifySecret)
+}));
+
+/** Ajoute des titres a une liste. `source` vaut 'texte' ou une adresse Spotify. */
+ipcMain.handle('client:import', async (e, opt) => {
+  opt = opt || {};
+  const side = opt.side === 'banned' ? 'clientBanned' : 'clientWanted';
+  let entries = [];
+  try {
+    if (opt.url) entries = await clientlist.fromSpotify(opt.url, config.spotifyId, config.spotifySecret);
+    else entries = clientlist.parseList(opt.text);
+  } catch (err) {
+    return { ok: false, error: err.message };
+  }
+  if (!entries.length) return { ok: false, error: 'Aucun titre lisible dans ce que tu as colle.' };
+
+  /* on ajoute sans doublonner ce qui est deja dans la liste */
+  const seen = new Set((config[side] || []).map(x => ((x.artist || '') + '|' + x.title).toLowerCase()));
+  const added = entries.filter(x => !seen.has(((x.artist || '') + '|' + x.title).toLowerCase()));
+  config[side] = (config[side] || []).concat(added);
+  saveConfig();
+  rebuildClient();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  send('client', { stats: clientSet.stats });
+  return { ok: true, lus: entries.length, ajoutes: added.length, stats: clientSet.stats };
+});
+
+/** La liste de courses, prete a coller dans un panier ou un mail. */
+ipcMain.handle('client:shopping', () => {
+  const m = (clientSet.stats && clientSet.stats.manquants) || [];
+  const txt = acquire.shoppingList(m);
+  if (txt) clipboard.writeText(txt);
+  return { ok: !!txt, n: m.length, texte: txt, pools: acquire.POOLS };
+});
+
+ipcMain.handle('client:clear', (e, side) => {
+  config[side === 'banned' ? 'clientBanned' : 'clientWanted'] = [];
+  saveConfig();
+  rebuildClient();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  send('client', { stats: clientSet.stats });
+  return { ok: true, stats: clientSet.stats };
+});
+
+ipcMain.handle('client:remove', (e, opt) => {
+  const side = opt.side === 'banned' ? 'clientBanned' : 'clientWanted';
+  config[side] = (config[side] || []).filter(x =>
+    ((x.artist || '') + '|' + x.title).toLowerCase() !== String(opt.key).toLowerCase());
+  saveConfig();
+  rebuildClient();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  return { ok: true, stats: clientSet.stats };
+});
+
 ipcMain.handle('structure:get', (e, id) => structures.get(id) || null);
 
-/* Le bouton de sauvetage : on ignore la courbe de soiree. */
+/* Le bouton de sauvetage : on ignore la courbe de soiree.
+   On respecte en revanche le crate, les BPM et les paroles — ce sont
+   des interdits de la salle, pas des preferences. Mais pas « deja
+   joue » : quand la piste se vide, le titre qui a marche il y a une
+   heure est justement le bon. */
 ipcMain.handle('rescue', () => {
   if (!current) return [];
-  return engine.rescue(current, library, {
+  const secours = filtersmod.apply(library, {
+    crate: config.fCrate ? (function () {
+      const c = crateList.find(x => x.id === config.fCrate);
+      return c ? { name: c.name, ids: c.ids } : null;
+    })() : null,
+    noExplicit: !!config.fNoExplicit,
+    bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0
+  }).tracks;
+  return engine.rescue(current, secours, {
     dna: currentDNA(),
-    banned: new Set((config.banned || []).map(s => s.toLowerCase())),
+    banned: bannedSet(), wanted: clientSet.wanted,
     structures: structures,
     limit: 3
   }).map(r => {
@@ -302,10 +517,11 @@ ipcMain.handle('rescue', () => {
     return {
       id: r.track.id, title: r.track.title, artist: r.track.artist,
       key: r.track.key, bpm: r.track.bpm, energy: r.track.energy, path: r.track.path,
-      total: r.total, why: r.why, introBars: r.introBars,
+      total: r.total, why: r.why, introBars: r.introBars, client: !!r.client,
       transition: r.transition.n,
       delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
-      plan: planFor(r.track)
+      plan: planFor(r.track),
+      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
   });
 });
@@ -341,14 +557,18 @@ ipcMain.handle('session:start', async (e, opts) => {
   guests.stop();
   const url = await guests.start({
     port: config.guestPort, sessionName: config.sessionName,
+    cooldown: config.guestCooldown, maxPerDevice: config.guestMax,
     getLibrary: () => library,
-    onRequest: top => { send('requests', top.slice(0, 8)); send('suggestions', computeSuggestions(config.suggestCount || 3)); }
+    onRequest: () => {
+      send('requests', requestList());
+      if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+    }
   });
   if (!setlog) setlog = new SetLog(SETS());
   setlog.open(config.sessionName, config.pack);
   return { url: url, qr: await qrPNG(url), share: shareLinks(url, config.sessionName) };
 });
-ipcMain.handle('session:requests', () => guests.top().slice(0, 12));
+ipcMain.handle('session:requests', () => requestList());
 ipcMain.handle('share:open', (e, url) => { shell.openExternal(url); return true; });
 ipcMain.handle('share:copy', (e, text) => { clipboard.writeText(text); return true; });
 ipcMain.handle('qr:save', async (e, dataUrl) => {
@@ -358,7 +578,110 @@ ipcMain.handle('qr:save', async (e, dataUrl) => {
   return r.filePath;
 });
 
+/* ============================================================
+   Les filtres de cabine
+   ============================================================ */
+ipcMain.handle('filters:get', () => {
+  const tam = currentFilter();
+  return {
+    crates: crateList.map(c => ({ id: c.id, name: c.name, source: c.source, n: c.n })),
+    etat: {
+      crate: config.fCrate, skipPlayed: !!config.fSkipPlayed,
+      noExplicit: !!config.fNoExplicit,
+      bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0
+    },
+    /* combien de morceaux le tamis laisse passer, et s'il etouffe */
+    restants: tam.tracks.tracks.length,
+    total: library.length,
+    vide: tam.tracks.vide,
+    active: tam.tracks.active,
+    /* le tempo joue, pour proposer une plage sensee en un clic */
+    bpm: current ? current.bpm : null
+  };
+});
+
+ipcMain.handle('filters:set', (e, patch) => {
+  for (const k of ['fCrate', 'fSkipPlayed', 'fNoExplicit', 'fBpmMin', 'fBpmMax'])
+    if (Object.prototype.hasOwnProperty.call(patch || {}, k)) config[k] = patch[k];
+  saveConfig();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  const tam = currentFilter();
+  send('filters', { restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active });
+  return { ok: true, restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active };
+});
+
+ipcMain.handle('filters:crates', () => {
+  crateList = cratesmod.readAll(librarySources, library);
+  return crateList.map(c => ({ id: c.id, name: c.name, source: c.source, n: c.n }));
+});
+
+/* ============================================================
+   L'atterrissage de fin de set
+   ============================================================ */
+ipcMain.handle('landing:plan', (e, minutes) => {
+  const m = Math.max(0, Math.round(Number(minutes) || 0));
+  if (!m) { landPlan = null; landAt = 0; if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+            return { ok: false, note: 'Plan efface — Liaison revient a la courbe de la soiree.' }; }
+  const tam = currentFilter();
+  landPlan = landing.plan({
+    restantMin: m,
+    library: tam.tracks.tracks,
+    playedIds: setlog ? setlog.playedIds() : new Set(),
+    playedDurs: setlog ? setlog.playedDurations() : [],
+    banned: bannedSet(), wanted: clientSet.wanted
+  });
+  landAt = Date.now();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  return Object.assign({}, landPlan, { phase: landingNow() });
+});
+
+ipcMain.handle('landing:get', () =>
+  landPlan && landPlan.ok ? Object.assign({}, landPlan, { phase: landingNow() }) : null);
+
+ipcMain.handle('landing:clear', () => {
+  landPlan = null; landAt = 0;
+  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  return { ok: true };
+});
+
+/* ============================================================
+   La tracklist
+   ============================================================ */
 ipcMain.handle('sets:list', () => (setlog ? setlog.list() : []));
+ipcMain.handle('sets:tracklist', (e, id) => (setlog ? setlog.tracklist(id) : null));
+ipcMain.handle('sets:copy', (e, id) => {
+  if (!setlog) return { ok: false };
+  const t = setlog.texte(id);
+  if (!t) return { ok: false };
+  clipboard.writeText(t);
+  return { ok: true, n: t.split('\n').length };
+});
+
+/* Le fichier des declarations. On propose un nom parlant : c'est ce
+   qu'on retrouvera dans le dossier six mois plus tard, au moment de
+   declarer. */
+ipcMain.handle('sets:export', async (e, opt) => {
+  if (!setlog) return { ok: false };
+  const id = opt && opt.id;
+  const format = (opt && opt.format) === 'txt' ? 'txt' : 'csv';
+  const t = setlog.tracklist(id);
+  if (!t) return { ok: false, error: 'Cette session ne contient aucun morceau.' };
+  const d = new Date(t.at);
+  const jour = d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const propre = String(t.name || 'session').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 60);
+  const r = await dialog.showSaveDialog({
+    title: 'Enregistrer la tracklist',
+    defaultPath: 'Tracklist ' + jour + ' - ' + propre + '.' + format,
+    filters: [format === 'csv'
+      ? { name: 'Tableur / declaration', extensions: ['csv'] }
+      : { name: 'Texte', extensions: ['txt'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try {
+    fs.writeFileSync(r.filePath, format === 'csv' ? setlog.csv(id) : setlog.texte(id), 'utf8');
+  } catch (err) { return { ok: false, error: String(err.message || err) }; }
+  return { ok: true, path: r.filePath, n: t.lignes.length };
+});
 ipcMain.handle('sets:replay', (e, opts) => {
   if (!feat().replay) return { error: 'Le rejeu de set demande une licence Resident ou Collectif.', locked: true };
   if (!setlog) return null;

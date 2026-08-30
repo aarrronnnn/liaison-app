@@ -80,6 +80,7 @@ function suggest(cur, library, opt) {
   const mode = opt.mode || 'crowd';
   const banned = opt.banned || new Set();
   const trends = opt.trends || new Map();
+  const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
   const limit = opt.limit || 5;
   if (!cur) return [];
   const wCrowd = mode === 'crowd' ? 0.26 : 0.06;
@@ -98,9 +99,12 @@ function suggest(cur, library, opt) {
       let total = (h * 0.27 + tp.s * 0.24 + en * 0.15 + ti * 0.14 + cr * wCrowd + td * wTrend) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       const voc = cur.vocal && t.vocal ? -6 : 0;
-      total = Math.max(4, Math.min(99, Math.round(total + voc)));
+      /* Un titre demande par le client remonte, mais ne double jamais un
+         morceau injouable : le bonus s'ajoute au score, il ne le remplace pas. */
+      const ask = wanted.has(t.id) ? 14 : 0;
+      total = Math.max(4, Math.min(99, Math.round(total + voc + ask)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
-               total: total, transition: transitionOf(cur, t, tp, h) };
+               client: wanted.has(t.id), total: total, transition: transitionOf(cur, t, tp, h) };
     })
     .sort((a, b) => b.total - a.total)
     .slice(0, limit);
@@ -196,6 +200,7 @@ function rescue(cur, library, opt) {
   const dna = opt.dna || {};
   const banned = opt.banned || new Set();
   const structures = opt.structures || new Map();
+  const wanted = opt.wanted || new Set();
   const limit = opt.limit || 3;
   if (!cur) return [];
 
@@ -220,29 +225,61 @@ function rescue(cur, library, opt) {
 
     const total = Math.round(
       tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
-    );
+    ) + (wanted.has(t.id) ? 12 : 0);
     out.push({
       track: t, total: Math.max(4, Math.min(99, total)),
       tempo: tp, h: h, fam: Math.round(fam), energy: e,
-      introBars: introBars,
-      why: introBars != null && introBars <= 4
-        ? 'Entre en ' + introBars + ' mesures'
-        : (t.pop >= 70 ? 'La salle la connait' : 'Energie ' + e + '/10'),
+      introBars: introBars, client: wanted.has(t.id),
+      why: wanted.has(t.id) ? 'Demande par le client'
+        : (introBars != null && introBars <= 4
+            ? 'Entre en ' + introBars + ' mesures'
+            : (t.pop >= 70 ? 'La salle la connait' : 'Energie ' + e + '/10')),
       transition: transitionOf(cur, t, tp, h)
     });
   }
   return out.sort((a, b) => b.total - a.total).slice(0, limit);
 }
 
-/* ---- correspondance floue : retrouver un morceau depuis un texte scrape ---- */
+/* ============================================================
+   Correspondance floue.
+
+   Trois sources ecrivent mal, et pour trois raisons differentes :
+     — les tags d'une bibliotheque, remplis a la main depuis vingt ans
+       (« 03_daft_punk-get_lucky_(320kbps).mp3 »)
+     — une playlist client, copiee d'une plateforme a une autre
+     — un invite qui tape sur son telephone, sans accent, avec des
+       fautes, et souvent dans le desordre (« sweet dreems eurythmic »)
+
+   Un seul indice ne suffit pas. On en combine trois : la proximite
+   des lettres, la part des mots de la requete qu'on retrouve, et
+   l'inclusion pure. Le meilleur des trois gagne.
+   ============================================================ */
+
+/* Le bruit qu'on trouve dans les noms de fichiers et les titres
+   recopies : mentions de plateforme, qualite, numero de piste. */
+const BRUIT = [
+  /\b(official|officiel)\s*(music\s*)?(video|audio|lyric[s]?|clip)\b/g,
+  /\b(hd|hq|4k|1080p|720p|320\s*kbps|320|128\s*kbps|full\s*album)\b/g,
+  /\b(lyrics?|paroles|audio only|visualizer|s[eé]ance)\b/g,
+  /\bwww\.[a-z0-9.-]+\b/g, /\b[a-z0-9-]+\.(com|net|fr|org)\b/g,
+  /\.(mp3|wav|aiff?|flac|m4a|ogg|aac)\b/g
+];
+
 function normalize(s) {
-  return String(s || '')
-    .toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')
-    .replace(/\((original|extended|radio|club|edit|mix|remix)[^)]*\)/g, ' ')
+  let t = String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')     /* accents */
+    .replace(/[_–—]/g, ' ')                     /* tirets longs, underscores */
+    .replace(/^\s*\d{1,3}\s*[-.)]\s*/, ' ');              /* « 03. » en tete */
+  for (const r of BRUIT) t = t.replace(r, ' ');
+  return t
+    .replace(/\b(feat|ft|featuring|avec|with)\b\.?/g, ' ')
+    .replace(/\((original|extended|radio|club|edit|mix|remix|version|instrumental)[^)]*\)/g, ' ')
+    .replace(/\[[^\]]*\]/g, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/\s+/g, ' ')
     .trim();
 }
+
 function bigrams(s) {
   const out = new Set();
   for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
@@ -255,20 +292,77 @@ function dice(a, b) {
   for (const g of A) if (B.has(g)) inter++;
   return (2 * inter) / (A.size + B.size);
 }
+
+/* Deux mots se ressemblent-ils assez ? On accepte le prefixe (« eurythmic »
+   pour « eurythmics ») et la faute de frappe (« dreems » pour « dreams »). */
+function motProche(a, b) {
+  if (a === b) return true;
+  if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
+  if (Math.abs(a.length - b.length) <= 2 && Math.min(a.length, b.length) >= 4)
+    return dice(a, b) >= 0.72;
+  return false;
+}
+
+/* Quelle part des mots tapes retrouve-t-on dans le titre ?
+   C'est l'indice qui sauve « sweet dreams eurythmics » face a
+   « Eurythmics - Sweet Dreams (Are Made of This) » : l'ordre ne
+   compte pas, les mots en trop du titre ne penalisent pas. */
+function partDesMots(q, cible) {
+  const A = q.split(' ').filter(w => w.length > 1);
+  const B = cible.split(' ').filter(w => w.length > 1);
+  if (!A.length || !B.length) return 0;
+  let trouves = 0;
+  for (const a of A) if (B.some(b => motProche(a, b))) trouves++;
+  return trouves / A.length;
+}
+
+function combine(q, cible) {
+  const d = dice(q, cible);
+  const t = partDesMots(q, cible);
+  /* inclusion franche : la requete est le titre, ou l'inverse */
+  if (cible.includes(q) || q.includes(cible)) return Math.min(1, 0.86 + 0.14 * d);
+  return Math.max(d, 0.42 * d + 0.58 * t);
+}
+
+/**
+ * Retrouve un morceau depuis un texte approximatif.
+ * @param {string} text  ce qui a ete tape, scrape ou colle
+ * @param {Array} library
+ * @param {number} threshold  0.58 par defaut ; 0.5 pour les invites
+ */
 function match(text, library, threshold) {
   threshold = threshold == null ? 0.58 : threshold;
   const q = normalize(text);
-  if (q.length < 4) return null;
+  if (q.length < 3) return null;
   let best = null, bestScore = 0;
   for (const t of library) {
-    const a = normalize(t.artist + ' ' + t.title);
-    const b = normalize(t.title + ' ' + t.artist);
-    const sc = Math.max(dice(q, a), dice(q, b), dice(q, normalize(t.title)));
+    const artist = t.artist || '', title = t.title || '';
+    const sc = Math.max(
+      combine(q, normalize(artist + ' ' + title)),
+      combine(q, normalize(title + ' ' + artist)),
+      combine(q, normalize(title))
+    );
     if (sc > bestScore) { bestScore = sc; best = t; }
   }
   return bestScore >= threshold ? { track: best, score: bestScore } : null;
 }
 
+/** Les n meilleurs, pour proposer un choix plutot qu'imposer une reponse. */
+function search(text, library, limit, threshold) {
+  const q = normalize(text);
+  if (q.length < 2) return [];
+  const out = [];
+  for (const t of library) {
+    const sc = Math.max(
+      combine(q, normalize((t.artist || '') + ' ' + (t.title || ''))),
+      combine(q, normalize((t.title || '') + ' ' + (t.artist || ''))),
+      combine(q, normalize(t.title || ''))
+    );
+    if (sc >= (threshold == null ? 0.34 : threshold)) out.push({ track: t, score: sc });
+  }
+  return out.sort((a, b) => b.score - a.score).slice(0, limit || 8);
+}
+
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
-                   transitionOf, suggest, keyOf, normalize, match, dice,
+                   transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss };

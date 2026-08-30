@@ -1,11 +1,14 @@
 name: Construire et publier Liaison
 
-# Pousse un tag (git tag v0.4.0 && git push --tags) et GitHub construit
+# Pousse un tag (git tag v0.4.1 && git push --tags) et GitHub construit
 # le .dmg et le .exe tout seul, puis les attache a la release.
 on:
   push:
     tags: ['v*']
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -28,12 +31,15 @@ jobs:
       - run: npm run ${{ matrix.script }}
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}  # electron-builder ne reclame plus rien
+          EP_PRE_RELEASE: false
       - uses: actions/upload-artifact@v4
         with:
           name: liaison-${{ matrix.os }}
           path: |
             dist/*.dmg
             dist/*.exe
+          if-no-files-found: error
 
   release:
     needs: build
@@ -53,7 +59,7 @@ jobs:
           body: |
             Widget de cabine pour DJ.
 
-            **macOS** : ouvre le .dmg, glisse Liaison dans Applications, puis clic droit sur l'app → Ouvrir.
-            **Windows** : lance le .exe, puis « Informations complémentaires » → « Exécuter quand même ».
+            **macOS** : ouvre le .dmg, glisse Liaison dans Applications, puis clic droit sur l'app -> Ouvrir.
+            **Windows** : lance le .exe, puis « Informations complementaires » -> « Executer quand meme ».
 
             Une fois ouverte, l'app te propose l'abonnement ou la saisie d'un code.
