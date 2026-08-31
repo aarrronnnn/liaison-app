@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "0.9.1",
+  "version": "0.9.2",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {

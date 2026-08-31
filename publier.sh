@@ -50,4 +50,4 @@ echo "  intel ${BLEU}https://github.com/$REPO/releases/download/v$VERSION/Liaiso
 echo "  win   ${BLEU}https://github.com/$REPO/releases/download/v$VERSION/Liaison-Setup-$VERSION.exe${FIN}"
 echo
 echo "Des que la construction est verte, le bouton Telecharger de"
-echo "${BLEU}https://liaison-gamma-five.vercel.app${FIN} sert le fichier."
+echo "${BLEU}https://liaison-web-ochre.vercel.app${FIN} sert le fichier."

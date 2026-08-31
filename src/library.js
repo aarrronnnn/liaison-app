@@ -124,37 +124,161 @@ function probe(file) {
 
    Huit et pas trente : au-dela, les processus se disputent la
    tete de lecture et le total remonte.
+
+   ------------------------------------------------------------
+   Le cache, et pourquoi il manquait cruellement.
+
+   Le defaut n'etait pas la lenteur du premier scan : c'est qu'il
+   n'etait garde nulle part. Fermer l'app, redemarrer la machine,
+   ou simplement un scan interrompu au milieu — et les 22 000
+   fichiers repartaient de zero. Rapporte par un vrai test : deux
+   heures de lecture, un redemarrage, et le compteur repart a
+   701 / 22 180. Le travail n'etait pas lent, il etait jete.
+
+   On garde donc ce qu'on a lu, indexe par chemin, avec la taille
+   et la date du fichier. Au relancement, un fichier inchange n'est
+   pas relu — un stat au lieu d'un ffprobe, soit un rapport de
+   l'ordre de mille. Un fichier modifie ou remplace est relu, lui,
+   parce que ses tags ont pu changer.
+
+   Et surtout : le cache est ecrit AU FIL DE L'EAU, toutes les 300
+   lectures. Un scan interrompu a 40 % reprend a 40 %, jamais a
+   zero. C'est la moitie du probleme, et c'est celle qui rendait la
+   premiere soiree impossible.
    ------------------------------------------------------------ */
-async function scanFolder(dir, onProgress) {
+
+/* Une entree tient en tableau plutot qu'en objet : sur 22 000
+   morceaux, les noms de champs repetes pesaient plus que les
+   valeurs elles-memes. */
+function chargerScanCache(file) {
+  if (!file) return { e: {}, sale: false };
+  try {
+    const j = JSON.parse(fs.readFileSync(file, 'utf8'));
+    if (j && j.v === 1 && j.e) return { e: j.e, sale: false };
+  } catch (e) {}
+  return { e: {}, sale: false };
+}
+
+/* Ecriture atomique : un fichier temporaire puis un renommage.
+   Une coupure de courant pendant l'ecriture laisse alors l'ancien
+   cache intact au lieu d'un JSON tronque — qui serait jete au
+   chargement suivant, et rendrait le cache inutile precisement le
+   jour ou il sert. */
+function ecrireScanCache(file, e) {
+  if (!file) return;
+  const tmp = file + '.tmp';
+  try {
+    fs.writeFileSync(tmp, JSON.stringify({ v: 1, e: e }));
+    fs.renameSync(tmp, file);
+  } catch (err) {
+    try { fs.unlinkSync(tmp); } catch (e2) {}
+  }
+}
+
+function empreinte(p) {
+  try { const s = fs.statSync(p); return [s.size, Math.round(s.mtimeMs)]; }
+  catch (e) { return null; }
+}
+
+/**
+ * Lit les tags d'un dossier.
+ * @param {string} dir
+ * @param {function} onProgress  { phase, done, total, caches, neufs }
+ * @param {object}   opt         opt.cache = chemin du fichier de cache
+ */
+async function scanFolder(dir, onProgress, opt) {
+  opt = opt || {};
+  const cacheFile = opt.cache || null;
+  const cache = chargerScanCache(cacheFile).e;
+
   const files = walk(dir, []);
   const out = new Array(files.length);
-  let curseur = 0, faits = 0;
+  let curseur = 0, faits = 0, caches = 0, neufs = 0, depuisSauvegarde = 0;
   const PARALLELE = Math.min(8, Math.max(2, files.length));
+
+  const ligne = (f, t, dur) => ({
+    path: f,
+    title: t.title || path.basename(f, path.extname(f)),
+    artist: t.artist || t.album_artist || '',
+    genre: t.genre || '',
+    bpm: num(t.tbpm || t.bpm || 0),
+    key: toCamelot(t.initial_key || t.tkey || t.key),
+    duration: dur || 0,
+    pop: 40
+  });
+
+  function rapporter() {
+    if (onProgress) onProgress({ phase: 'lecture', done: faits, total: files.length,
+                                 caches: caches, neufs: neufs });
+  }
 
   async function coureur() {
     while (curseur < files.length) {
       const i = curseur++;
       const f = files[i];
-      let info = {};
-      try { info = await probe(f); } catch (e) { info = {}; }
-      const t = info.tags || {};
-      out[i] = {
-        path: f,
-        title: t.title || path.basename(f, path.extname(f)),
-        artist: t.artist || t.album_artist || '',
-        genre: t.genre || '',
-        bpm: num(t.tbpm || t.bpm || 0),
-        key: toCamelot(t.initial_key || t.tkey || t.key),
-        duration: info.duration || 0,
-        pop: 40
-      };
+      const cle = cleChemin(f);
+      const emp = empreinte(f);
+      const c = cache[cle];
+
+      /* Deja lu, et le fichier n'a pas bouge : rien a faire. */
+      if (c && emp && c[0] === emp[0] && c[1] === emp[1]) {
+        out[i] = { path: f, title: c[2], artist: c[3], genre: c[4],
+                   bpm: c[5], key: c[6] || null, duration: c[7], pop: 40 };
+        caches++;
+      } else {
+        let info = {};
+        try { info = await probe(f); } catch (e) { info = {}; }
+        const r = ligne(f, info.tags || {}, info.duration);
+        out[i] = r;
+        neufs++;
+        if (emp) {
+          cache[cle] = [emp[0], emp[1], r.title, r.artist, r.genre, r.bpm, r.key, r.duration];
+          depuisSauvegarde++;
+        }
+      }
+
       faits++;
-      if (onProgress && faits % 25 === 0) onProgress({ phase: 'lecture', done: faits, total: files.length });
+      /* On sauvegarde par paquets : ecrire a chaque fichier
+         couterait plus cher que la lecture elle-meme, ne jamais
+         ecrire avant la fin ramene le probleme d'origine. */
+      if (depuisSauvegarde >= 300) { depuisSauvegarde = 0; ecrireScanCache(cacheFile, cache); }
+      if (faits % 25 === 0) rapporter();
     }
   }
 
-  await Promise.all(Array.from({ length: PARALLELE }, coureur));
-  if (onProgress) onProgress({ phase: 'lecture', done: files.length, total: files.length });
+  let complet = false;
+  try {
+    await Promise.all(Array.from({ length: PARALLELE }, coureur));
+    complet = true;
+  } finally {
+    /* Meme si le scan est interrompu, ce qui a ete lu est garde. */
+    if (neufs) ecrireScanCache(cacheFile, cache);
+  }
+
+  /* ---------- l'entretien du cache ----------
+     Un cache qui ne fait que grandir finit par peser plus que ce
+     qu'il fait gagner : les morceaux effaces, les cles USB
+     debranchees et les dossiers renommes y restent pour toujours.
+
+     On l'elague donc, mais a deux conditions strictes :
+       — seulement si le parcours est alle jusqu'au bout, sinon on
+         effacerait le travail d'un scan interrompu ;
+       — seulement sous le dossier qu'on vient de lire, parce que
+         le meme fichier de cache sert a plusieurs sources et
+         qu'un disque externe debranche ne doit pas etre oublie
+         pour autant. */
+  if (complet && cacheFile) {
+    const prefixe = cleChemin(dir).replace(/\/+$/, '') + '/';
+    const gardes = new Set(files.map(cleChemin));
+    let retires = 0;
+    for (const cle of Object.keys(cache)) {
+      if (cle.indexOf(prefixe) === 0 && !gardes.has(cle)) { delete cache[cle]; retires++; }
+    }
+    if (retires) ecrireScanCache(cacheFile, cache);
+  }
+
+  faits = files.length;
+  rapporter();
   return out.filter(Boolean);
 }
 
@@ -291,4 +415,4 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin };
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache };

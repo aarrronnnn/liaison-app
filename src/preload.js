@@ -55,6 +55,8 @@ contextBridge.exposeInMainWorld('liaison', {
   licenseRelease: () => invoke('license:release'),
   licenseBuy: plan => invoke('license:buy', plan),
   autoImport: () => invoke('library:auto'),
+  rescanLibrary: opt => invoke('library:rescan', opt),
+  scanInfo: () => invoke('library:scanInfo'),
   librarySources: () => invoke('library:sources'),
   runningApps: () => invoke('apps:running'),
   openSettings: () => invoke('widget:settings'),

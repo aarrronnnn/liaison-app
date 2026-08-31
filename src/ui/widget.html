@@ -8,6 +8,7 @@ body{background:var(--deep);color:var(--cream);font-family:var(--b);font-size:13
 user-select:none;overflow:hidden;border:1px solid var(--wire2);border-radius:6px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .lbl{color:var(--cream3)}
+.vr{font-family:var(--m);font-size:8.5px;letter-spacing:.06em;color:var(--cream3);margin-left:7px;opacity:.75}
 
 /* ---------- barre ---------- */
 .grip{display:flex;align-items:center;gap:9px;padding:9px 10px;border-bottom:1px solid var(--wire);-webkit-app-region:drag}
@@ -137,6 +138,14 @@ border-radius:2px;border:1px solid var(--wire2);color:var(--cream3);white-space:
 
 .empty{padding:28px 18px;color:var(--cream3);font-size:12.5px;line-height:1.65;text-align:center}
 .empty b{display:block;font-family:var(--d);font-size:15px;color:var(--cream2);text-transform:uppercase;margin-bottom:8px}
+/* Le conseil : cadre a gauche, parce qu'une marche a suivre se lit
+   en colonne et pas centree. */
+.conseil{text-align:left;padding:20px 18px}
+.conseil b{text-align:left}
+.marche{margin:12px 0 0;padding:0 0 0 20px;color:var(--cream2)}
+.marche li{margin:5px 0;font-size:12.5px}
+.repli{display:block;margin-top:12px;padding-top:10px;border-top:1px solid var(--wire);
+       color:var(--cream3);font-size:11.5px}
 
 /* ---------- bandeau demandes ---------- */
 .reqbar{display:none;align-items:center;gap:9px;padding:8px 11px;background:var(--blue);color:#fff;min-width:0}
@@ -206,6 +215,11 @@ transition:.18s;pointer-events:none}
       <circle cx="12" cy="12" r="2.5" fill="var(--deep)"/>
     </svg>
     <span class="nm">LIAISON</span>
+    <!-- La version, en clair. Un test reel a ete mene pendant des
+         heures sur une version depassee sans que personne ne puisse
+         s'en rendre compte : rien, nulle part, ne disait laquelle
+         tournait. Trois caracteres reglent ca definitivement. -->
+    <span class="vr" id="ver"></span>
   </span>
   <span class="act">
     <button id="btnSearch" title="Declarer le morceau en cours">⌕</button>
@@ -418,15 +432,39 @@ $('#btnTheme').onclick = () => {
    bibliotheque, pas de morceau detecte, ou un filtre trop serre —
    et chacune a sa reponse.
    ------------------------------------------------------------ */
-let etatAn = { library: 0, analyses: 0, offline: 0, restants: 0, sansFils: false, importing: false };
+let etatAn = { library: 0, analyses: 0, offline: 0, restants: 0, sansFils: false, importing: false, conseils: [] };
+
+/* Un conseil vaut mieux qu'un constat. Quand Liaison sait pourquoi
+   la bibliotheque est vide ET comment la remplir, il donne la
+   marche a suivre plutot que de renvoyer le DJ dans les reglages
+   chercher tout seul. */
+function conseilHTML(c) {
+  return '<div class="empty conseil"><b>' + esc(c.titre) + '</b>' + esc(c.texte) +
+         '<ol class="marche">' + (c.marche || []).map(x => '<li>' + esc(x) + '</li>').join('') + '</ol>' +
+         (c.repli ? '<span class="repli">' + esc(c.repli) + '</span>' : '') + '</div>';
+}
+
+/* Le conseil qui correspond au moment : on ne parle pas de l'export
+   rekordbox a quelqu'un dont la bibliotheque est deja chargee. */
+function conseilPour(quand) {
+  return (etatAn.conseils || []).find(c => c && c.quand === quand) || null;
+}
 
 function etatVide() {
   if (etatAn.importing)
     return '<div class="empty"><b>Lecture de ta bibliotheque</b>Liaison lit la base de ton logiciel.<br>Quelques secondes.</div>';
   if (!etatAn.library)
-    return '<div class="empty"><b>Aucune bibliotheque</b>Ouvre les reglages et lance la detection,<br>ou pointe ton dossier de musique.</div>';
+    return conseilHTML(conseilPour('biblio') || {
+      titre: 'Aucune bibliotheque',
+      texte: 'Liaison n\'a trouve aucune base a lire.',
+      marche: ['Ouvre les reglages et lance la detection',
+               'Ou pointe directement ton dossier de musique'] });
   if (!curNow)
-    return '<div class="empty"><b>Aucun morceau detecte</b>Lance un titre dans ton logiciel de mix,<br>ou declare-le avec la loupe ci-dessus.</div>';
+    return conseilHTML(conseilPour('deck') || {
+      titre: 'Aucun morceau detecte',
+      texte: 'Liaison attend de savoir ce qui tourne.',
+      marche: ['Lance un titre dans ton logiciel de mix',
+               'Ou clique la loupe en haut et tape deux lettres du titre'] });
   if (etatAn.offline >= etatAn.library * 0.5 && etatAn.offline > 10)
     return '<div class="empty"><b>Disque introuvable</b>' + etatAn.offline + ' morceaux pointent un disque<br>qui n\'est pas branche.</div>';
   return '<div class="empty"><b>Rien ne se cale</b>Aucun titre ne s\'enchaine sur ce tempo.<br>Desserre les filtres, ou passe par un relais.</div>';
@@ -790,7 +828,20 @@ window.liaison.on('analysis', p => {
   if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
 });
 window.liaison.on('status', s => { $('#st').textContent = (s.ok ? '● ' : '○ ') + (s.msg || ''); });
-window.liaison.on('progress', p => { $('#st').textContent = p.phase + ' ' + p.done + '/' + p.total; });
+window.liaison.on('progress', p => {
+  const n = x => (x || 0).toLocaleString('fr-FR');
+  let t = 'Lecture ' + n(p.done) + ' / ' + n(p.total);
+  /* Quand le cache reprend la main, on le dit : c'est la difference
+     entre « ca recommence a zero » et « ca reprend ou ca en etait ». */
+  if (p.caches > 0) t += ' · ' + n(p.caches) + ' deja connus';
+  $('#st').textContent = t;
+});
+window.liaison.on('conseils', list => {
+  const par = new Map((etatAn.conseils || []).map(c => [c.cle, c]));
+  for (const c of list || []) if (c && c.cle) par.set(c.cle, c);
+  etatAn.conseils = Array.from(par.values());
+  if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
+});
 window.liaison.on('library', async l => {
   $('#st').textContent = l.n.toLocaleString('fr-FR') + ' titres prets';
   try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
@@ -803,6 +854,7 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
 
 (async () => {
   const c = await window.liaison.getConfig();
+  if (c.version) $('#ver').textContent = 'v' + c.version;
   cfg = c.config;
   appliquerTheme(cfg.theme);
   refreshLand();

@@ -125,8 +125,39 @@ function start(opts, cb) {
     annSock.on('error', () => {});
   }
 
+  /* ------------------------------------------------------------
+     Le silence, explique.
+
+     « Aucun paquet recu — verifie le reseau » envoyait le DJ
+     verifier un cable qui n'existe pas. Pro DJ Link est un
+     protocole diffuse par le MATERIEL : un CDJ, un XDJ, un DJM.
+     rekordbox lance seul sur un portable n'emet rien, et n'a
+     jamais rien emis — il n'y a donc rien a reparer.
+
+     C'est le cas le plus frequent, et de loin : le DJ qui essaie
+     Liaison chez lui est presque toujours devant rekordbox seul.
+     Lui dire la verite, et lui donner la porte de sortie
+     (declarer le morceau a la main, ce que Liaison fait en deux
+     lettres), vaut mieux qu'un voyant rouge sans consigne.
+     ------------------------------------------------------------ */
   const health = setInterval(() => {
-    if (!packets) cb.onStatus({ ok: false, msg: 'Aucun paquet cabine recu — verifie le reseau Pro DJ Link' });
+    if (packets) return;
+    cb.onStatus({
+      ok: false,
+      msg: 'Pro DJ Link silencieux — aucun materiel sur le reseau',
+      conseil: {
+        cle: 'prolink-muet', quand: 'deck',
+        titre: 'Aucun materiel sur le reseau',
+        texte: 'Pro DJ Link n\'est diffuse que par un CDJ, un XDJ ou un DJM. ' +
+               'rekordbox seul sur un portable n\'annonce rien : il n\'y a rien a reparer.',
+        marche: [
+          'Avec du materiel : branche-le en reseau et relance rekordbox',
+          'Sans materiel : clique la loupe en haut et tape deux lettres du titre',
+          'Liaison enchaine ensuite normalement'
+        ],
+        repli: 'Serato, Traktor et VirtualDJ sont detectes sans materiel, eux.'
+      }
+    });
   }, 15000);
 
   return {

@@ -130,9 +130,18 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
     <table id="srcTable"><thead><tr><th>Sources trouvees</th><th style="width:90px">Type</th></tr></thead><tbody></tbody></table>
     <div class="bar"><i id="bar"></i></div>
     <div class="state" id="libState">Recherche en cours…</div>
+    <p class="tips" id="scanInfo" style="margin-top:14px"></p>
     <div class="row">
       <button id="reScan">Relire maintenant</button>
+      <button id="reScanTout" class="g">Tout relire</button>
     </div>
+    <p class="tips" style="margin-top:10px">
+      <b>Relire</b> ne rouvre que ce qui a change : dix titres ajoutes coutent dix lectures,
+      pas toute la bibliotheque. Liaison le fait deja tout seul quand tu ajoutes de la musique —
+      ce bouton sert a forcer la main.<br>
+      <b>Tout relire</b> jette ce qui est connu et repart de zero. A garder pour le cas ou tu as
+      retagge des morceaux avec un outil qui n'a pas change leur date de modification.
+    </p>
   </div>
 
   <div class="card">
@@ -412,7 +421,35 @@ $('#buyPass').onclick = () => window.liaison.licenseBuy('pass');
 $('#buyCol').onclick = () => window.liaison.licenseBuy('collectif');
 window.liaison.on('license', renderLic);
 
-$('#reScan').onclick = async () => { $('#libState').textContent = 'Relecture…'; await window.liaison.autoImport(); renderSources(); };
+async function renderScanInfo() {
+  try {
+    const i = await window.liaison.scanInfo();
+    if (!i || !i.connus) { $('#scanInfo').textContent = ''; return; }
+    const mo = i.octets > 0 ? (i.octets / 1048576) : 0;
+    $('#scanInfo').innerHTML = '<b>' + i.connus.toLocaleString('fr-FR') + ' morceaux deja lus</b> et gardes ' +
+      'd\'une session a l\'autre (' + (mo >= 1 ? mo.toFixed(1) + ' Mo' : Math.round(i.octets / 1024) + ' Ko') +
+      '). Au prochain lancement ils ne seront pas relus.';
+  } catch (e) { $('#scanInfo').textContent = ''; }
+}
+
+async function relire(force) {
+  const b1 = $('#reScan'), b2 = $('#reScanTout');
+  b1.disabled = b2.disabled = true;
+  $('#libState').textContent = force ? 'Relecture complete…' : 'Relecture…';
+  try { await window.liaison.rescanLibrary({ force: !!force }); }
+  finally { b1.disabled = b2.disabled = false; }
+  renderSources(); renderScanInfo();
+}
+$('#reScan').onclick = () => relire(false);
+$('#reScanTout').onclick = () => relire(true);
+window.liaison.on('progress', p => {
+  const n = x => (x || 0).toLocaleString('fr-FR');
+  $('#libState').textContent = 'Lecture ' + n(p.done) + ' / ' + n(p.total) +
+    (p.caches > 0 ? ' · ' + n(p.caches) + ' deja connus' : '');
+  const bar = $('#bar');
+  if (bar && p.total) bar.style.width = Math.round(p.done / p.total * 100) + '%';
+});
+renderScanInfo();
 async function renderSources(){
   const list = await window.liaison.librarySources();
   $('#srcTable').querySelector('tbody').innerHTML = list.length

@@ -23,6 +23,7 @@ const landing = require('./landing');
 const acquire = require('./acquire');
 const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
+const rbFichiers = require('./sources/rekordbox');
 
 const DIR = () => app.getPath('userData');
 const CFG = () => path.join(DIR(), 'config.json');
@@ -30,6 +31,10 @@ const CACHE = () => path.join(DIR(), 'analysis-cache.json');
 const SETS = () => path.join(DIR(), 'sets.json');
 const LIC = () => path.join(DIR(), 'license.json');
 const STRUCT = () => path.join(DIR(), 'structure-cache.json');
+/* Les tags lus par ffprobe, gardes d'une soiree a l'autre : sans ce
+   fichier, un dossier de 22 000 morceaux est relu en entier a chaque
+   lancement. */
+const SCAN = () => path.join(DIR(), 'scan-cache.json');
 
 const DEFAULTS = {
   source: null, sourceOpts: {},
@@ -137,8 +142,9 @@ async function importLibrary(mode, p) {
   const onProgress = x => send('progress', x);
   let tracks = [];
   if (mode === 'rekordbox') tracks = lib.parseRekordboxXML(p);
-  else tracks = await lib.scanFolder(p, onProgress);
+  else tracks = await lib.scanFolder(p, onProgress, { cache: SCAN() });
   library = lib.finalize(tracks);
+  indexChemins = null;
   rebuildClient();
   rebuildCrates([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
   config.libraryMode = mode; config.libraryPath = p; saveConfig();
@@ -154,8 +160,14 @@ async function autoImport(preferKind) {
   importing = true;
   try {
     librarySources = autolib.detect();
+    /* Ce qui manque pour aller vite — typiquement rekordbox
+       installe sans export XML. On le dit avant le scan, pas
+       apres deux heures. */
+    const avis = autolib.conseils(librarySources);
+    if (avis.length) send('conseils', avis);
     if (!librarySources.length) {
       send('status', { ok: false, msg: 'Aucune bibliotheque trouvee — ouvre les reglages' });
+      send('library', { n: 0, crates: 0, conseils: avis });
       return;
     }
     /* on privilegie la base du logiciel qui vient de s'ouvrir */
@@ -165,7 +177,7 @@ async function autoImport(preferKind) {
 
     const lists = [];
     for (const src of ordered) {
-      try { lists.push(await autolib.readSource(src, x => send('progress', x))); }
+      try { lists.push(await autolib.readSource(src, x => send('progress', x), { cache: SCAN() })); }
       catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
     }
     const merged = autolib.merge(lists);
@@ -174,10 +186,12 @@ async function autoImport(preferKind) {
        faut pour proposer un enchainement. L'energie et le timbre
        arrivent ensuite, morceau par morceau, sans bloquer. */
     library = libmod.finalize(merged);
+    indexChemins = null;
     rebuildClient();
     rebuildCrates(ordered);
     elaguerStructures();
     send('library', { n: library.length, crates: crateList.length,
+                      conseils: avis,
                       sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
     startAnalysis();
 
@@ -503,10 +517,62 @@ now.on('text', text => {
   if (m && (!current || m.track.id !== current.id)) setCurrent(m.track, 'detect');
   send('raw', { text: text, matched: m ? m.track.title : null });
 });
-now.on('status', s => send('status', s));
+/* ============================================================
+   rekordbox sans materiel.
+
+   Pro DJ Link ne parle que si un CDJ, un XDJ ou un DJM est sur le
+   reseau. Le DJ qui essaie Liaison chez lui, devant rekordbox
+   seul, n'a donc jamais rien vu bouger : « en attente du deck »,
+   indefiniment, sans que rien ne soit casse.
+
+   On ajoute une deuxieme paire d'yeux : les fichiers audio que le
+   processus rekordbox tient ouverts. C'est une deduction et pas
+   une annonce — voir sources/rekordbox.js pour ce qu'elle vaut —
+   donc elle passe TOUJOURS apres Pro DJ Link. Des qu'un vrai
+   paquet cabine arrive, on cesse de deduire.
+   ============================================================ */
+let rbWatch = null;
+let dernierPaquetDeck = 0;
+let indexChemins = null;
+
+function chemins() {
+  if (indexChemins) return indexChemins;
+  indexChemins = new Map();
+  for (const t of library) if (t.path) indexChemins.set(libmod.cleChemin(t.path), t);
+  return indexChemins;
+}
+
+function startRekordboxFichiers() {
+  stopRekordboxFichiers();
+  if (!rbFichiers.dispo) return;
+  rbWatch = rbFichiers.start({
+    resoudre: p => chemins().get(libmod.cleChemin(p)) || null
+  }, {
+    onLoad: x => {
+      /* Pro DJ Link a parle il y a moins d'une minute : c'est lui
+         qui commande, on se tait. */
+      if (Date.now() - dernierPaquetDeck < 60000) return;
+      if (!current || current.id !== x.track.id) setCurrent(x.track, 'rekordbox');
+    },
+    onStatus: s => {
+      if (s && s.conseil) send('conseils', [s.conseil]);
+    }
+  });
+}
+function stopRekordboxFichiers() {
+  if (rbWatch) { try { rbWatch.stop(); } catch (e) {} rbWatch = null; }
+}
+
+now.on('status', s => {
+  send('status', s);
+  /* Une source qui sait pourquoi elle ne voit rien le dit au
+     widget, pas seulement au bandeau d'etat. */
+  if (s && s.conseil) send('conseils', [s.conseil]);
+});
 
 /* Pro DJ Link : un morceau vient d'etre charge sur un deck */
 now.on('deck', st => {
+  dernierPaquetDeck = Date.now();
   const t = library.find(x => x.rbId && x.rbId === st.trackId);
   if (t) { if (!current || t.id !== current.id) setCurrent(t, 'deck ' + st.device); }
   else send('raw', { text: 'Deck ' + st.device + ' — identifiant rekordbox ' + st.trackId, matched: null });
@@ -514,7 +580,7 @@ now.on('deck', st => {
 
 /* ---------------- IPC ---------------- */
 ipcMain.handle('locales:pack', (e, country, event) => locales.compose(country, event));
-ipcMain.handle('config:get', () => ({ config: config, countries: locales.COUNTRIES, events: locales.EVENTS, libraryCount: library.length,
+ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(), countries: locales.COUNTRIES, events: locales.EVENTS, libraryCount: library.length,
   detected: autolib.detect(), running: watcher.current().map(a => ({ id: a.id, label: a.label })),
   license: license.status(),
   sets: setlog ? setlog.list() : [], guestUrl: guests.port ? guests.url() : null }));
@@ -615,7 +681,11 @@ ipcMain.handle('analysis:state', () => {
     restants: dernierRapport ? dernierRapport.restants : (analyse ? analyse.file.size : 0),
     fils: analyse ? analyse.workers.length : 0,
     sansFils: analyse ? !!analyse.sansFils : false,
-    importing: importing
+    importing: importing,
+    /* Ce qui manque pour aller vite. Recalcule a chaque appel :
+       le DJ peut exporter son XML pendant que le widget est
+       ouvert, et le conseil doit alors disparaitre tout seul. */
+    conseils: autolib.conseils(librarySources)
   };
 });
 
@@ -930,6 +1000,35 @@ ipcMain.handle('license:buy', (e, plan) => {
 });
 
 ipcMain.handle('library:auto', () => autoImport(activeApp && activeApp.librarySource));
+
+/* ------------------------------------------------------------
+   Relire, et la difference entre les deux boutons.
+
+   « Relire » compare les fichiers a ce qu'on connait deja : ceux
+   qui n'ont pas bouge ne sont pas rouverts. Dix titres achetes
+   cet apres-midi coutent dix lectures, pas vingt-deux mille.
+
+   « Tout relire » jette le cache et repart de zero. Utile dans un
+   seul cas, mais reel : un logiciel qui recrit les tags d'un
+   morceau SANS changer sa date de modification — ca arrive avec
+   certains outils de retagage. Le morceau parait inchange alors
+   qu'il ne l'est plus. On garde donc la porte de sortie, en
+   disant ce qu'elle coute.
+   ------------------------------------------------------------ */
+ipcMain.handle('library:rescan', async (e, opt) => {
+  if (opt && opt.force) { try { fs.unlinkSync(SCAN()); } catch (err) {} }
+  await autoImport(activeApp && activeApp.librarySource);
+  return { n: library.length };
+});
+
+/* Ce que le cache de lecture contient — pour dire au DJ ce qu'une
+   relecture va reellement lui couter. */
+ipcMain.handle('library:scanInfo', () => {
+  let n = 0, taille = 0;
+  try { taille = fs.statSync(SCAN()).size; } catch (err) {}
+  try { n = Object.keys(libmod.chargerScanCache(SCAN()).e).length; } catch (err) {}
+  return { connus: n, octets: taille, dossiers: librarySources.filter(s => s.kind === 'folder').length };
+});
 ipcMain.handle('library:sources', () => autolib.detect());
 ipcMain.handle('apps:running', () => watcher.current().map(a => ({ id: a.id, label: a.label, nowSource: a.nowSource })));
 ipcMain.handle('widget:settings', () => openSettings());
@@ -979,6 +1078,8 @@ function wireWatcher() {
     config.source = kind; saveConfig();
     const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
     now.start(kind, opts);
+    /* rekordbox : on ecoute le reseau ET les fichiers ouverts. */
+    if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
     if (config.autoLibrary && !library.length) await autoImport(app_.librarySource);
     refreshTray();
   });
@@ -986,6 +1087,7 @@ function wireWatcher() {
     if (activeApp && activeApp.id === app_.id) {
       activeApp = null;
       now.stop();
+      stopRekordboxFichiers();
       current = null;
       send('app', { id: app_.id, label: app_.label, open: false });
       if (config.autoWidget && widget) widget.hide();

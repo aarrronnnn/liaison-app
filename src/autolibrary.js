@@ -212,6 +212,67 @@ function parseVirtualDJ(file) {
   return out;
 }
 
+/* ------------------------------------------------------------
+   rekordbox installe, mais rien a lire.
+
+   rekordbox 6 et 7 gardent leur bibliotheque dans une base
+   chiffree que Liaison ne lit pas — et ne lira pas : la
+   dechiffrer demanderait d'utiliser une cle extraite du logiciel
+   de Pioneer, ce qui n'a pas sa place dans un produit qu'on vend.
+
+   Ce que rekordbox sait faire, en revanche, c'est exporter sa
+   collection en XML, et c'est meme la fonction qu'il propose pour
+   travailler avec d'autres outils. Un export de 22 000 titres se
+   lit en une seconde, avec les BPM et les tonalites deja calcules
+   par rekordbox lui-meme — donc mieux que ce que Liaison lirait
+   dans les tags des fichiers.
+
+   Le probleme n'etait donc pas technique, il etait muet : sans
+   XML, Liaison retombait sans rien dire sur un scan de dossier de
+   deux heures, alors que la bonne reponse tenait en trois clics
+   dans rekordbox. On le dit maintenant.
+   ------------------------------------------------------------ */
+function rekordboxDirs() {
+  return [
+    path.join(HOME, 'Library', 'Pioneer', 'rekordbox'),
+    path.join(HOME, 'AppData', 'Roaming', 'Pioneer', 'rekordbox'),
+    win ? path.join(process.env.APPDATA || '', 'Pioneer', 'rekordbox') : '',
+    path.join(HOME, 'Music', 'PioneerDJ'),
+    path.join(HOME, 'Musique', 'PioneerDJ')
+  ].filter(Boolean);
+}
+function rekordboxInstalle() {
+  for (const d of rekordboxDirs()) if (exists(d)) return d;
+  return null;
+}
+
+/**
+ * Ce qui manque pour aller vite, et comment le corriger.
+ * Rendu tel quel a l'interface : c'est un message pour le DJ, pas
+ * un diagnostic pour le journal.
+ */
+function conseils(sources) {
+  const out = [];
+  const kinds = new Set((sources || []).map(s => s.kind));
+  if (!kinds.has('rekordbox') && rekordboxInstalle()) {
+    out.push({
+      cle: 'rekordbox-sans-xml', quand: 'biblio',
+      titre: 'rekordbox est la, mais sa bibliotheque est fermee',
+      texte: 'rekordbox garde sa collection dans une base chiffree. Exporte-la une fois ' +
+             'et Liaison la lira en une seconde, avec tes BPM et tes tonalites.',
+      marche: [
+        'Dans rekordbox : Fichier > Exporter la collection au format xml',
+        'Enregistre le fichier dans Musique ou sur le Bureau',
+        'Reviens ici et relance la detection'
+      ],
+      /* Sans ca, il reste le scan de dossier : il marche, mais il
+         lit les tags des fichiers un par un. */
+      repli: 'Sinon Liaison lit ton dossier de musique — plus long, et moins precis.'
+    });
+  }
+  return out;
+}
+
 /* ---------- detection ---------- */
 function detect() {
   const found = [];
@@ -228,13 +289,14 @@ function detect() {
   return found;
 }
 
-async function readSource(src, onProgress) {
+async function readSource(src, onProgress, opt) {
   if (src.kind === 'serato') return seratoDb.parseDatabase(src.path);
   if (src.kind === 'traktor') return parseTraktor(src.path);
   if (src.kind === 'virtualdj') return parseVirtualDJ(src.path);
   if (src.kind === 'rekordbox') return lib.parseRekordboxXML(src.path);
   if (src.kind === 'itunes') return parseITunes(src.path);
-  return lib.scanFolder(src.path, onProgress);
+  /* Le seul cas lent, et donc le seul qui a besoin d'un cache. */
+  return lib.scanFolder(src.path, onProgress, opt || {});
 }
 
 /* ---------- lecture du plist iTunes ----------
@@ -357,16 +419,75 @@ function merge(lists) {
    surveillance est gratuite, le controle est negligeable, et entre
    les deux plus rien ne passe a travers.
    ============================================================ */
+/* ------------------------------------------------------------
+   La surveillance.
+
+   Les dossiers de musique en etaient exclus, et pour une bonne
+   raison a l'epoque : relire un dossier coutait deux heures, on
+   n'allait pas le declencher parce qu'un fichier avait bouge.
+
+   Depuis que les tags lus sont gardes en cache, cette raison a
+   disparu. Relire un dossier de 22 000 morceaux dont aucun n'a
+   change prend cinq millisecondes ; dix titres achetes dans
+   l'apres-midi en coutent dix de plus. Le calcul s'est inverse :
+   surveiller devient gratuit, et ne pas surveiller oblige le DJ a
+   penser a relancer un scan avant chaque soiree — ce que personne
+   ne fera.
+
+   fs.watch en recursif couvre macOS et Windows. Sous Linux il ne
+   l'est pas, d'ou le balayage periodique qui suit, qui sert aussi
+   de filet pour les disques externes rebranches.
+   ------------------------------------------------------------ */
 function watch(sources, onChange) {
   const vivants = [];
   let timer = null;
-  const surveilles = (sources || []).filter(s => s.kind !== 'folder');
+  const bases = (sources || []).filter(s => s.kind !== 'folder');
+  const dossiers = (sources || []).filter(s => s.kind === 'folder');
+  const surveilles = bases;
 
   const signaler = s => {
     clearTimeout(timer);
     /* on laisse le logiciel finir d'ecrire avant de relire */
     timer = setTimeout(() => onChange(s), 4000);
   };
+
+  /* Un telechargement s'ecrit par morceaux, et un transfert de
+     cle USB en ecrit des dizaines a la suite. On attend donc plus
+     longtemps qu'apres la sauvegarde d'une base : douze secondes
+     sans nouvel evenement, et on relit. */
+  let tDossier = null;
+  const signalerDossier = s => {
+    clearTimeout(tDossier);
+    tDossier = setTimeout(() => onChange(s), 12000);
+  };
+
+  for (const s of dossiers) {
+    try {
+      const w = fs.watch(s.path, { recursive: true }, (ev, f) => {
+        /* seuls les fichiers audio nous interessent : un .DS_Store
+           qui change ne doit pas relancer une lecture */
+        if (f && !/\.(mp3|wav|aiff?|flac|m4a|aac|ogg|wma)$/i.test(f)) return;
+        signalerDossier(s);
+      });
+      w.on('error', () => {});
+      vivants.push(w);
+    } catch (e) { /* recursif refuse (Linux) : le balayage prend le relais */ }
+  }
+
+  /* Le balayage : on compte les fichiers audio du dossier. Un
+     compte qui change veut dire qu'on a ajoute ou retire quelque
+     chose. C'est grossier, mais ca ne reveille pas le disque plus
+     d'une fois par minute et ca rattrape ce que fs.watch rate. */
+  const comptes = new Map();
+  const compter = d => { try { return lib.walk(d, []).length; } catch (e) { return -1; } };
+  for (const s of dossiers) comptes.set(s.path, compter(s.path));
+  const balayage = dossiers.length ? setInterval(() => {
+    for (const s of dossiers) {
+      const n = compter(s.path);
+      if (n >= 0 && n !== comptes.get(s.path)) { comptes.set(s.path, n); signalerDossier(s); }
+    }
+  }, 60000) : null;
+  if (balayage && balayage.unref) balayage.unref();
 
   for (const s of surveilles) {
     const dossier = path.dirname(s.path);
@@ -402,12 +523,14 @@ function watch(sources, onChange) {
   return {
     stop: () => {
       clearTimeout(timer);
+      clearTimeout(tDossier);
       clearInterval(contro);
+      if (balayage) clearInterval(balayage);
       vivants.forEach(w => { try { w.close(); } catch (e) {} });
     }
   };
 }
 
-module.exports = { detect, readSource, merge, watch, parseTraktor, parseVirtualDJ, parseITunes,
+module.exports = { conseils, rekordboxInstalle, detect, readSource, merge, watch, parseTraktor, parseVirtualDJ, parseITunes,
                    seratoPaths, traktorPaths, virtualdjPaths, rekordboxXmlPaths, itunesPaths,
                    musicFolders, externalVolumes, fromFileURL };
