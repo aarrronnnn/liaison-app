@@ -145,6 +145,18 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
   </div>
 
   <div class="card">
+    <h2>Ce que Liaison a appris de toi <span class="pill ok" id="goutPill">observation</span></h2>
+    <p class="tips">Liaison ne suppose pas qu'il existe un DJ moyen. Il regarde ce que tu joues
+      apres chaque suggestion — celles que tu prends, et surtout celles que tu ignores — et il
+      deplace ses criteres vers les tiens. Rien n'est modifie avant douze enchainements, tout est
+      borne, et tu peux tout effacer.</p>
+    <div id="goutListe"></div>
+    <div class="row" style="margin-top:14px">
+      <button id="goutOublier" class="g">Tout oublier</button>
+    </div>
+  </div>
+
+  <div class="card">
     <h2>2 — Ton logiciel de mix <span class="pill ok">automatique</span></h2>
     <p class="tips">Liaison surveille les logiciels ouverts. Le widget apparait quand tu lances ton logiciel et disparait quand tu le fermes ; la bonne source de detection est choisie toute seule.</p>
     <div class="state" id="appState">Aucun logiciel de mix ouvert.</div>
@@ -439,6 +451,34 @@ async function relire(force) {
   try { await window.liaison.rescanLibrary({ force: !!force }); }
   finally { b1.disabled = b2.disabled = false; }
   renderSources(); renderScanInfo();
+
+/* ------------------------------------------------------------
+   Ce que Liaison a appris — en phrases, pas en coefficients.
+   Un systeme qui s'adapte en silence est un systeme qu'on
+   soupconne au premier enchainement rate, a tort.
+   ------------------------------------------------------------ */
+async function renderGout() {
+  let g;
+  try { g = await window.liaison.goutEtat(); } catch (e) { return; }
+  const pill = $('#goutPill'), boite = $('#goutListe');
+  if (!g) return;
+  pill.textContent = g.n < g.mini ? 'observation' : 'adapte a ' + g.force + ' %';
+  const lignes = (g.resume || []).map(l =>
+    '<div style="margin:0 0 12px"><b style="display:block;font-size:13px">' + esc(l.t) + '</b>' +
+    '<span style="color:var(--ink2);font-size:13.5px;line-height:1.6">' + esc(l.d) + '</span></div>').join('');
+  const pente = g.arcObserve
+    ? '<p class="tips" style="margin-top:10px">Pente lue dans tes six derniers morceaux : <b>' +
+      (g.arcObserve === 'up' ? 'tu montes' : g.arcObserve === 'down' ? 'tu redescends' : 'tu tiens le niveau') +
+      '</b>. En mode Auto, c\'est elle que Liaison suit.</p>'
+    : '';
+  boite.innerHTML = lignes + pente;
+}
+$('#goutOublier').onclick = async () => {
+  await window.liaison.goutOublier();
+  renderGout();
+};
+renderGout();
+setInterval(renderGout, 20000);
 }
 $('#reScan').onclick = () => relire(false);
 $('#reScanTout').onclick = () => relire(true);

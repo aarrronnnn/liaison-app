@@ -54,8 +54,35 @@ padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
 .row.sos .sc{color:var(--redLit)}
 .n{display:block;font-family:var(--b);font-weight:700;font-size:12.5px;letter-spacing:-.01em;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.mm{display:block;font-family:var(--m);font-size:9.5px;color:var(--cream3);margin-top:3px;
-white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ------------------------------------------------------------
+   L'ordre des informations, et ce qu'on accepte de perdre.
+
+   La ligne etait « artiste · tonalite · ecart · transition ·
+   TENDANCE », coupee au bout par des points de suspension. Sur une
+   fenetre de 380 px, ce qui tombait etait donc systematiquement la
+   fin — c'est-a-dire la transition et la tendance. Le widget
+   coupait exactement les informations pour lesquelles il existe,
+   et gardait celle qu'on peut lire dans le titre juste au-dessus.
+
+   On inverse : la tonalite, l'ecart de tempo et le type de
+   transition sont courts, fixes, et passent devant. L'artiste, qui
+   est long et variable, est le seul a pouvoir se faire couper.
+   ------------------------------------------------------------ */
+.mm{display:flex;align-items:baseline;flex-wrap:wrap;gap:1px 7px;font-family:var(--m);
+font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
+.mm>span{white-space:nowrap}
+/* L'artiste retrograde : il finit la ligne s'il y a la place, il
+   passe dessous sinon. Jamais coupe au milieu d'un mot, jamais au
+   prix d'une information de mix. */
+.mm .ar{min-width:0;flex:1 1 60px;overflow:hidden;text-overflow:ellipsis}
+/* Le bloc « tonalite · ecart · transition » ne retrograde jamais :
+   c'est l'information pour laquelle le widget existe. */
+/* Trois groupes, qui passent a la ligne les uns apres les autres
+   plutot que d'etre tronques : les etiquettes, les faits de mix,
+   puis l'artiste. L'artiste part le premier, les faits ne partent
+   jamais. */
+.mm .bd{flex:0 0 auto}
+.mm .fx{flex:0 0 auto}
 .mm .up{color:var(--blueLit)}
 .mm .ask{color:var(--redLit);font-weight:700}
 /* Deja joue : ce soir en rouge (une faute), une autre fois en gris
@@ -189,12 +216,36 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
    justement celui qu'on cherche a 2 h du matin, sortait de la
    fenetre. Elle passe donc a la ligne, et l'etat texte prend
    toute la largeur en dessous plutot que de pousser les boutons. */
-.foot{display:flex;align-items:center;gap:3px;padding:7px 8px;border-top:1px solid var(--wire);flex-wrap:wrap}
-.chip{font-family:var(--m);font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;
-padding:6px 8px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
+/* ------------------------------------------------------------
+   Le pied, en une seule rangee.
+
+   Sept boutons a 0,12 em d'interlettrage ne tenaient pas dans
+   380 px : SOS — le bouton d'urgence — se retrouvait seul sur une
+   deuxieme ligne, en bas, la ou on le cherche le moins vite. C'est
+   le seul bouton dont on a besoin en moins d'une seconde.
+
+   Trois economies, sans rien retirer : la courbe (monter / tenir /
+   baisser) devient un groupe a bordures partagees, l'interlettrage
+   passe a 0,08 em, et le rembourrage a 6 px. Le tout tient, et SOS
+   reste a droite, toujours au meme endroit.
+   ------------------------------------------------------------ */
+.foot{display:flex;align-items:center;gap:4px;padding:7px 8px;border-top:1px solid var(--wire);flex-wrap:wrap}
+.seg{display:flex;flex:none}
+.seg .chip{border-radius:0;margin-left:-1px}
+.seg .chip:first-child{border-radius:2px 0 0 2px;margin-left:0}
+.seg .chip:last-child{border-radius:0 2px 2px 0}
+.seg .chip[aria-pressed=true]{position:relative;z-index:1}
+.chip{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
+padding:6px 6px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
 .chip:hover{color:var(--cream);border-color:var(--wire2)}
 .chip[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
-.chip.sos{border-color:#4A2119;color:var(--redLit);margin-left:2px}
+.chip.sos{border-color:#4A2119;color:var(--redLit);margin-left:auto}
+/* Les trois fleches : « monter / tenir / baisser » ecrits en toutes
+   lettres prenaient 150 px pour dire ce qu'une fleche dit d'un coup
+   d'oeil — et c'est un coup d'oeil qu'on a, en cabine, pas une
+   lecture. Le nom reste dans l'infobulle et pour les lecteurs
+   d'ecran. */
+.chip.fl{font-size:12px;line-height:1;padding:4px 8px;letter-spacing:0}
 .chip.sos:hover{background:var(--red);border-color:var(--red);color:#fff}
 .foot .st{flex:1 0 100%;order:9;margin-top:3px;font-family:var(--m);font-size:8.5px;color:var(--cream3);
 overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -306,9 +357,16 @@ transition:.18s;pointer-events:none}
 </div>
 
 <div class="foot">
-  <button class="chip" data-arc="up" aria-pressed="true">Monter</button>
-  <button class="chip" data-arc="hold" aria-pressed="false">Tenir</button>
-  <button class="chip" data-arc="down" aria-pressed="false">Baisser</button>
+  <span class="seg">
+    <!-- « Auto » d'abord, et par defaut : personne, en cabine, ne
+         clique un bouton pour annoncer une intention qui se lit
+         deja dans les six derniers morceaux joues. Les trois autres
+         restent, pour le moment ou le DJ veut forcer la main. -->
+    <button class="chip" data-arc="auto" aria-pressed="true" title="Liaison suit la pente que tu joues">Auto</button>
+    <button class="chip fl" data-arc="up" aria-pressed="false" aria-label="Monter" title="Forcer : monter">↑</button>
+    <button class="chip fl" data-arc="hold" aria-pressed="false" aria-label="Tenir" title="Forcer : tenir le niveau">=</button>
+    <button class="chip fl" data-arc="down" aria-pressed="false" aria-label="Baisser" title="Forcer : redescendre">↓</button>
+  </span>
   <button class="chip" id="btnFilt" aria-pressed="false" title="Filtres de cabine">Filtres<span class="badge" id="filtN" style="display:none">0</span></button>
   <button class="chip" id="btnLand" aria-pressed="false" title="Temps restant et descente">Fin</button>
   <button class="chip req" id="btnReq" title="Demandes des invites">Demandes<span class="badge" id="reqN" style="display:none">0</span></button>
@@ -353,11 +411,19 @@ function toast(msg, red) {
    plan de mix de la meilleure proposition sont poses par-dessus. */
 function renderStrip(st, plan) {
   const strip = $('#strip'), lab = $('#striplbl');
+  /* Sans structure, la barre restait affichee : seize pixels de
+     gris uni surmontes de « analyse de la structure… », en
+     permanence, y compris quand aucun morceau ne tourne. On la
+     replie — elle reapparait des que l'analyse a quelque chose a
+     montrer. */
   if (!st || !st.ok || !st.duration) {
     strip.innerHTML = '';
+    strip.hidden = true;
+    lab.hidden = !curNow;
     lab.innerHTML = '<span>Analyse de la structure…</span><span></span>';
     return;
   }
+  strip.hidden = false; lab.hidden = false;
   const D = st.duration, pc = t => Math.max(0, Math.min(100, (t / D) * 100));
   let h = '<div class="seg body" style="left:' + pc(st.readyAt) + '%;right:' + (100 - pc(st.outPoint)) + '%"></div>';
   for (const b of st.breaks || [])
@@ -390,7 +456,9 @@ function renderNow(n) {
 
 function planHTML(r) {
   if (!r.plan) return '<div class="plan wait">Points de mix en cours de calcul…</div>';
-  if (!r.plan.ok) return '<div class="plan wait">' + esc(r.plan.note || '') + '</div>';
+  /* Un plan refuse sans explication donnait un bandeau vide : une
+     bordure et six pixels de marge pour rien, sur chaque ligne. */
+  if (!r.plan.ok) return r.plan.note ? '<div class="plan wait">' + esc(r.plan.note) + '</div>' : '';
   const p = r.plan;
   if (p.tight)
     return '<div class="plan"><span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
@@ -485,6 +553,13 @@ function renderAnalyse(p) {
 /* « Tu l'as deja passe ». Ce soir, c'est rouge : c'est la faute que
    personne ne pardonne. Une autre soiree, c'est gris : c'est une
    information, et parfois c'est meme une bonne raison de le rejouer. */
+/* La meme etiquette, sans son separateur : dans un groupe qui peut
+   passer a la ligne, un « · » en fin de ligne pend dans le vide. */
+function dejaBrut(r) {
+  if (!r.deja || !r.deja.texte) return '';
+  return '<span class="deja' + (r.deja.grave ? ' grave' : '') + '">' + esc(r.deja.texte) + '</span>';
+}
+
 function dejaHTML(r) {
   if (!r.deja || !r.deja.texte) return '';
   return '<span class="deja' + (r.deja.grave ? ' grave' : '') + '">' + esc(r.deja.texte) + '</span> · ';
@@ -504,7 +579,7 @@ function renderSug(list) {
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.cloture ? '<span class="clo">CLÔTURE</span> · ' : ''}${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span>
+        <span class="mm">${r.cloture || r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.client ? (r.cloture?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -526,7 +601,7 @@ function renderSos(list) {
       <span class="sc">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.client ? '<span class="ask">DEMANDÉ</span> · ' : ''}${dejaHTML(r)}${esc(r.artist || '')} · ${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span>
+        <span class="mm">${r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.client ? '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? (r.client?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -584,9 +659,9 @@ function renderReq(list) {
       <span class="sc">${r.n}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${esc(r.artist || '')}${r.have
-          ? ' · ' + esc(r.match.key || '?') + ' · ' + Number(r.match.bpm).toFixed(1).replace('.', ',')
-          : ' · <span class="miss">pas dans ta bibliothèque</span>'}</span>
+        <span class="mm"><span class="fx">${r.have
+          ? esc(r.match.key || '?') + ' · ' + Number(r.match.bpm).toFixed(1).replace('.', ',')
+          : '<span class="miss">pas dans ta bibliothèque</span>'}</span><span class="ar">${esc(r.artist || '')}</span></span>
       </span>
       ${r.have ? `<button class="go" data-id="${r.id}">Copier</button>` : '<span class="go" style="opacity:.35">—</span>'}
     </div>`).join('');

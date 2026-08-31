@@ -24,6 +24,7 @@ const acquire = require('./acquire');
 const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
 const rbFichiers = require('./sources/rekordbox');
+const { Gout } = require('./gout');
 
 const DIR = () => app.getPath('userData');
 const CFG = () => path.join(DIR(), 'config.json');
@@ -31,6 +32,9 @@ const CACHE = () => path.join(DIR(), 'analysis-cache.json');
 const SETS = () => path.join(DIR(), 'sets.json');
 const LIC = () => path.join(DIR(), 'license.json');
 const STRUCT = () => path.join(DIR(), 'structure-cache.json');
+/* Ce que Liaison a appris de CE DJ. Un fichier a part : on peut
+   l'effacer sans rien perdre d'autre. */
+const GOUT = () => path.join(DIR(), 'gout.json');
 /* Les tags lus par ffprobe, gardes d'une soiree a l'autre : sans ce
    fichier, un dossier de 22 000 morceaux est relu en entier a chaque
    lancement. */
@@ -41,7 +45,9 @@ const DEFAULTS = {
   autoLibrary: true, autoWidget: true, launchAtLogin: true, prolinkAnnounce: false,
   libraryMode: null, libraryPath: null,
   pack: 'fr-club', sessionName: 'Session', guestWeight: 0.5,
-  arc: 'up', mode: 'crowd', banned: [], guestPort: 7373,
+  /* « auto » par defaut : Liaison lit la pente dans ce qui est
+     joue plutot que d'attendre qu'on la lui declare. */
+  arc: 'auto', mode: 'crowd', banned: [], guestPort: 7373,
   revealOnLoad: false, opacity: 1,
   /* les listes du client : ce qu'il veut entendre, ce qu'il refuse */
   clientWanted: [], clientBanned: [], clientName: '',
@@ -63,6 +69,11 @@ let activeApp = null;
 const now = new NowPlaying();
 const guests = new GuestServer();
 let setlog = null;
+let gout = null;
+const leGout = () => (gout || (gout = new Gout(GOUT())));
+/* Ce qu'on proposait juste avant le changement de morceau : c'est
+   l'etiquette de l'exemple qu'on est en train d'observer. */
+let dernieresPropositions = [];
 let trends = new Map();
 /* listes du client, une fois rapprochees de la bibliotheque */
 let clientSet = { wanted: new Set(), banned: new Set(), dna: {}, stats: null };
@@ -453,6 +464,20 @@ function currentDNA() {
   return dna;
 }
 
+/* ------------------------------------------------------------
+   La courbe, observee plutot que declaree.
+
+   Le DJ devait appuyer sur MONTER, TENIR ou BAISSER. Personne ne
+   le fait : on est en cabine, on mixe, on ne va pas cliquer un
+   bouton pour annoncer une intention qui se lit deja dans les six
+   derniers morceaux joues. En mode automatique, Liaison regarde la
+   pente reelle de l'energie et suit.
+   ------------------------------------------------------------ */
+function arcAuto() {
+  const joues = setlog && setlog.current ? setlog.current.played : [];
+  return leGout().arcObserve(joues);
+}
+
 function computeSuggestions(limit) {
   if (!current) return [];
   const f = feat();
@@ -466,10 +491,15 @@ function computeSuggestions(limit) {
   /* Pendant l'atterrissage, c'est le plan qui commande la courbe :
      le DJ a annonce une heure de fin, elle prime sur le pack. */
   const ph = landingNow();
-  const arc = ph ? ph.arc : config.arc;
+  const arc = ph ? ph.arc : (config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc);
 
-  return engine.suggest(current, vivier, {
+  /* Ce que Liaison a appris de ce DJ. Neutre les douze premiers
+     enchainements, puis de plus en plus present. */
+  const g = leGout().reglages();
+
+  const bruts = engine.suggest(current, vivier, {
     dna: currentDNA(), arc: arc, mode: mode,
+    poids: g.poids, marge: g.marge, variete: g.variete,
     banned: bannedSet(), wanted: clientSet.wanted,
     trends: trends, limit: n,
     /* la memoire de la soiree : ce qui vient d'etre joue */
@@ -479,7 +509,14 @@ function computeSuggestions(limit) {
        apres avoir verifie qu'elle est encore mixable depuis ce qui
        tourne, et en la remplacant si elle ne l'est plus */
     epingle: clotureEpinglee(vivier, ph)
-  }).map(r => {
+  });
+
+  /* On garde les propositions BRUTES : ce sont elles qui portent
+     les notes par critere, et donc l'etiquette dont l'apprentissage
+     a besoin au prochain changement de morceau. */
+  dernieresPropositions = bruts;
+
+  return bruts.map(r => {
     ensureStructure(r.track);
     const plan = planFor(r.track);
     const st = structures.get(r.track.id);
@@ -499,6 +536,30 @@ function computeSuggestions(limit) {
 }
 
 function setCurrent(track, how) {
+  /* ------------------------------------------------------------
+     Le seul moment ou Liaison apprend quelque chose.
+
+     Le DJ vient de lancer un morceau. Soit c'est l'un de ceux
+     qu'on proposait — on avait raison —, soit c'est autre chose,
+     et c'est la que l'information est la plus riche : il nous dit
+     gratuitement ce qu'on avait mal note.
+
+     On observe TOUJOURS, meme quand le widget est ferme, meme
+     quand le DJ ne regarde pas. C'est ce qui permet de l'ouvrir au
+     milieu de la nuit et de le trouver deja au courant.
+     ------------------------------------------------------------ */
+  try {
+    if (current && track && current.id !== track.id) {
+      leGout().observer({
+        cur: current, joue: track,
+        propositions: dernieresPropositions,
+        recents: setlog && setlog.current ? setlog.current.played : [],
+        dna: currentDNA(),
+        arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc
+      });
+    }
+  } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
+
   current = track;
   ensureStructure(track);
   prioriserAnalyse();
@@ -669,6 +730,27 @@ ipcMain.handle('client:remove', (e, opt) => {
 });
 
 ipcMain.handle('structure:get', (e, id) => structures.get(id) || null);
+
+/* ------------------------------------------------------------
+   Ce que Liaison a appris, en clair.
+
+   Un systeme qui s'adapte en silence est un systeme auquel on ne
+   fait pas confiance — et que le DJ soupconnera au premier
+   enchainement rate, a tort. On rend donc l'apprentissage lisible
+   et effacable : des phrases en francais, et un bouton pour tout
+   oublier.
+   ------------------------------------------------------------ */
+ipcMain.handle('gout:etat', () => {
+  const g = leGout();
+  const r = g.reglages();
+  return {
+    n: g.d.n, pris: g.d.pris, ignore: g.d.ignore, force: Math.round(r.force * 100),
+    mini: 12, resume: g.resume(),
+    arcObserve: arcAuto(),
+    marge: r.marge ? Math.round(r.marge * 1000) / 10 : null
+  };
+});
+ipcMain.handle('gout:oublier', () => { leGout().oublier(); return { ok: true }; });
 
 /* Ou en est l'analyse de fond, et pourquoi le widget dit ce qu'il dit. */
 ipcMain.handle('analysis:state', () => {
@@ -960,7 +1042,10 @@ ipcMain.handle('sets:replay', (e, opts) => {
   if (!prev.length) return { error: 'Set introuvable dans la bibliotheque actuelle.' };
   const additions = (opts.addIds || []).map(id => library.find(t => t.id === id)).filter(Boolean);
   const r = reshuffle(prev, additions, {
-    dna: currentDNA(), arc: config.arc, drop: opts.drop || 0,
+    /* reshuffle ne comprend que up/hold/down : « auto » doit etre
+       resolu ici, sinon il tombe dans le cas par defaut sans qu'on
+       le sache. */
+    dna: currentDNA(), arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc, drop: opts.drop || 0,
     trends: trends, banned: new Set((config.banned || []).map(s => s.toLowerCase()))
   });
   return {

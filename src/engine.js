@@ -182,10 +182,16 @@ function penaliteVariete(t, M) {
    il ne fait qu'eviter du calcul inutile.
    ------------------------------------------------------------ */
 const MARGE_CRIBLE = 0.12;
-function passeLeCrible(bpmRef, bpm) {
+/* La marge est reglable. Certains DJs ne sortent jamais de deux
+   pour cent, d'autres passent de 95 a 128 sans complexe. On mesure
+   ce qu'ils font et on ouvre le crible d'autant — sans descendre
+   sous 6 % (on couperait des enchainements evidents) ni depasser
+   22 % (au-dela ce n'est plus un mix, c'est une coupure). */
+function passeLeCrible(bpmRef, bpm, marge) {
   if (!(bpm > 0)) return false;
+  const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.06, Math.min(0.22, marge)) : MARGE_CRIBLE;
   for (const r of [1, 2, 0.5]) {
-    if (Math.abs(bpm * r - bpmRef) / bpmRef <= MARGE_CRIBLE) return true;
+    if (Math.abs(bpm * r - bpmRef) / bpmRef <= M) return true;
   }
   return false;
 }
@@ -200,9 +206,28 @@ function suggest(cur, library, opt) {
   const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
   const limit = opt.limit || 5;
   if (!cur) return [];
-  const wCrowd = mode === 'crowd' ? 0.26 : 0.06;
-  const wTrend = mode === 'trend' ? 0.18 : 0.04;
-  const W = 0.27 + 0.24 + 0.15 + 0.14 + wCrowd + wTrend;
+  /* ------------------------------------------------------------
+     Les poids, et pourquoi ils ne sont plus fixes.
+
+     Ces six coefficients disaient ce qu'un bon enchainement est :
+     l'harmonie compte 0,27, le tempo 0,24, l'energie 0,15... C'est
+     une moyenne. Or il n'existe pas de DJ moyen : celui qui joue
+     de la house tient l'harmonie au demi-ton et ne bouge pas de
+     deux BPM ; celui qui fait un mariage saute de 95 a 128 entre
+     deux titres et se moque de la tonalite. Avec des poids fixes,
+     Liaison proposait au second ce qui convenait au premier, et il
+     n'avait aucun moyen de s'en apercevoir.
+
+     opt.poids est un jeu de multiplicateurs appris sur ce que le
+     DJ joue REELLEMENT — voir gout.js. Absent, tout vaut 1 et le
+     comportement est exactement celui d'avant.
+     ------------------------------------------------------------ */
+  const P = opt.poids || {};
+  const m = (k) => { const v = P[k]; return (typeof v === 'number' && isFinite(v)) ? Math.max(0.5, Math.min(1.8, v)) : 1; };
+  const wH = 0.27 * m('h'), wT = 0.24 * m('tp'), wE = 0.15 * m('en'), wI = 0.14 * m('ti');
+  const wCrowd = (mode === 'crowd' ? 0.26 : 0.06) * m('cr');
+  const wTrend = (mode === 'trend' ? 0.18 : 0.04) * m('td');
+  const W = wH + wT + wE + wI + wCrowd + wTrend;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
@@ -226,7 +251,7 @@ function suggest(cur, library, opt) {
          on la reservait toute la soiree pour qu'elle ne sorte
          jamais. Elle apparait donc avec son vrai ecart de tempo
          affiche — au DJ de decider s'il la cale ou s'il coupe. */
-      (t.bpm > 0) && (t.id === epingle || passeLeCrible(cur.bpm, t.bpm)))
+      (t.bpm > 0) && (t.id === epingle || passeLeCrible(cur.bpm, t.bpm, opt.marge)))
     .map(t => {
       const h = harmScore(cur.key, t.key);
       const tp = tempoScore(cur.bpm, t.bpm);
@@ -234,8 +259,24 @@ function suggest(cur, library, opt) {
       const ti = timbreScore(cur.timbre, t.timbre);
       const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
-      let total = (h * 0.27 + tp.s * 0.24 + en * 0.15 + ti * 0.14 + cr * wCrowd + td * wTrend) / W;
+      let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
+      /* ------------------------------------------------------------
+         La notoriete, qui n'etait nulle part.
+
+         Le moteur savait noter l'accord, le tempo, l'energie, le
+         timbre et le genre. Il ne savait pas noter « c'est un
+         tube ». Or c'est le premier critere d'un DJ de mariage, et
+         l'inverse exact du critere d'un DJ de club — les deux
+         gouts les plus repandus, et aucun des deux n'etait
+         exprimable.
+
+         Le terme vaut zero tant que rien n'est appris : le
+         comportement par defaut ne bouge pas d'un point. Il devient
+         positif pour qui joue les tubes, negatif pour qui creuse.
+         ------------------------------------------------------------ */
+      const kPop = typeof P.pop === 'number' && isFinite(P.pop) ? Math.max(-1, Math.min(1, P.pop)) : 0;
+      const noto = kPop ? ((t.pop == null ? 40 : t.pop) - 50) * kPop * 0.30 : 0;
       const voc = cur.vocal && t.vocal ? -6 : 0;
       /* Un titre demande par le client remonte, mais ne double jamais un
          morceau injouable : le bonus s'ajoute au score, il ne le remplace pas. */
@@ -245,8 +286,12 @@ function suggest(cur, library, opt) {
          cette exception, une cloture dont l'artiste venait d'etre
          joue perdait quarante points et retombait dans la liste. */
       const pin = epingle && t.id === epingle ? 45 : 0;
-      const va = pin ? 0 : penaliteVariete(t, M);
-      total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin)));
+      /* Un DJ de mariage rejoue le meme artiste deux fois dans la
+         nuit et personne ne s'en plaint ; un DJ de club ne le fait
+         jamais. L'echelle de la penalite est donc apprise, elle
+         aussi. */
+      const va = pin ? 0 : penaliteVariete(t, M) * (typeof P.variete === 'number' ? Math.max(0.25, Math.min(1.6, P.variete)) : 1);
+      total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
                transition: transitionOf(cur, t, tp, h) };

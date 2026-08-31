@@ -26,12 +26,20 @@ jobs:
           - os: macos-latest
             nom: mac-arm64
             args: --mac --arm64
+            arch: arm64
+            macho: arm64
           - os: macos-latest
             nom: mac-x64
             args: --mac --x64
+            arch: x64
+            # « file » dit x86_64, jamais x64 : chercher « x64 »
+            # ne trouvait rien et faisait echouer un binaire correct.
+            macho: x86_64
           - os: windows-latest
             nom: windows
             args: --win --x64
+            arch: x64
+            macho: ''
     name: ${{ matrix.nom }}
     runs-on: ${{ matrix.os }}
     steps:
@@ -45,22 +53,84 @@ jobs:
           node-version: 22
           cache: npm
 
+      # ------------------------------------------------------------
+      # L'architecture des binaires embarques.
+      #
+      # ffmpeg-static ne contient qu'UN SEUL binaire : celui de la
+      # machine ou npm a tourne. Les runners macOS sont tous en
+      # Apple Silicon depuis le retrait de macos-13 — donc le job
+      # « x64 » installait un ffmpeg arm64 et l'empaquetait dans le
+      # .dmg Intel. Verifie : le paquet ne contient qu'un fichier
+      # « ffmpeg », pas un par plateforme.
+      #
+      # npm_config_arch est lu par ffmpeg-static a l'installation ET
+      # au require. On le pose donc pour toute la duree du job.
+      # (ffprobe-static, lui, embarque toutes les plateformes : il
+      # n'a jamais eu le probleme, ce qui explique qu'on ne l'ait
+      # pas vu plus tot.)
+      # ------------------------------------------------------------
       - name: Installer les dependances
         run: npm ci
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+          npm_config_platform: ${{ startsWith(matrix.os, 'macos') && 'darwin' || 'win32' }}
 
       # Un diagnostic AVANT la construction : quand ca casse, on veut
       # savoir sur quoi on tourne sans relancer le build a l'aveugle.
       - name: Contexte
+        shell: bash
         run: |
           node -v
           npm -v
+          echo "machine  : $(uname -m)"
+          echo "cible    : ${{ matrix.arch }}"
           echo "electron-builder : $(npx electron-builder --version)"
           node -e "const p=require('./package.json');console.log('Liaison',p.version)"
 
+      # Le binaire embarque est-il de la bonne architecture ? On le
+      # verifie AVANT de construire : une erreur ici coute trente
+      # secondes, la meme erreur decouverte par un DJ sur un Mac
+      # Intel coute un client.
+      - name: Verifier l'architecture de ffmpeg
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          F=node_modules/ffmpeg-static/ffmpeg
+          file "$F"
+          if ! file "$F" | grep -qi "${{ matrix.macho }}"; then
+            echo "::error::ffmpeg embarque n'est pas en ${{ matrix.macho }} : $(file "$F")"
+            exit 1
+          fi
+          echo "ffmpeg est bien en ${{ matrix.macho }}"
+
+      # ------------------------------------------------------------
+      # La construction, et surtout : sa trace.
+      #
+      # Quand ce job echoue, le journal complet n'est lisible que
+      # par le proprietaire du depot — pas moyen de diagnostiquer
+      # une panne sans se connecter. On recopie donc la fin de la
+      # sortie dans le resume du job, qui est public. La prochaine
+      # panne se lira sur la page du build, sans identifiants.
+      # ------------------------------------------------------------
       - name: Construire
-        run: npx electron-builder ${{ matrix.args }} --publish never
+        shell: bash
+        run: |
+          set -o pipefail
+          npx electron-builder ${{ matrix.args }} --publish never 2>&1 | tee /tmp/build.log
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
+
+      - name: Journal en cas d'echec
+        if: failure()
+        shell: bash
+        run: |
+          {
+            echo "## ${{ matrix.nom }} — echec de la construction"
+            echo ''
+            echo '```'
+            tail -n 120 /tmp/build.log 2>/dev/null || echo "(aucune sortie capturee)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       # Ce qui a reellement ete produit. Sans cette etape, un dossier
       # dist vide se voit seulement a l'etape suivante, sans dire pourquoi.
@@ -68,6 +138,38 @@ jobs:
         if: always()
         shell: bash
         run: ls -lh dist/ || echo "aucun dossier dist"
+
+      # Le controle qui manquait : le .dmg produit contient-il un
+      # ffmpeg de la bonne architecture ? C'est la question qu'on
+      # aurait du se poser avant de publier un .dmg Intel construit
+      # sur une machine Apple Silicon.
+      - name: Verifier le .dmg produit
+        if: startsWith(matrix.os, 'macos')
+        shell: bash
+        run: |
+          set -e
+          N=$(ls dist/*.dmg 2>/dev/null | wc -l | tr -d ' ')
+          echo "$N fichier(s) .dmg"
+          ls dist/*.dmg
+          if [ "$N" != "1" ]; then
+            echo "::error::attendu 1 seul .dmg pour ${{ matrix.arch }}, trouve $N"
+            exit 1
+          fi
+          POINT=$(mktemp -d)
+          hdiutil attach -nobrowse -quiet -mountpoint "$POINT" dist/*.dmg
+          FF="$POINT/Liaison.app/Contents/Resources/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg"
+          if [ -f "$FF" ]; then
+            file "$FF"
+            if ! file "$FF" | grep -qi "${{ matrix.macho }}"; then
+              hdiutil detach "$POINT" -quiet || true
+              echo "::error::le .dmg ${{ matrix.arch }} embarque un ffmpeg $(file "$FF")"
+              exit 1
+            fi
+            echo "ffmpeg dans le .dmg : ${{ matrix.macho }} — correct"
+          else
+            echo "::warning::ffmpeg introuvable dans le paquet ($FF)"
+          fi
+          hdiutil detach "$POINT" -quiet || true
 
       - uses: actions/upload-artifact@v6
         with:

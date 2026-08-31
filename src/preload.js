@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('liaison', {
   clientRemove: opt => invoke('client:remove', opt),
   structure: id => invoke('structure:get', id),
   analysisState: () => invoke('analysis:state'),
+  /* ce que Liaison a appris du DJ */
+  goutEtat: () => invoke('gout:etat'),
+  goutOublier: () => invoke('gout:oublier'),
   /* sante de la bibliotheque */
   healthScan: opt => invoke('health:scan', opt),
   healthReveal: id => invoke('health:reveal', id),
