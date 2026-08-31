@@ -643,7 +643,11 @@ now.on('deck', st => {
 ipcMain.handle('locales:pack', (e, country, event) => locales.compose(country, event));
 ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(), countries: locales.COUNTRIES, events: locales.EVENTS, libraryCount: library.length,
   detected: autolib.detect(), running: watcher.current().map(a => ({ id: a.id, label: a.label })),
-  license: license.status(),
+  /* La licence n'existe qu'apres app.whenReady(). Une fenetre ne
+     peut pas interroger avant, en principe — mais « en principe »
+     ne suffit pas pour une ligne qui, si elle jette, empeche
+     l'interface entiere de s'initialiser. */
+  license: license ? license.status() : null,
   sets: setlog ? setlog.list() : [], guestUrl: guests.port ? guests.url() : null }));
 
 ipcMain.handle('config:set', (e, patch) => {
@@ -1060,7 +1064,7 @@ ipcMain.handle('icon:data', () => {
   try { return nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png')).resize({ width: 128 }).toDataURL(); }
   catch (e) { return ''; }
 });
-ipcMain.handle('license:status', () => license.status());
+ipcMain.handle('license:status', () => (license ? license.status() : null));
 ipcMain.handle('license:activate', async (e, key) => {
   const r = await license.activate(key);
   send('license', license.status());

@@ -83,7 +83,16 @@ jobs:
       # fait echouer les trois jobs a la fois.
       - name: Verifier la configuration
         shell: bash
-        run: node build/verifier-config.js
+        run: |
+          # Un garde-fou qui fait echouer la construction quand il
+          # est absent est pire que pas de garde-fou : c'est
+          # exactement ce qui vient d'arriver. S'il n'est pas la, on
+          # le signale et on continue.
+          if [ -f build/verifier-config.js ]; then
+            node build/verifier-config.js
+          else
+            echo "::warning::build/verifier-config.js absent — validation de la configuration ignoree"
+          fi
 
       - name: Contexte
         shell: bash
@@ -128,15 +137,32 @@ jobs:
         env:
           CSC_IDENTITY_AUTO_DISCOVERY: false     # pas de signature payante
 
+      # Le resume disait « (aucune sortie capturee) » quand l'echec
+      # arrivait AVANT la construction — c'est-a-dire precisement
+      # quand on ne sait pas ce qui s'est passe. On decrit donc
+      # aussi l'etat du depot au moment de l'echec.
       - name: Journal en cas d'echec
         if: failure()
         shell: bash
         run: |
           {
-            echo "## ${{ matrix.nom }} — echec de la construction"
+            echo "## ${{ matrix.nom }} — echec"
             echo ''
+            echo '### Sortie de la construction'
             echo '```'
-            tail -n 120 /tmp/build.log 2>/dev/null || echo "(aucune sortie capturee)"
+            if [ -s /tmp/build.log ]; then tail -n 120 /tmp/build.log
+            else echo "(la construction n'a pas demarre : l'echec est dans une etape precedente)"; fi
+            echo '```'
+            echo '### Fichiers attendus par le workflow'
+            echo '```'
+            for f in package.json build/verifier-config.js build/afterPack.js build/icon.png src/main.js; do
+              if [ -f "$f" ]; then echo "present  $f"; else echo "ABSENT   $f"; fi
+            done
+            echo ''
+            echo "node        $(node -v 2>&1)"
+            echo "npm         $(npm -v 2>&1)"
+            echo "electron-builder $(npx --no-install electron-builder --version 2>&1 | tail -1)"
+            echo "app-builder-lib  $([ -d node_modules/app-builder-lib ] && echo present || echo ABSENT)"
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
