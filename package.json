@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "0.9.4",
+  "version": "0.9.5",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {
@@ -32,7 +32,6 @@
     ],
     "afterPack": "build/afterPack.js",
     "mac": {
-      "_pourquoi_target_sans_arch": "Cette liste valait [arm64, x64]. Consequence trouvee en verifiant les fichiers publies : le job arm64 construisait DEJA les deux .dmg (artefact de 385 Mo = 190 + 196), et le job x64 refaisait le meme travail. Pire, les deux .dmg sortaient d'un runner Apple Silicon, ou npm avait installe le ffmpeg arm64 : le .dmg Intel embarquait donc un ffmpeg qu'un Mac Intel ne peut pas executer. Sans arch ici, c'est l'option de la ligne de commande qui decide, et chaque job produit un seul .dmg, avec le bon binaire dedans.",
       "target": [
         "dmg"
       ],

@@ -77,6 +77,14 @@ jobs:
 
       # Un diagnostic AVANT la construction : quand ca casse, on veut
       # savoir sur quoi on tourne sans relancer le build a l'aveugle.
+      # Trente millisecondes ici, contre deux minutes de runner par
+      # plateforme quand la configuration est refusee. Ce controle
+      # existe parce qu'une seule clef inconnue dans package.json a
+      # fait echouer les trois jobs a la fois.
+      - name: Verifier la configuration
+        shell: bash
+        run: node build/verifier-config.js
+
       - name: Contexte
         shell: bash
         run: |
