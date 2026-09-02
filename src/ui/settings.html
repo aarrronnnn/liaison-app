@@ -89,6 +89,109 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 .dur.on{background:var(--blue);color:#fff;border-color:var(--blue)}
 .moments li{margin-bottom:6px;color:var(--ink2);font-size:13px}
 .moments b{color:var(--ink)}
+
+/* ============================================================
+   La fenetre de reglages : une application, pas une page.
+
+   Etat de depart, mesure : 4 071 px de defilement, onze cartes
+   d'apparence identique posees a la suite. Pour changer le pays
+   du contexte, il fallait passer devant la licence, la
+   bibliotheque, l'apprentissage et le logiciel de mix. Rien ne
+   disait ou on etait ni ce qui restait plus bas.
+
+   On ne reecrit pas le contenu — il est juste. On lui donne la
+   forme d'une fenetre : une colonne de rubriques a gauche, une
+   seule a l'ecran a droite. Chaque panneau tient alors dans la
+   hauteur de la fenetre, et le titre de la rubrique dit toujours
+   ou on se trouve.
+
+   La construction se fait a l'execution, a partir des cartes
+   existantes : aucune ligne de HTML deplacee, donc aucun
+   identifiant casse et aucun gestionnaire perdu.
+   ============================================================ */
+.shell{display:grid;grid-template-columns:236px minmax(0,1fr);gap:0;align-items:start;
+min-height:calc(100vh - 118px)}
+@media(max-width:820px){.shell{grid-template-columns:minmax(0,1fr)}}
+
+.rail{position:sticky;top:0;align-self:start;padding:4px 18px 24px 0;border-right:1.5px solid var(--line)}
+@media(max-width:820px){.rail{position:static;border-right:0;border-bottom:1.5px solid var(--line);
+  padding:0 0 14px;display:flex;gap:6px;overflow-x:auto;margin-bottom:18px}}
+.rail .rgrp{font-family:var(--m);font-weight:700;font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;
+color:var(--rose);margin:22px 0 9px;padding:0 0 5px 11px;border-bottom:1.5px solid var(--line)}
+.rail .rgrp:first-child{margin-top:0}
+@media(max-width:820px){.rail .rgrp{display:none}}
+.rnav{display:block;width:100%;text-align:left;background:transparent;border:0;cursor:pointer;
+padding:9px 11px;border-radius:3px;color:var(--ink2);font-family:var(--b);font-size:13.5px;
+letter-spacing:-.005em;line-height:1.35;display:flex;align-items:center;gap:9px;white-space:nowrap}
+.rnav:hover{background:var(--paper2);color:var(--ink)}
+.rnav[aria-current="true"]{background:var(--ink);color:var(--paper)}
+/* un filet bleu a gauche : on voit ou on est, meme du coin de l'oeil */
+.rnav{border-left:2px solid transparent;border-radius:0 3px 3px 0}
+.rnav[aria-current="true"]{border-left-color:var(--rose)}
+.rnav:hover{border-left-color:var(--line)}
+.rnav .rn{font-family:var(--m);font-size:9.5px;letter-spacing:.06em;opacity:.6;min-width:14px}
+.rnav[aria-current="true"] .rn{opacity:.75}
+.rnav .rdot{margin-left:auto;width:6px;height:6px;border-radius:50%;background:var(--blue);display:none}
+.rnav[data-alerte="1"] .rdot{display:block}
+.rnav[aria-current="true"] .rdot{background:var(--paper)}
+
+.pans{padding:0 0 40px 26px;min-width:0}
+@media(max-width:820px){.pans{padding-left:0}}
+.pan{display:none}
+.pan.on{display:block;animation:panIn .28s cubic-bezier(.16,1,.3,1)}
+@keyframes panIn{from{opacity:0;transform:translateY(7px)}to{opacity:1;transform:none}}
+/* ------------------------------------------------------------
+   La couleur, reprise du site.
+
+   La fenetre etait creme, blanche et bleue — trois tons, aucune
+   hierarchie. Le site, lui, se lit d'un coup d'oeil parce qu'il
+   pose du rouge sur les etiquettes, du bleu sur ce qui agit, et
+   qu'il alterne les fonds : blocs clairs, blocs inverses. On
+   applique les memes regles ici, avec les memes valeurs.
+
+     rouge  — l'etiquette de rubrique et son filet, comme .col .no
+     bleu   — ce sur quoi on peut cliquer
+     inverse— le bandeau d'explication en tete de panneau
+     creme2 — les blocs secondaires
+
+   Ce n'est pas de la decoration : chaque couleur dit une chose,
+   et toujours la meme.
+   ------------------------------------------------------------ */
+.panh{margin:0 0 20px}
+.paneb{display:inline-block;font-family:var(--m);font-weight:700;font-size:11.5px;
+letter-spacing:.14em;text-transform:uppercase;color:var(--rose);
+padding-bottom:5px;border-bottom:2px solid var(--rose);margin-bottom:12px}
+.panh h2{margin:0;font-family:var(--d);font-size:clamp(26px,3.2vw,36px);text-transform:uppercase;
+line-height:1.08;letter-spacing:.025em}
+.panh .pill{vertical-align:.3em;margin-left:10px}
+/* Le bandeau qui dit a quoi sert la rubrique. Inverse, comme la
+   bande manifeste du site : on comprend en une phrase, sans lire
+   le reste. */
+.panintro{margin:14px 0 0;background:var(--ink);color:var(--paper);padding:15px 17px;border-radius:4px;
+font-size:14px;line-height:1.65;max-width:70ch}
+.panintro b{color:#fff}
+.panintro .k{display:block;font-family:var(--m);font-size:9.5px;letter-spacing:.18em;
+text-transform:uppercase;color:#8D9099;margin-bottom:7px}
+/* les cartes ne sont plus des cartes : elles sont le panneau */
+.pan .card{border:0;background:transparent;padding:0;margin:0}
+.pan .card > h2{display:none}
+/* Les sous-blocs d'un panneau reprennent l'alternance du site :
+   un fond legerement different suffit a separer deux idees sans
+   ajouter un trait de plus. */
+.pan .grid > div{background:var(--card);border:1px solid var(--line);border-radius:5px;padding:18px}
+.pan .grid > div:nth-child(even){background:var(--card2)}
+@media(max-width:760px){.pan .grid > div{padding:16px}}
+.pan .tips{color:var(--ink2);font-size:13.5px;line-height:1.65}
+.pan .tips b{color:var(--ink)}
+/* Les etats : une couleur par sens, jamais deux sens par couleur. */
+.pill{font-family:var(--m);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+padding:4px 8px;border-radius:2px;background:var(--card2);color:var(--ink2)}
+.pill.ok{background:var(--ok);color:#fff}
+.pill.att{background:var(--rose);color:#fff}
+.pill.info{background:var(--blue);color:#fff}
+button:not(.g):hover{background:var(--blue2);border-color:var(--blue2)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
+
 </style></head><body><div class="wrap">
 
 <h1><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 3.4 10 12l-6.6 8.6" stroke="var(--blue)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.6 3.4 14 12l6.6 8.6" stroke="var(--rose)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg> Liaison</h1>
@@ -829,4 +932,142 @@ window.liaison.clientGet().then(st => {
   renderClient(st);
   if (st.spotify) { $('#spId').placeholder = 'enregistre'; $('#spSecret').placeholder = 'enregistre'; }
 }).catch(() => {});
-</script></body></html>
+</script></body>
+<script>
+/* ------------------------------------------------------------
+   Montage de la fenetre a partir des cartes existantes.
+   Aucun element n'est recree : on les deplace, ce qui preserve
+   tous les ecouteurs deja poses par le reste du fichier.
+   ------------------------------------------------------------ */
+(function () {
+  var wrap = document.querySelector('.wrap');
+  if (!wrap) return;
+  var cartes = [].slice.call(document.querySelectorAll('.card'));
+  if (cartes.length < 3) return;
+
+  /* Le nom court de chaque rubrique et un mot d'introduction. Le
+     titre complet de la carte reste la source : on n'invente rien,
+     on abrege ce qui l'est trop pour une colonne. */
+  var NOMS = {
+    licCard:  ['Licence', 'Ton essai et ta cle',
+      'Quatorze jours, toutes fonctions ouvertes, sans compte a creer. Ensuite le widget continue de proposer un enchainement, mais <b>les sessions invites et le rejeu de set se ferment</b>. Une cle libere la machine ou tu l\'actives.'],
+    default:  [null, null]
+  };
+  /* L'ordre compte : « Sante de ta bibliotheque » contient
+     « ta bibliotheque ». Le motif le plus precis passe donc en
+     premier, sinon deux rubriques portent le meme nom — ce qui
+     etait exactement le cas au premier essai. */
+  /* Chaque rubrique dit : ce que c'est, a quoi ca sert, et ce que
+     tu as a faire. Trois lignes, pas une notice. */
+  var COURTS = [
+    [/sante de ta bibliotheque|^\s*\d*\s*[—-]?\s*sante/i, 'Sante', 'Le controle qualite',
+      'Sur des milliers de morceaux accumules pendant des annees, il y a forcement des tempos faux, des tonalites qui ne collent pas et des fichiers disparus. Liaison compare ce que dit ta base a ce qu\'il mesure lui-meme, et te montre l\'ecart. <b>Il ne corrige rien tout seul</b> : c\'est ta bibliotheque.'],
+    [/bibliotheque$|ta bibliotheque/i, 'Bibliotheque', 'D\'ou viennent tes morceaux',
+      'Liaison lit la base de ton logiciel la ou elle se trouve — Serato, Traktor, VirtualDJ, rekordbox, iTunes. <b>Rien a importer, rien a exporter.</b> Ce qui a deja ete lu est garde d\'une session a l\'autre : au deuxieme lancement, c\'est instantane.'],
+    [/appris de toi/i,                 'Ce qu\'il apprend', 'Ton gout, mesure',
+      'Liaison regarde ce que tu joues apres chaque suggestion — celles que tu prends, et surtout celles que tu ignores — et deplace ses criteres vers les tiens. <b>Rien n\'est modifie avant douze enchainements</b>, tout est borne, et tu peux tout effacer.'],
+    [/logiciel de mix/i,               'Logiciel de mix', 'Comment il voit tes decks',
+      'Liaison surveille les logiciels ouverts : le widget apparait quand tu lances le tien, disparait quand tu le fermes. <b>Serato, Traktor et VirtualDJ</b> sont lus sans materiel. <b>rekordbox</b> demande un CDJ, un XDJ ou un DJM sur le reseau — sinon, la loupe du widget.'],
+    [/contexte/i,                      'Contexte', 'Le pays et le type de soiree',
+      'Un mariage a Lille et un club a Berlin n\'appellent pas les memes titres. Le contexte oriente les genres proposes et la courbe d\'energie attendue. <b>C\'est le reglage qui change le plus les suggestions</b> — deux menus, trente secondes.'],
+    [/soiree du client/i,              'Le client', 'Ce qu\'il veut, ce qu\'il refuse',
+      'Colle sa liste ou un lien de playlist Spotify : les titres voulus passent devant dans le widget et tirent l\'ambiance vers leurs genres. <b>Les titres refuses sortent du moteur</b>, sans discussion.'],
+    [/demandes des invites/i,          'Les invites', 'La salle demande, tu decides',
+      'Liaison ouvre une page sur ton reseau local. Les invites scannent un QR et deposent une demande — <b>aucun compte, aucune appli a installer</b>. Cinq demandes par personne, quatre-vingt-dix secondes entre deux.'],
+    [/preparer une soiree/i,           'Preparer', 'Le vivier, avant de partir',
+      'Beaucoup de soirees se jouent sur CDJ, sans ordinateur en cabine. Liaison construit chez toi le vivier que tu aurais joue : un ordre mixable, cale sur la courbe du contexte. <b>Tu l\'exportes en playlist</b>, ton logiciel l\'ouvre, tu la mets sur ta cle.'],
+    [/tracklists/i,                    'Tracklists', 'Ce qui a ete joue, a la minute',
+      'Liaison note tout ce qui est passe, avec l\'heure et la duree reelle de chaque morceau. De quoi repondre a « tu peux m\'envoyer ta tracklist ? » sans rien retaper, et <b>remplir une declaration SACEM</b> sans reconstruire la soiree de memoire.'],
+    [/rejouer un set/i,                'Rejouer', 'La meme soiree, autrement',
+      'Reprends le vivier d\'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l\'ordre : <b>jamais le meme enchainement deux fois</b>, et la mixabilite tient toujours.']
+  ];
+
+  var shell = document.createElement('div'); shell.className = 'shell';
+  var rail  = document.createElement('nav'); rail.className = 'rail'; rail.setAttribute('aria-label', 'Rubriques');
+  var pans  = document.createElement('div'); pans.className = 'pans';
+  shell.appendChild(rail); shell.appendChild(pans);
+
+  /* les cartes vivent dans des .grid : on remonte a l'ancetre
+     direct de .wrap pour pouvoir tout retirer proprement */
+  var aRetirer = [];
+  cartes.forEach(function (c) {
+    var n = c; while (n.parentElement && n.parentElement !== wrap) n = n.parentElement;
+    if (aRetirer.indexOf(n) < 0) aRetirer.push(n);
+  });
+
+  /* Le regroupement suit le moment ou on ouvre la rubrique :
+     ce qu'on regle une fois en installant, ce qu'on regle avant
+     une soiree precise, et ce qu'on ouvre autour d'elle. */
+  var groupes = [['Ta cabine', 0, 4], ['Cette soiree', 4, 7], ['Autour de la soiree', 7, 99]];
+  var boutons = [];
+
+  cartes.forEach(function (carte, i) {
+    var titreComplet = carte.querySelector('h2');
+    var brut = titreComplet ? titreComplet.textContent.trim() : 'Rubrique ' + (i + 1);
+    var court = null, sous = null, intro = null;
+    if (NOMS[carte.id] && NOMS[carte.id][0]) { court = NOMS[carte.id][0]; sous = NOMS[carte.id][1]; intro = NOMS[carte.id][2]; }
+    if (!court) for (var k = 0; k < COURTS.length; k++)
+      if (COURTS[k][0].test(brut)) { court = COURTS[k][1]; sous = COURTS[k][2]; intro = COURTS[k][3]; break; }
+    if (!court) court = brut.replace(/^\d+\s*[—-]\s*/, '').slice(0, 22);
+
+    var pan = document.createElement('section');
+    pan.className = 'pan'; pan.id = 'pan-' + i;
+    var h = document.createElement('div'); h.className = 'panh';
+    var pill = titreComplet ? titreComplet.querySelector('.pill') : null;
+    h.innerHTML = '<span class="paneb">' + String(i + 1).padStart(2, '0') + ' · ' + (sous || court) + '</span>'
+                + '<h2>' + court + '</h2>'
+                + (intro ? '<div class="panintro"><span class="k">A quoi ca sert</span>' + intro + '</div>' : '');
+    if (pill) h.querySelector('h2').appendChild(pill);
+    pan.appendChild(h);
+    pan.appendChild(carte);
+    pans.appendChild(pan);
+
+    var b = document.createElement('button');
+    b.className = 'rnav'; b.type = 'button'; b.dataset.pan = pan.id;
+    b.innerHTML = '<span class="rn">' + String(i + 1).padStart(2, '0') + '</span><span>' + court + '</span><span class="rdot"></span>';
+    b.onclick = function () { montrer(pan.id); };
+    boutons.push(b);
+  });
+
+  /* les rubriques, par groupe */
+  groupes.forEach(function (g) {
+    var lot = boutons.slice(g[1], g[2]);
+    if (!lot.length) return;
+    var t = document.createElement('div'); t.className = 'rgrp'; t.textContent = g[0];
+    rail.appendChild(t);
+    lot.forEach(function (b) { rail.appendChild(b); });
+  });
+
+  /* On ne retire que ce qui est RESTE enfant direct de .wrap.
+     Sans cette verification, une carte posee directement dans
+     .wrap — sans .grid autour — etait sa propre « enveloppe » :
+     on la deplacait dans son panneau, puis on la supprimait
+     aussitot. Sept rubriques sur onze arrivaient vides, avec leur
+     titre et rien dessous. */
+  aRetirer.forEach(function (n) { if (n.parentElement === wrap) wrap.removeChild(n); });
+  wrap.appendChild(shell);
+
+  function montrer(id) {
+    [].forEach.call(pans.children, function (p) { p.classList.toggle('on', p.id === id); });
+    boutons.forEach(function (b) { b.setAttribute('aria-current', b.dataset.pan === id ? 'true' : 'false'); });
+    try { localStorage.setItem('liaison.reglages.pan', id); } catch (e) {}
+    window.scrollTo({ top: 0, behavior: 'auto' });
+  }
+
+  var depart = null;
+  try { depart = localStorage.getItem('liaison.reglages.pan'); } catch (e) {}
+  if (!depart || !document.getElementById(depart)) depart = 'pan-1';
+  if (!document.getElementById(depart)) depart = 'pan-0';
+  montrer(depart);
+
+  /* Une pastille sur les rubriques qui reclament une action : on
+     ne fait pas chercher au DJ ce qui ne va pas. */
+  window.__reglagesAlerte = function (motif, actif) {
+    boutons.forEach(function (b) {
+      if (motif.test(b.textContent)) b.dataset.alerte = actif ? '1' : '0';
+    });
+  };
+})();
+</script>
+
+</html>

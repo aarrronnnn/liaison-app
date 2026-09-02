@@ -19,10 +19,30 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .grip .act button{width:24px;height:22px;border-radius:2px;color:var(--cream3);font-family:var(--m);font-size:12px;line-height:1}
 .grip .act button:hover{background:var(--deep3);color:var(--cream)}
 
-/* ---------- morceau en cours ---------- */
-.ref{padding:11px 12px 12px;border-bottom:1px solid var(--wire);background:var(--deep2)}
+/* ============================================================
+   Le morceau en cours : la reference, pas une ligne de plus.
+
+   Tout le widget se lit PAR RAPPORT a ce bloc — les ecarts de
+   tempo, les tonalites, les points de mix sont relatifs a lui.
+   Il avait pourtant la meme valeur visuelle que le reste : un
+   fond a peine plus clair, et c'est tout.
+
+   On lui donne le traitement que le site donne a ses reperes :
+   un filet bleu a gauche sur toute la hauteur, comme la barre du
+   .col, et les valeurs en couleur — la tonalite en bleu, le tempo
+   en creme plein. Le DJ doit pouvoir le trouver du coin de l'oeil,
+   dans le noir, en une fraction de seconde.
+   ============================================================ */
+.ref{padding:11px 12px 12px;border-bottom:1px solid var(--wire);background:var(--deep2);
+position:relative}
+.ref::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blueLit)}
 .ref .top{display:flex;align-items:baseline;gap:8px}
 .ref .top .lbl{color:var(--blueLit)}
+/* Les trois valeurs de reference : chacune sa couleur, toujours
+   la meme, ici comme dans les suggestions. */
+.ref .m i{color:var(--cream)}
+.ref .m span:nth-child(1) i{color:var(--blueLit)}
+.ref .m span:nth-child(3) i{color:var(--redLit)}
 .ref .t{font-family:var(--d);font-size:21px;line-height:.98;text-transform:uppercase;margin-top:7px;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ref .a{font-family:var(--m);font-size:10px;color:var(--cream3);margin-top:4px;
@@ -49,7 +69,21 @@ letter-spacing:.1em;color:var(--cream3);margin-top:4px;text-transform:uppercase}
 padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
 .row + .row{border-top:1px solid var(--wire)}
 .row:hover{background:var(--deep2);border-color:var(--wire2)}
+/* ------------------------------------------------------------
+   Le score, et ce qu'il doit dire d'un coup d'oeil.
+
+   Il etait bleu pour le premier, gris pour les autres : on savait
+   lequel etait en tete, pas si le deuxieme valait la peine. Un 91
+   et un 62 s'affichaient du meme gris.
+
+   Trois niveaux, donc, avec la palette du site : bleu quand ca se
+   cale vraiment (85 et plus), creme quand c'est jouable (70-84),
+   gris en dessous. Le DJ voit la qualite du vivier avant meme de
+   lire les titres.
+   ------------------------------------------------------------ */
 .sc{font-family:var(--d);font-size:25px;line-height:.85;text-align:right;color:var(--cream3);padding-top:1px}
+.sc[data-n="haut"]{color:var(--blueLit)}
+.sc[data-n="moyen"]{color:var(--cream2)}
 .row.best .sc{color:var(--blueLit)}
 .row.sos .sc{color:var(--redLit)}
 .n{display:block;font-family:var(--b);font-weight:700;font-size:12.5px;letter-spacing:-.01em;
@@ -151,10 +185,12 @@ padding:5px 8px;border:1px solid var(--wire2);border-radius:2px;color:var(--crea
 .land .ask input{font-family:var(--m);font-size:9px;width:56px;text-align:center;
 background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;padding:5px 4px}
 /* plan de mix */
-.plan{font-family:var(--m);font-size:9.5px;margin-top:6px;display:flex;gap:11px;
+/* Les trois instants : c'est ce que le site promet en gros sur sa
+   page d'accueil. Ils meritent mieux que du 9,5 px gris. */
+.plan{font-family:var(--m);font-size:10px;margin-top:7px;display:flex;gap:11px;
 padding-top:6px;border-top:1px solid var(--wire);white-space:nowrap;overflow:hidden}
 .plan b{font-weight:400;color:var(--cream3);letter-spacing:.1em;text-transform:uppercase;font-size:8.5px}
-.plan s{text-decoration:none;color:var(--cream)}
+.plan s{text-decoration:none;color:var(--cream);font-weight:700}
 .plan .k1 s{color:var(--blueLit)}
 .plan .k3 s{color:var(--redLit)}
 .plan.wait{color:var(--cream3);border-top-color:var(--wire);display:block}
@@ -576,7 +612,7 @@ function renderSug(list) {
   }
   box.innerHTML = list.map((r, i) => `
     <div class="row ${i === 0 ? 'best' : ''}">
-      <span class="sc">${r.total}</span>
+      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
         <span class="mm">${r.cloture || r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.client ? (r.cloture?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
@@ -598,7 +634,7 @@ function renderSos(list) {
   }
   box.innerHTML = list.map(r => `
     <div class="row sos">
-      <span class="sc">${r.total}</span>
+      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
         <span class="mm">${r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.client ? '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? (r.client?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>

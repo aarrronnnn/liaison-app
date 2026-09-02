@@ -103,13 +103,32 @@ function start(opts, cb) {
   const resoudre = opts.resoudre || (() => null);
 
   if (!dispo) {
-    cb.onStatus({ ok: false, msg: 'Lecture des fichiers ouverts indisponible sous Windows',
+    /* ------------------------------------------------------------
+       Windows, et la verite qu'on doit a l'utilisateur.
+
+       Sous macOS, on deduit le morceau charge des fichiers que
+       rekordbox tient ouverts. Windows ne permet pas de lister les
+       fichiers ouverts d'un autre processus sans outil tiers ni
+       droits administrateur — et rekordbox ne publie rien de son
+       cote : Pioneer l'a confirme sur son propre forum.
+
+       Il n'y a donc, aujourd'hui, aucun moyen honnete de lire le
+       deck de rekordbox sous Windows sans materiel. On ne fait pas
+       semblant de chercher : on le dit, et on montre le chemin qui
+       marche — deux lettres dans la loupe, et Liaison enchaine.
+       ------------------------------------------------------------ */
+    cb.onStatus({ ok: false, msg: 'rekordbox sous Windows : declare le morceau a la main',
       conseil: {
         cle: 'rekordbox-windows', quand: 'deck',
-        titre: 'rekordbox sans materiel, sous Windows',
-        texte: 'Liaison ne peut pas voir quels fichiers rekordbox a ouverts sous Windows.',
-        marche: ['Avec un CDJ, un XDJ ou un DJM : utilise Pro DJ Link',
-                 'Sinon : clique la loupe et tape deux lettres du titre'] } });
+        titre: 'rekordbox sous Windows, sans materiel',
+        texte: 'rekordbox n\'annonce pas ce qu\'il joue, et Windows ne permet pas de le deviner. ' +
+               'Ce n\'est pas une panne : c\'est une limite du logiciel de Pioneer.',
+        marche: ['Clique la loupe en haut, tape deux lettres du titre',
+                 'Liaison propose la suite, avec les points de mix',
+                 'Une seule frappe par morceau, pas plus'],
+        repli: 'Avec un CDJ, un XDJ ou un DJM sur le reseau, le deck est lu automatiquement. ' +
+               'Serato, Traktor et VirtualDJ le sont aussi, sans materiel.'
+      } });
     return { stop() {} };
   }
 

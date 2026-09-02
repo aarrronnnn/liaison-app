@@ -605,7 +605,10 @@ function chemins() {
 
 function startRekordboxFichiers() {
   stopRekordboxFichiers();
-  if (!rbFichiers.dispo) return;
+  /* On demarre AUSSI sous Windows, ou le module se contente
+     d'expliquer pourquoi il ne peut rien lire. On sortait ici sans
+     rien dire : le DJ Windows n'avait donc ni detection ni
+     explication — juste un widget muet. */
   rbWatch = rbFichiers.start({
     resoudre: p => chemins().get(libmod.cleChemin(p)) || null
   }, {
@@ -1152,6 +1155,14 @@ function refreshTray() {
     { label: 'Reglages…', click: openSettings },
     { type: 'separator' },
     { label: 'Relire la bibliotheque', click: () => autoImport(activeApp && activeApp.librarySource) },
+    /* Un testeur qui a vu quelque chose d'anormal doit pouvoir
+       nous envoyer le journal sans avoir a le chercher dans un
+       dossier systeme cache. Deux clics depuis la barre de menus. */
+    { label: 'Ouvrir le journal des pannes', click: () => {
+        const f = path.join(DIR(), 'pannes.log');
+        try { if (!fs.existsSync(f)) fs.writeFileSync(f, 'Aucune panne enregistree. Tant mieux.\n'); } catch (e) {}
+        try { shell.showItemInFolder(f); } catch (e) {}
+      } },
     { type: 'separator' },
     { label: 'Quitter Liaison', click: () => { app.isQuitting = true; app.quit(); } }
   ]));
@@ -1167,7 +1178,9 @@ function wireWatcher() {
     config.source = kind; saveConfig();
     const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
     now.start(kind, opts);
-    /* rekordbox : on ecoute le reseau ET les fichiers ouverts. */
+    /* rekordbox : on ecoute le reseau ET les fichiers ouverts.
+       Sous Windows la seconde source n'existe pas — elle le dit
+       elle-meme, ce qui vaut mieux qu'un widget muet. */
     if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
     if (config.autoLibrary && !library.length) await autoImport(app_.librarySource);
     refreshTray();
@@ -1313,6 +1326,58 @@ app.whenReady().then(async () => {
   if (config.autoLibrary) autoImport().then(refreshTray);
   else if (config.libraryPath) importLibrary(config.libraryMode, config.libraryPath).then(refreshTray);
 });
+/* ============================================================
+   Le filet, sous tout le reste.
+
+   Dans le processus principal d'Electron, une exception qui
+   n'est attrapee nulle part TUE l'application. Pas de message,
+   pas de trace : la fenetre disparait, l'icone de la barre de
+   menus disparait, et le DJ ne peut rien raconter d'autre que
+   « ca s'est fermé tout seul ». C'est la pire panne possible
+   pendant une soiree, et la plus difficile a corriger apres coup
+   puisqu'il ne reste rien.
+
+   On attrape donc tout, et on fait trois choses dans cet ordre :
+
+     1. on ECRIT la panne dans un fichier, avec l'heure, la
+        version et la trace complete. C'est ce qu'on demandera au
+        testeur ;
+     2. on NE QUITTE PAS. Une suggestion ratee ne doit pas couper
+        la musique — le reste de l'app continue de tourner ;
+     3. on le dit une fois, calmement, avec le chemin du journal.
+        Une fois seulement : une boucle d'erreurs ne doit pas
+        ensevelir l'ecran sous les fenetres.
+   ============================================================ */
+let dejaPrevenu = false;
+function noterPanne(quoi, err) {
+  const t = new Date().toISOString();
+  const trace = err && err.stack ? err.stack : String(err);
+  const ligne = '\n[' + t + '] ' + quoi + ' — Liaison ' + app.getVersion() +
+                ' — ' + process.platform + '/' + process.arch + '\n' + trace + '\n';
+  /* Le dossier existe toujours en usage reel — Electron le cree —
+     mais un journal de pannes qui depend de cette hypothese est un
+     journal qu'on ne trouvera pas le jour ou elle est fausse. */
+  try { fs.mkdirSync(DIR(), { recursive: true }); } catch (e) {}
+  try { fs.appendFileSync(path.join(DIR(), 'pannes.log'), ligne); } catch (e) {}
+  try { console.error(ligne); } catch (e) {}
+  if (dejaPrevenu) return;
+  dejaPrevenu = true;
+  try {
+    dialog.showMessageBox({
+      type: 'warning',
+      title: 'Liaison a rencontre un probleme',
+      message: 'Liaison continue de tourner.',
+      detail: 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
+              'Le detail est dans :\n' + path.join(DIR(), 'pannes.log'),
+      buttons: ['Continuer', 'Ouvrir le journal'],
+      defaultId: 0, cancelId: 0
+    }).then(r => { if (r && r.response === 1) { try { shell.showItemInFolder(path.join(DIR(), 'pannes.log')); } catch (e) {} } })
+      .catch(() => {});
+  } catch (e) {}
+}
+process.on('uncaughtException', e => noterPanne('exception non attrapee', e));
+process.on('unhandledRejection', e => noterPanne('promesse rejetee', e));
+
 app.on('window-all-closed', () => { /* Liaison vit dans la barre de menus */ });
 app.on('activate', () => {
   if (!widget) createWidget();

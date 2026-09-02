@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "0.9.6",
+  "version": "1.0.0",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {
@@ -37,6 +37,7 @@
         "dmg"
       ],
       "category": "public.app-category.music",
+      "minimumSystemVersion": "10.15.0",
       "identity": null,
       "gatekeeperAssess": false,
       "artifactName": "Liaison-${version}-${arch}.${ext}",

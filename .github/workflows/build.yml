@@ -222,12 +222,28 @@ jobs:
     permissions:
       contents: write
     steps:
-      # download-artifact doit rester sur la meme majeure que
-      # upload-artifact : les deux partagent le format de stockage.
-      - uses: actions/download-artifact@v6
+      # ------------------------------------------------------------
+      # Le moteur des actions, pas le notre.
+      #
+      # L'avertissement « Node.js 20 is deprecated » ne vient pas de
+      # node-version: 22 dans ce fichier : il vient du moteur que
+      # CHAQUE action declare pour elle-meme. Verifie une par une :
+      #
+      #   checkout@v5           node24  ok
+      #   setup-node@v5         node24  ok
+      #   upload-artifact@v6    node24  ok
+      #   download-artifact@v6  node20  <- l'un des deux coupables
+      #   action-gh-release@v2  node20  <- l'autre
+      #
+      # download-artifact v8 et action-gh-release v3 tournent en
+      # node24 et gardent les memes entrees (verifie : files, name,
+      # body, path, merge-multiple). upload v6 et download v8 sont
+      # de la meme generation de stockage (v4+), donc compatibles.
+      # ------------------------------------------------------------
+      - uses: actions/download-artifact@v8
         with: { path: dist, merge-multiple: true }
       - run: ls -lh dist
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           files: |
             dist/*.dmg
