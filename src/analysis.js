@@ -156,7 +156,20 @@ class AnalysisService {
     this.workers = this.workers.filter(x => x !== w);
     this.libres = this.libres.filter(x => x !== w);
     if (!this.arrete && this.workers.length < this.nWorkers) {
-      setTimeout(() => { this.workers.length = 0; this.libres.length = 0; this._demarrerWorkers(); this._pousser(); }, 1500);
+      setTimeout(() => {
+        /* Vider le tableau ne tue pas les fils : il oublie seulement
+           leurs references. Les fils vivants continuaient de tourner
+           avec leur ffmpeg, et le morceau qu'ils traitaient restait
+           bloque dans « en cours » pour toujours — donc jamais rejoue,
+           et la barre de progression ne retombait jamais a zero. Sur
+           trois fils remplaces, cinq restaient en vie. */
+        for (const w of this.workers) {
+          if (w.job != null) { this._rendre(w.job); w.job = null; }
+          try { w.terminate(); } catch (e) {}
+        }
+        this.workers.length = 0; this.libres.length = 0;
+        this._demarrerWorkers(); this._pousser();
+      }, 1500);
     }
   }
 

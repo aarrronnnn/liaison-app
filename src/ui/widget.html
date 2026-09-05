@@ -65,7 +65,7 @@ letter-spacing:.1em;color:var(--cream3);margin-top:4px;text-transform:uppercase}
 
 /* ---------- liste ---------- */
 .list{overflow:auto;max-height:334px;padding:4px}
-.row{display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:start;
+.row{position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:start;
 padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
 .row + .row{border-top:1px solid var(--wire)}
 .row:hover{background:var(--deep2);border-color:var(--wire2)}
@@ -292,6 +292,16 @@ font-size:9.5px;letter-spacing:.06em;padding:9px 11px;border-radius:2px;opacity:
 transition:.18s;pointer-events:none}
 .toast.on{opacity:1;transform:none}
 .toast.red{background:var(--red)}
+/* Le glisser-deposer. La poignee ne s'affiche qu'au survol : en cabine,
+   une ligne couverte d'icones est une ligne qu'on ne lit plus. */
+.row[data-drag]{cursor:grab}
+.row[data-drag]:active{cursor:grabbing}
+.row[data-drag]::after{content:"⠿";position:absolute;left:3px;top:50%;transform:translateY(-50%);
+  font-size:11px;line-height:1;color:var(--cream3);opacity:0;transition:.12s;pointer-events:none}
+.row[data-drag]:hover::after{opacity:.55}
+.row.glisse{outline:1.5px solid var(--blueLit);outline-offset:-1px}
+.row.sansFichier{cursor:default}
+.row.sansFichier::after{display:none}
 </style></head><body>
 
 <div class="grip">
@@ -390,6 +400,16 @@ transition:.18s;pointer-events:none}
 <div class="licbar" id="licBar">
   <span class="lbl" id="licTxt" style="color:var(--blueLit)"></span>
   <button class="chip" id="licBuy" style="margin-left:auto">Prendre une licence</button>
+</div>
+
+<!-- Une version plus recente existe. On le dit, on ne l'installe pas :
+     personne ne veut d'un widget qui redemarre a une heure du matin.
+     Et « Plus tard » vaut pour cette version-la seulement — la
+     suivante reposera la question. -->
+<div class="licbar" id="majBar">
+  <span class="lbl" id="majTxt" style="color:var(--blueLit)"></span>
+  <button class="chip" id="majVoir" style="margin-left:auto">Voir</button>
+  <button class="chip" id="majPlusTard" title="Ne plus le dire pour cette version">Plus tard</button>
 </div>
 
 <div class="foot">
@@ -611,7 +631,7 @@ function renderSug(list) {
     return;
   }
   box.innerHTML = list.map((r, i) => `
-    <div class="row ${i === 0 ? 'best' : ''}">
+    <div class="row ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel">
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
@@ -622,6 +642,7 @@ function renderSug(list) {
     </div>`).join('');
   renderStrip(curStruct, list[0] && list[0].plan);
   fitHeight();
+  marquerGlissables();
 }
 
 function renderSos(list) {
@@ -926,10 +947,69 @@ $('#lClX').onclick = async () => {
 function licState(st) {
   const bar = $('#licBar');
   if (st.tier === 'trial') { bar.classList.add('on'); $('#licTxt').textContent = 'Essai — ' + st.trialLeft + ' jours'; }
-  else if (st.tier === 'none') { bar.classList.add('on'); $('#licTxt').textContent = 'Essai termine — 1 suggestion'; }
+  else if (st.tier === 'expire') { bar.classList.add('on'); bar.classList.add('stop');
+    $('#licTxt').textContent = 'Essai terminé — un pass soirée à 4,95 € rouvre tout pour 48 h'; }
   else bar.classList.remove('on');
 }
 
+/* ------------------------------------------------------------
+   La mise a jour disponible.
+
+   Installer une nouvelle version ne demande jamais de desinstaller
+   l'ancienne : sur Mac on glisse la nouvelle dans Applications et
+   on remplace, sur Windows l'installeur passe par-dessus. Le texte
+   du bandeau reste donc court — c'est la page qui explique.
+   ------------------------------------------------------------ */
+let majInfo = null;
+function renderMaj(r) {
+  const bar = $('#majBar');
+  if (!r || r.aJour) { bar.classList.remove('on'); return; }
+  majInfo = r;
+  bar.classList.add('on');
+  $('#majTxt').textContent = 'Version ' + r.version + ' disponible';
+  fitHeight();
+}
+$('#majVoir').onclick = () => window.liaison.majOuvrir();
+$('#majPlusTard').onclick = () => {
+  if (majInfo) window.liaison.majIgnorer(majInfo.version);
+  $('#majBar').classList.remove('on');
+  fitHeight();
+};
+window.liaison.on('maj', renderMaj);
+
+/* ------------------------------------------------------------
+   Glisser une suggestion sur un deck.
+
+   Le navigateur ferait son propre glisser (du texte) : on le lui
+   retire, et on demande au systeme d'exploitation un vrai glisser
+   de fichier. Pour le logiciel de mix, c'est exactement comme si
+   le DJ avait attrape le morceau dans son explorateur — donc rien
+   a configurer de son cote, et rien qui soit pilote du notre.
+   ------------------------------------------------------------ */
+document.addEventListener('dragstart', e => {
+  const ligne = e.target.closest && e.target.closest('[data-drag]');
+  if (!ligne) return;
+  /* Le fichier a disparu du disque : on sait deja que ca ne servira a
+     rien, autant ne pas demarrer un glisser qui ne menera nulle part. */
+  if (ligne.classList.contains('sansFichier')) { e.preventDefault(); return; }
+  e.preventDefault();                     /* sinon Chromium glisse du texte */
+  ligne.classList.add('glisse');
+  setTimeout(() => ligne.classList.remove('glisse'), 700);
+  window.liaison.dragTrack(Number(ligne.dataset.drag));
+});
+/* Une ligne dont le fichier est introuvable ne doit pas donner l'illusion
+   qu'on peut la glisser : on retire la poignee des le rendu. */
+async function marquerGlissables() {
+  const lignes = document.querySelectorAll('[data-drag]');
+  for (const l of lignes) {
+    try {
+      const ok = await window.liaison.dragPossible(Number(l.dataset.drag));
+      if (!ok) { l.removeAttribute('draggable'); l.classList.add('sansFichier'); }
+    } catch (e) {}
+  }
+}
+
+window.liaison.on('toast', t => toast(t.texte, t.rouge));
 window.liaison.on('now', renderNow);
 window.liaison.on('suggestions', renderSug);
 window.liaison.on('analysis', p => {

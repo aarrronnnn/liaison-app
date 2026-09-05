@@ -21,6 +21,23 @@ contextBridge.exposeInMainWorld('liaison', {
   /* ce que Liaison a appris du DJ */
   goutEtat: () => invoke('gout:etat'),
   goutOublier: () => invoke('gout:oublier'),
+  /* ce que le DJ a reellement fait avec l'app, pour lui parler de lui */
+  bilan: () => invoke('stats:bilan'),
+  /* les tarifs du jour, jamais ecrits en dur dans l'interface */
+  tarifs: () => invoke('tarifs:get'),
+  /* les mises a jour : on previent, on ne remplace jamais tout seul */
+  majEtat: () => invoke('maj:etat'),
+  majOuvrir: () => invoke('maj:ouvrir'),
+  majIgnorer: v => invoke('maj:ignorer', v),
+
+  /* les soirees preparees a l'avance */
+  soireesListe: () => invoke('soirees:liste'),
+  soireeCreer: p => invoke('soirees:creer', p),
+  soireeModifier: (id, patch) => invoke('soirees:modifier', { id, patch }),
+  soireeDupliquer: (id, nom) => invoke('soirees:dupliquer', { id, nom }),
+  soireeSupprimer: id => invoke('soirees:supprimer', id),
+  soireeActiver: id => invoke('soirees:activer', id),
+  soireeDesactiver: () => invoke('soirees:desactiver'),
   /* sante de la bibliotheque */
   healthScan: opt => invoke('health:scan', opt),
   healthReveal: id => invoke('health:reveal', id),
@@ -40,6 +57,8 @@ contextBridge.exposeInMainWorld('liaison', {
   /* la tracklist */
   tracklist: id => invoke('sets:tracklist', id),
   copySet: id => invoke('sets:copy', id),
+  /* le debrief de fin de soiree : des mesures, pas des conseils */
+  setDebrief: id => invoke('sets:debrief', id),
   exportSet: opt => invoke('sets:export', opt),
   /* les filtres de cabine */
   filters: () => invoke('filters:get'),
@@ -65,5 +84,9 @@ contextBridge.exposeInMainWorld('liaison', {
   openSettings: () => invoke('widget:settings'),
   hideWidget: () => invoke('widget:close'),
   setHeight: h => invoke('widget:height', h),
+  /* le glisser-deposer vers le deck : send(), pas invoke() — startDrag
+     doit partir pendant l'evenement dragstart et ne rend rien */
+  dragTrack: id => ipcRenderer.send('drag:track', id),
+  dragPossible: id => invoke('drag:possible', id),
   on: on
 });

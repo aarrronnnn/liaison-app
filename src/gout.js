@@ -61,6 +61,7 @@
    on ne fait pas confiance.
    ============================================================ */
 const fs = require('fs');
+const ecrire = require('./ecrire');
 const engine = require('./engine');
 
 const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td'];
@@ -113,9 +114,7 @@ class Gout {
       this._timer = null;
       if (!this._sale) return;
       this._sale = false;
-      const tmp = this.fichier + '.tmp';
-      try { fs.writeFileSync(tmp, JSON.stringify(this.d)); fs.renameSync(tmp, this.fichier); }
-      catch (e) { try { fs.unlinkSync(tmp); } catch (e2) {} }
+      ecrire.ecrireJSON(this.fichier, this.d);
     }, 4000);
     if (this._timer.unref) this._timer.unref();
   }
@@ -305,9 +304,21 @@ class Gout {
     return out;
   }
 
+  /* « Tout oublier » doit oublier tout de suite. _ranger() differe
+     l'ecriture de quatre secondes avec un timer unref() : un clic
+     suivi d'une fermeture dans la foulee laissait le fichier
+     d'apprentissage intact. Le DJ croyait avoir efface. */
   oublier() {
     this.d = vide();
-    this._ranger();
+    this.ecrireMaintenant();
+  }
+
+  /** Ecrit sans attendre. Appele a la fermeture de l'application. */
+  ecrireMaintenant() {
+    if (!this.fichier) return;
+    if (this._timer) { clearTimeout(this._timer); this._timer = null; }
+    this._sale = false;
+    ecrire.ecrireJSON(this.fichier, this.d);
   }
 }
 

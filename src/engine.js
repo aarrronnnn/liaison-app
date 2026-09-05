@@ -205,7 +205,11 @@ function suggest(cur, library, opt) {
   const trends = opt.trends || new Map();
   const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
   const limit = opt.limit || 5;
-  if (!cur) return [];
+  /* Sans tempo sur le morceau en cours, tout le calcul part en NaN :
+     tempoScore divise par cur.bpm. Ca n'arrivait pas tant que la
+     bibliotheque ecartait les morceaux sans tempo — ils y entrent
+     maintenant, en attendant d'etre mesures. */
+  if (!cur || !(cur.bpm > 0)) return [];
   /* ------------------------------------------------------------
      Les poids, et pourquoi ils ne sont plus fixes.
 
@@ -392,7 +396,7 @@ function rescue(cur, library, opt) {
   const structures = opt.structures || new Map();
   const wanted = opt.wanted || new Set();
   const limit = opt.limit || 3;
-  if (!cur) return [];
+  if (!cur || !(cur.bpm > 0)) return [];
 
   /* Le sauvetage ignore la courbe de soiree, mais pas la memoire :
      remonter la piste avec le meme artiste qu'il y a trois titres
@@ -408,8 +412,32 @@ function rescue(cur, library, opt) {
     if (tp.s < 52) continue;                     /* injouable maintenant : on passe */
 
     const h = harmScore(cur.key, t.key);
+
+    /* ------------------------------------------------------------
+       L'energie, et le morceau pas encore analyse.
+
+       Cette ligne rejetait tout ce qui est sous 6 sur 10 — logique
+       pour un bouton de sauvetage. Sauf qu'un morceau dont
+       l'analyse n'a pas encore tourne recoit une energie NEUTRE de
+       5, posee par finalize(). Et 5 est inferieur a 6.
+
+       Consequence, reproduite : sur une bibliotheque fraichement
+       importee, 100 % des titres valent 5, donc 100 % sont
+       rejetes, donc SOS repond « rien de mixable » — au moment
+       precis ou le DJ en a besoin, c'est-a-dire au debut, quand
+       l'analyse de fond n'a eu le temps de traiter que quelques
+       dizaines de morceaux.
+
+       On distingue donc « energie faible, mesuree » de « energie
+       inconnue ». Un titre non analyse reste candidat : sa
+       notoriete dit deja s'il remonte une salle, et c'est meme le
+       critere principal d'un sauvetage.
+       ------------------------------------------------------------ */
+    const mesuree = !!t.analyzed && t.energy != null;
     const e = t.energy == null ? 5 : t.energy;
-    if (e < 6) continue;                         /* on remonte la salle, pas on l'endort */
+    if (mesuree && e < 5.4) continue;            /* mesure basse : on l'ecarte */
+    if (!mesuree && (t.pop == null ? 40 : t.pop) < 30) continue;
+    /* pas encore analyse : c'est la notoriete qui tient lieu d'impact */
 
     /* reconnaissance immediate : notoriete d'abord, ADN de la salle ensuite */
     const fam = (t.pop == null ? 40 : t.pop) * 0.62 + crowdScore(t, dna, dnaPret) * 0.38;
@@ -418,7 +446,8 @@ function rescue(cur, library, opt) {
     const st = structures.get(t.id);
     const introBars = st && st.ok ? st.introBars : null;
     const quick = introBars == null ? 60 : Math.max(0, 100 - Math.max(0, introBars - 4) * 9);
-    const impact = e * 7 + (t.vocal ? 14 : 0) + quick * 0.3;
+    const impact = (mesuree ? e * 7 : (t.pop == null ? 40 : t.pop) * 0.62)
+                 + (t.vocal ? 14 : 0) + quick * 0.3;
 
     const total = Math.round(
       tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
@@ -430,7 +459,8 @@ function rescue(cur, library, opt) {
       why: wanted.has(t.id) ? 'Demande par le client'
         : (introBars != null && introBars <= 4
             ? 'Entre en ' + introBars + ' mesures'
-            : (t.pop >= 70 ? 'La salle la connait' : 'Energie ' + e + '/10')),
+            : (t.pop >= 70 ? 'La salle la connait'
+               : (mesuree ? 'Energie ' + e + '/10' : 'Valeur sure'))),
       transition: transitionOf(cur, t, tp, h)
     });
   }
@@ -611,11 +641,21 @@ function candidats(q, library) {
   }
   /* Filet : quand l'index ne propose rien — mots colles
      (« djpaxel »), faute sur les trois premieres lettres — on
-     repasse sur toute la bibliotheque. C'est lent, mais ca
-     n'arrive que sur une requete qui n'aurait rien donne du tout,
-     et une seconde d'attente vaut mieux qu'un « aucun resultat »
-     alors que le morceau est la. */
-  if (!vus.size) for (let i = 0; i < library.length; i++) vus.add(i);
+     repasse sur la bibliotheque. C'est lent, mais ca n'arrive que
+     sur une requete qui n'aurait rien donne du tout, et une demi-
+     seconde d'attente vaut mieux qu'un « aucun resultat » alors
+     que le morceau est la.
+
+     Borne, en revanche. Ce filet est atteignable depuis la page
+     des invites, qui tourne dans le processus principal : sur
+     30 000 titres, un balayage complet gelait le widget et la
+     detection du deck pendant plusieurs secondes. Six mille
+     comparaisons coutent une cinquantaine de millisecondes et
+     retrouvent le morceau dans la quasi-totalite des cas. */
+  if (!vus.size) {
+    const plafond = Math.min(library.length, 6000);
+    for (let i = 0; i < plafond; i++) vus.add(i);
+  }
   return vus;
 }
 

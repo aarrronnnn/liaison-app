@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "1.0.0",
+  "version": "1.2.0",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "dist:mac": "electron-builder --mac --arm64 --publish never",
     "dist:mac-intel": "electron-builder --mac --x64 --publish never",
     "dist:win": "electron-builder --win --x64 --publish never",
-    "verifier": "node build/verifier-config.js && node build/demarrage.js"
+    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-licence-ui.js"
   },
   "author": "Liaison",
   "license": "UNLICENSED",
@@ -19,6 +19,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@electron/fuses": "^2.1.3",
     "electron": "^32.0.0",
     "electron-builder": "^24.13.3"
   },
@@ -61,7 +62,26 @@
       "allowToChangeInstallationDirectory": false
     },
     "dmg": {
-      "title": "Liaison ${version}"
+      "title": "Liaison ${version}",
+      "background": "build/dmg-fond.png",
+      "iconSize": 96,
+      "window": {
+        "width": 620,
+        "height": 460
+      },
+      "contents": [
+        {
+          "x": 155,
+          "y": 205,
+          "type": "file"
+        },
+        {
+          "x": 465,
+          "y": 205,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "extraMetadata": {
       "name": "liaison"

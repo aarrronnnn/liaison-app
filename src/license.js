@@ -11,18 +11,52 @@ const path = require('path');
 const crypto = require('crypto');
 const https = require('https');
 const http = require('http');
+const ecrire = require('./ecrire');
 
 const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
-MCowBQYDK2VwAyEAIBlTS+zRHjloETukaZa3Ii07GpZbEJU+0Mp5GkYmCA4=
+MCowBQYDK2VwAyEAZDFMHUbLpG/oPPTkjqslX0sF6sp0DSwmYGxzNpOfGgM=
 -----END PUBLIC KEY-----`;
 
-const API = process.env.LIAISON_API || 'https://liaison-gamma-five.vercel.app';
-const TRIAL_DAYS = 14;
+/* ------------------------------------------------------------
+   L'adresse du service de licence.
 
-/* Ce que chaque niveau ouvre. */
+   Elle pointait encore sur l'ancien projet Vercel, qui a ete
+   transforme en simple redirection : toutes les activations
+   partaient donc vers une redirection, et POST ne suit pas les
+   redirections. Personne n'aurait pu activer une cle achetee.
+
+   La liste ci-dessous est essayee dans l'ordre : le jour ou le
+   nom de domaine definitif est achete, on l'ajoute en tete et les
+   applications deja installees continuent de fonctionner grace
+   aux suivantes. */
+const API_LISTE = (process.env.LIAISON_API ? [process.env.LIAISON_API] : []).concat([
+  'https://liaisondj.app',
+  'https://liaison-web-ochre.vercel.app'
+]);
+const API = API_LISTE[0];
+const TRIAL_DAYS = 7;
+
+/* ------------------------------------------------------------
+   Ce que chaque palier ouvre.
+
+   Il n'y a plus de formule gratuite. La porte d'entree est le pass
+   soiree a 4,95 € : le DJ qui joue trois fois par an paie trois
+   fois, celui qui joue toutes les semaines s'abonne des le
+   troisieme pass — et il le calcule tout seul.
+
+   Apres l'essai, l'application ne disparait pas : elle se VERROUILLE.
+   Le widget reste en place, il montre le morceau en cours, et il dit
+   ce qu'il faut faire pour qu'il reparle. Une app qu'on ne peut plus
+   ouvrir du tout se desinstalle le soir meme, et avec elle la
+   deuxieme chance.
+
+   L'essai dure SEPT jours. C'est court, exprès. Et c'est pour ca que
+   la prolongation existe : sept jours de calendrier, pour un DJ de
+   mariage, font presque toujours zero soiree jouee.
+   ------------------------------------------------------------ */
 const TIERS = {
-  none:      { suggestions: 1, sessions: false, replay: false, trends: false, seats: 0,
-               label: 'Essai termine' },
+  expire:    { suggestions: 0, sessions: false, replay: false, trends: false, seats: 1,
+               label: 'Essai termine', verrouille: true },
   trial:     { suggestions: 5, sessions: true,  replay: true,  trends: true,  seats: 1,
                label: 'Essai' },
   pass:      { suggestions: 5, sessions: true,  replay: false, trends: true,  seats: 1,
@@ -67,10 +101,10 @@ function verify(token) {
 }
 
 /* ---------- appel reseau ---------- */
-function post(pathname, body, timeoutMs) {
+function post(pathname, body, timeoutMs, base) {
   return new Promise((resolve, reject) => {
     let url;
-    try { url = new URL(pathname, API); } catch (e) { return reject(e); }
+    try { url = new URL(pathname, base || API); } catch (e) { return reject(e); }
     const data = Buffer.from(JSON.stringify(body), 'utf8');
     const mod = url.protocol === 'http:' ? http : https;
     const req = mod.request({
@@ -91,6 +125,74 @@ function post(pathname, body, timeoutMs) {
   });
 }
 
+/* ------------------------------------------------------------
+   Les tarifs, demandes au serveur.
+
+   Ils etaient ecrits en dur dans la fenetre de licence. Le jour ou
+   un prix change, l'app installee continue d'annoncer l'ancien et
+   le DJ decouvre le vrai montant sur la page de paiement. C'est la
+   pire seconde possible dans un tunnel d'achat.
+
+   On demande donc le tarif du jour, et on garde une valeur de repli
+   pour le cas ou le reseau ne repond pas — il vaut mieux un prix
+   approchant qu'une fenetre vide. */
+const TARIFS_REPLI = {
+  lancement: false,
+  plans: {
+    pass:         { euro: '4,95' },
+    resident:     { euro: '14,95' },
+    resident_an:  { euro: '149', parMois: '12,42' },
+    collectif:    { euro: '44,95' },
+    collectif_an: { euro: '449' }
+  }
+};
+
+function get(pathname, timeoutMs, base) {
+  return new Promise((resolve, reject) => {
+    let url;
+    try { url = new URL(pathname, base || API); } catch (e) { return reject(e); }
+    const mod = url.protocol === 'http:' ? http : https;
+    const req = mod.request({
+      hostname: url.hostname, port: url.port || undefined, path: url.pathname, method: 'GET'
+    }, res => {
+      const chunks = [];
+      res.on('data', c => chunks.push(c));
+      res.on('end', () => {
+        let j = null;
+        try { j = JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch (e) {}
+        resolve({ code: res.statusCode, body: j });
+      });
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs || 6000, () => { req.destroy(new Error('Delai depasse')); });
+    req.end();
+  });
+}
+
+async function tarifs() {
+  for (const base of API_LISTE) {
+    try {
+      const r = await get('/api/tarifs', 6000, base);
+      if (r.code === 200 && r.body && r.body.plans) return r.body;
+    } catch (e) { /* on essaie l'adresse suivante */ }
+  }
+  return TARIFS_REPLI;
+}
+
+/** Essaie chaque adresse connue, dans l'ordre. */
+async function postAilleurs(pathname, body, timeoutMs) {
+  let derniere = null;
+  for (const base of API_LISTE) {
+    try {
+      const r = await post(pathname, body, timeoutMs, base);
+      /* une redirection n'est pas une reponse : on passe a la suivante */
+      if (r.code >= 300 && r.code < 400) { derniere = r; continue; }
+      return r;
+    } catch (e) { derniere = { code: 0, body: { error: e.message } }; }
+  }
+  return derniere || { code: 0, body: { error: 'Service injoignable' } };
+}
+
 /* ============================================================
    Etat de la licence
    ============================================================ */
@@ -100,38 +202,112 @@ class License {
     this.state = this._load();
     this.device = deviceId();
   }
-  _load() {
-    try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (e) { return {}; }
+  _load() { return ecrire.lireJSON(this.file, {}) || {}; }
+  /* Ecriture atomique : perdre ce fichier, c'est forcer une
+     reactivation alors que le siege est deja consomme cote serveur —
+     donc un client qui a paye, bloque en cabine. */
+  _save() { ecrire.ecrireJSON(this.file, this.state); }
+
+  /* ============================================================
+     L'essai, et les deux facons de le voler.
+
+     1. EFFACER LE FICHIER. trialStart vivait uniquement dans
+        license.json, dans un dossier que l'utilisateur peut
+        ouvrir. Le supprimer redonnait quatorze jours, autant de
+        fois qu'on veut.
+
+     2. RECULER L'HORLOGE. Toutes les dates — fin d'essai, date
+        d'expiration de la licence en cache — sont comparees a
+        Date.now(). Reculer la pendule de l'ordinateur d'un an
+        prolongeait l'essai d'autant et ressuscitait une licence
+        expiree.
+
+     Les deux corrections sont simples et n'empechent personne
+     d'utiliser le produit normalement :
+
+     — un second temoin est ecrit A COTE, sous un nom discret, et
+       on retient TOUJOURS la date la plus ancienne des deux. Il
+       faut donc trouver et effacer les deux fichiers, et il n'y
+       a rien qui les relie ;
+
+     — on garde la date la plus haute jamais vue. Si l'horloge
+       recule, on continue de compter a partir de cette date. Une
+       horloge qui avance est normale ; une horloge qui recule de
+       plusieurs jours ne l'est pas.
+
+     Aucune de ces deux mesures n'est infranchissable pour
+     quelqu'un de determine — rien ne l'est cote client. Elles
+     coutent trente secondes a ecrire et arretent l'immense
+     majorite des abus, qui sont opportunistes.
+     ============================================================ */
+  _temoinFichier() {
+    return path.join(path.dirname(this.file), '.liaison-init');
   }
-  _save() {
+  _lireTemoin() {
+    try {
+      const j = JSON.parse(Buffer.from(fs.readFileSync(this._temoinFichier(), 'utf8'), 'base64').toString('utf8'));
+      return (j && typeof j.t === 'number') ? j : null;
+    } catch (e) { return null; }
+  }
+  _ecrireTemoin(o) {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this.file, JSON.stringify(this.state, null, 1));
+      fs.writeFileSync(this._temoinFichier(), Buffer.from(JSON.stringify(o), 'utf8').toString('base64'));
     } catch (e) {}
+  }
+
+  /** L'heure, corrigee des reculs d'horloge. */
+  maintenant() {
+    const n = Date.now();
+    const vu = Math.max(this.state.vuMax || 0, (this._lireTemoin() || {}).v || 0);
+    if (n > vu) {
+      this.state.vuMax = n;
+      const t = this._lireTemoin() || {};
+      if (n - (t.v || 0) > 3600000) this._ecrireTemoin({ t: t.t || n, v: n });
+      return n;
+    }
+    /* l'horloge a recule : on s'en tient a ce qu'on a deja vu */
+    return vu;
   }
 
   /** Demarre l'essai au tout premier lancement. */
   ensureTrial() {
-    if (!this.state.trialStart) { this.state.trialStart = Date.now(); this._save(); }
+    const n = this.maintenant();
+    const t = this._lireTemoin();
+    /* la date la plus ancienne des deux temoins fait foi */
+    const debuts = [this.state.trialStart, t && t.t].filter(x => typeof x === 'number' && x > 0);
+    const debut = debuts.length ? Math.min.apply(null, debuts) : n;
+    if (this.state.trialStart !== debut) { this.state.trialStart = debut; this._save(); }
+    if (!t || t.t !== debut) this._ecrireTemoin({ t: debut, v: Math.max(n, (t && t.v) || 0) });
     return this.trialLeft();
   }
   trialLeft() {
-    if (!this.state.trialStart) return TRIAL_DAYS;
-    const used = (Date.now() - this.state.trialStart) / 86400000;
-    return Math.max(0, Math.ceil(TRIAL_DAYS - used));
+    const t = this._lireTemoin();
+    const debuts = [this.state.trialStart, t && t.t].filter(x => typeof x === 'number' && x > 0);
+    if (!debuts.length) return TRIAL_DAYS;
+    const debut = Math.min.apply(null, debuts);
+    const used = (this.maintenant() - debut) / 86400000;
+    /* La prolongation accordee a qui n'a pas encore joue de vraie
+       soiree s'ajoute a la duree, pas a la date de depart : le temoin
+       anti-recul reste valable tel quel. */
+    const rab = this.state.prolongeJours > 0 ? Math.min(30, this.state.prolongeJours) : 0;
+    return Math.max(0, Math.ceil(TRIAL_DAYS + rab - used));
   }
 
   /** Niveau effectif, sans reseau. */
   tier() {
     const p = this.state.license ? verify(this.state.license) : null;
-    if (p && Date.now() < p.exp) {
-      if ((p.plan === 'pass' || p.plan === 'ami') && p.until && Date.now() > p.until) return 'none';
+    const n = this.maintenant();
+    if (p && n < p.exp) {
+      if ((p.plan === 'pass' || p.plan === 'ami') && p.until && n > p.until) return 'expire';
       return TIERS[p.plan] ? p.plan : 'resident';
     }
     if (this.trialLeft() > 0) return 'trial';
-    return 'none';
+    /* L'essai est fini. L'app se verrouille, elle ne se ferme pas :
+       le widget reste la et propose le pass. */
+    return 'expire';
   }
-  features() { return TIERS[this.tier()] || TIERS.none; }
+  features() { return TIERS[this.tier()] || TIERS.expire; }
 
   status() {
     const t = this.tier();
@@ -154,7 +330,7 @@ class License {
 
   /** Active cette machine avec une cle achetee. */
   async activate(key) {
-    const r = await post('/api/activate', { key: key, device: this.device, name: deviceName() });
+    const r = await postAilleurs('/api/activate', { key: key, device: this.device, name: deviceName() });
     if (r.code !== 200 || !r.body.license) {
       return { ok: false, error: r.body.error || ('Erreur ' + r.code), devices: r.body.devices };
     }
@@ -172,7 +348,7 @@ class License {
     if (!force && this.state.lastCheck && Date.now() - this.state.lastCheck < 86400000)
       return { ok: true, skipped: true };
     try {
-      const r = await post('/api/validate', { key: this.state.key, device: this.device }, 6000);
+      const r = await postAilleurs('/api/validate', { key: this.state.key, device: this.device }, 6000);
       if (r.code === 200 && r.body.license && verify(r.body.license)) {
         this.state.license = r.body.license;
         this.state.lastCheck = Date.now();
@@ -196,11 +372,12 @@ class License {
   /** Libere le siege de cette machine. */
   async release() {
     if (!this.state.key) return { ok: false, error: 'Aucune cle' };
-    try { await post('/api/liberer', { key: this.state.key, device: this.device }); } catch (e) {}
+    try { await postAilleurs('/api/liberer', { key: this.state.key, device: this.device }); } catch (e) {}
     this.state = { trialStart: this.state.trialStart };
     this._save();
     return { ok: true };
   }
 }
 
-module.exports = { License, TIERS, deviceId, deviceName, verify, API, TRIAL_DAYS };
+module.exports = { License, TIERS, deviceId, deviceName, verify, tarifs, TARIFS_REPLI,
+                   API, API_LISTE, TRIAL_DAYS };

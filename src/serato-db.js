@@ -6,6 +6,14 @@
      o,r = conteneur | t,p = texte UTF-16BE | s = int16 | u = uint32 | b = octet
    ============================================================ */
 const fs = require('fs');
+/* La tonalite doit etre convertie en notation Camelot, comme pour
+   rekordbox, Traktor et VirtualDJ. Sans ca, un DJ qui affiche ses
+   tonalites en notation classique (« Am », « F#m ») donne au moteur
+   des valeurs qu'il ne sait pas comparer : le critere d'harmonie —
+   le plus lourd des six, 0,27 — rend alors 50 pour TOUTES les paires,
+   c'est-a-dire « je ne sais pas ». Le classement perd son premier
+   critere sans que rien ne le signale. */
+const { toCamelot } = require('./library');
 
 function readChunks(buf, start, end) {
   const out = [];
@@ -68,7 +76,7 @@ function parseDatabase(file) {
       artist: t.tart || '',
       genre: t.tgen || '',
       bpm: parseFloat(String(t.tbpm || '0').replace(',', '.')) || 0,
-      key: t.tkey || null,
+      key: toCamelot(t.tkey) || null,
       duration: parseLen(t.tlen),
       pop: 40
     });

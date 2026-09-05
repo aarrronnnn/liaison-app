@@ -41,7 +41,15 @@ const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isF
 
 /* ---------- rekordbox.xml ---------- */
 function parseRekordboxXML(xmlPath) {
-  const xml = fs.readFileSync(xmlPath, 'utf8');
+  /* Le message brut d'ENOENT ne dit rien a un DJ. Celui-ci dit ce qui
+     s'est passe et ce qu'il faut faire. */
+  let xml;
+  try { xml = fs.readFileSync(xmlPath, 'utf8'); }
+  catch (e) {
+    throw new Error('Impossible de lire ' + xmlPath +
+      ' — le fichier a peut-etre ete deplace ou renomme. Reexporte ta collection depuis rekordbox, ' +
+      'ou choisis le nouveau chemin dans les reglages.');
+  }
   const out = [];
   const re = /<TRACK\s([^>]*?)\/?>/g;
   let m;
@@ -71,15 +79,20 @@ function parseRekordboxXML(xmlPath) {
 }
 
 /* ---------- scan de dossier ---------- */
-function walk(dir, acc, depth) {
+/* On ne peut pas distinguer « dossier vide » de « dossier illisible »
+   avec un tableau vide. Or la difference est enorme : dans le premier
+   cas il faut oublier les fichiers disparus, dans le second il faut
+   surtout ne rien toucher. walk() note donc ses echecs. */
+function walk(dir, acc, depth, echecs) {
   depth = depth || 0;
   if (depth > 8) return acc;
   let entries = [];
-  try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return acc; }
+  try { entries = fs.readdirSync(dir, { withFileTypes: true }); }
+  catch (e) { if (echecs) echecs.push(dir); return acc; }
   for (const e of entries) {
     if (e.name.startsWith('.')) continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) walk(p, acc, depth + 1);
+    if (e.isDirectory()) walk(p, acc, depth + 1, echecs);
     else if (AUDIO.has(path.extname(e.name).toLowerCase())) acc.push(p);
   }
   return acc;
@@ -191,7 +204,18 @@ async function scanFolder(dir, onProgress, opt) {
   const cacheFile = opt.cache || null;
   const cache = chargerScanCache(cacheFile).e;
 
-  const files = walk(dir, []);
+  const echecs = [];
+  const files = walk(dir, [], 0, echecs);
+  /* Le dossier racine lui-meme est illisible : disque externe non
+     branche, dossier renomme, volume demonte. On sort sans rien
+     effacer. Le cas s'est deja produit — et l'elagage ci-dessous
+     vidait alors le cache, ce qui relancait vingt-deux mille lectures
+     ffprobe au rebranchement. Exactement l'accident de deux heures que
+     ce cache existe pour eviter. */
+  if (echecs.indexOf(dir) === 0 || (!files.length && echecs.length)) {
+    if (onProgress) onProgress({ done: 0, total: 0, caches: 0, illisible: dir });
+    return [];
+  }
   const out = new Array(files.length);
   let curseur = 0, faits = 0, caches = 0, neufs = 0, depuisSauvegarde = 0;
   const PARALLELE = Math.min(8, Math.max(2, files.length));
@@ -267,7 +291,9 @@ async function scanFolder(dir, onProgress, opt) {
          le meme fichier de cache sert a plusieurs sources et
          qu'un disque externe debranche ne doit pas etre oublie
          pour autant. */
-  if (complet && cacheFile) {
+  /* Et meme quand la racine repond, on n'elague pas si un sous-dossier
+     a echoue : les fichiers qu'il contenait seraient oublies pour rien. */
+  if (complet && cacheFile && !echecs.length) {
     const prefixe = cleChemin(dir).replace(/\/+$/, '') + '/';
     const gardes = new Set(files.map(cleChemin));
     let retires = 0;
@@ -393,7 +419,14 @@ function cleChemin(p) {
 function finalize(tracks) {
   const pris = new Set();
   return tracks
-    .filter(t => t.bpm > 40 && t.bpm < 220)
+    /* Un tempo aberrant (0, 1, 300) est un tag faux : on le remet a
+       null plutot que d'ecarter le morceau. Le jeter ici, c'etait le
+       rendre inaccessible a l'analyse de fond — qui sait pourtant
+       deduire le tempo. Un DJ sans logiciel de mix, avec un dossier de
+       MP3 achetes sans tag TBPM, voyait « 0 titre pret » sans la
+       moindre explication. */
+    .map(t => (t.bpm > 40 && t.bpm < 220) ? t
+              : Object.assign({}, t, { bpm: null, aMesurer: true }))
     .map((t, i) => {
       /* Sans chemin — ca arrive avec une base incomplete — on se
          rabat sur artiste + titre, qui est stable lui aussi. */

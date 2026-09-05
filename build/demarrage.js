@@ -43,7 +43,8 @@ function preparer() {
 
 const APPELS = ['config:get', 'analysis:state', 'gout:etat', 'library:sources', 'library:scanInfo',
   'apps:running', 'filters:get', 'filters:crates', 'now:get', 'suggest', 'rescue', 'client:get',
-  'landing:get', 'sets:list', 'license:status', 'icon:data', 'structure:get'];
+  'landing:get', 'sets:list', 'license:status', 'icon:data', 'structure:get',
+  'stats:bilan', 'maj:etat', 'soirees:liste'];
 
 (async () => {
   preparer();

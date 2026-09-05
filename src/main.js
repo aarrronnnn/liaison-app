@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, screen, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, screen, Tray, Menu, nativeImage, globalShortcut } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -21,10 +21,15 @@ const cratesmod = require('./crates');
 const filtersmod = require('./filters');
 const landing = require('./landing');
 const acquire = require('./acquire');
+const ecrire = require('./ecrire');
+const maj = require('./maj');
+const moments = require('./moments');
+const debriefmod = require('./debrief');
 const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
 const rbFichiers = require('./sources/rekordbox');
 const { Gout } = require('./gout');
+const { Soirees } = require('./soirees');
 
 const DIR = () => app.getPath('userData');
 const CFG = () => path.join(DIR(), 'config.json');
@@ -35,6 +40,8 @@ const STRUCT = () => path.join(DIR(), 'structure-cache.json');
 /* Ce que Liaison a appris de CE DJ. Un fichier a part : on peut
    l'effacer sans rien perdre d'autre. */
 const GOUT = () => path.join(DIR(), 'gout.json');
+/* Les fiches de soiree preparees a l'avance. */
+const SOIREES = () => path.join(DIR(), 'soirees.json');
 /* Les tags lus par ffprobe, gardes d'une soiree a l'autre : sans ce
    fichier, un dossier de 22 000 morceaux est relu en entier a chaque
    lancement. */
@@ -71,10 +78,48 @@ const guests = new GuestServer();
 let setlog = null;
 let gout = null;
 const leGout = () => (gout || (gout = new Gout(GOUT())));
+let soirees = null;
+const lesSoirees = () => (soirees || (soirees = new Soirees(SOIREES())));
 /* Ce qu'on proposait juste avant le changement de morceau : c'est
    l'etiquette de l'exemple qu'on est en train d'observer. */
 let dernieresPropositions = [];
+/* ------------------------------------------------------------
+   Ce que la salle reclame — la « tendance », mesuree ici et ce soir.
+
+   Cette carte etait declaree et jamais remplie : le critere de
+   tendance rendait donc la constante 20 pour tous les morceaux, le
+   badge TENDANCE du widget ne pouvait jamais s'allumer, et le mode
+   « tendance » — pourtant facture dans les paliers superieurs —
+   ne changeait strictement rien.
+
+   Plutot que de la retirer, on lui donne la seule source de
+   tendance qui soit honnete et verifiable : les demandes des
+   invites de CETTE soiree. Pas un classement Spotify mondial qui
+   ne sait rien du mariage en cours ; les gens qui sont dans la
+   salle, maintenant. Deux telephones qui demandent le meme titre,
+   c'est un signal ; huit, c'est un ordre.
+   ------------------------------------------------------------ */
 let trends = new Map();
+
+/* Recalculee a chaque nouvelle demande, pas a chaque suggestion :
+   c'est une douzaine de rapprochements flous, pas gratuits. */
+function majTendances() {
+  const t = new Map();
+  const dem = guests.top();
+  if (!dem.length) { trends = t; return; }
+  /* Le titre le plus demande de la soiree vaut 100. Les autres se
+     situent par rapport a lui, avec un plancher a 35 : etre demande
+     du tout est deja un signal. */
+  const haut = Math.max(1, dem[0].n);
+  for (const r of dem.slice(0, 20)) {
+    const m = engine.match((r.artist ? r.artist + ' ' : '') + r.title, library, 0.5);
+    if (!m) continue;                       /* le DJ ne l'a pas : rien a proposer */
+    const cle = ((m.track.artist || '') + ' - ' + (m.track.title || ''))
+      .toLowerCase().replace(/\s+/g, ' ').trim();
+    t.set(cle, Math.round(35 + (r.n / haut) * 65));
+  }
+  trends = t;
+}
 /* listes du client, une fois rapprochees de la bibliotheque */
 let clientSet = { wanted: new Set(), banned: new Set(), dna: {}, stats: null };
 let license = null;
@@ -95,31 +140,98 @@ let structTimer = null;
 const feat = () => (license ? license.features() : TIERS.trial);
 
 function loadConfig() {
-  try { config = Object.assign({}, DEFAULTS, JSON.parse(fs.readFileSync(CFG(), 'utf8'))); } catch (e) {}
+  const lu = ecrire.lireJSON(CFG(), null);
+  if (lu && typeof lu === 'object') config = Object.assign({}, DEFAULTS, lu);
 }
 function saveConfig() {
-  try { fs.mkdirSync(DIR(), { recursive: true }); fs.writeFileSync(CFG(), JSON.stringify(config, null, 1)); } catch (e) {}
+  /* Ecriture atomique : ce fichier porte les listes du client, saisies
+     a la main avant la soiree. Les perdre a cause d'une coupure, c'est
+     retaper cent quatre-vingts titres. */
+  ecrire.ecrireJSON(CFG(), config);
 }
 const send = (ch, payload) => {
   for (const w of [widget, settings]) if (w && !w.isDestroyed()) w.webContents.send(ch, payload);
 };
 
 /* ---------------- fenetres ---------------- */
+/* ============================================================
+   Le widget par-dessus un logiciel en plein ecran.
+
+   Signale sur rekordbox en plein ecran : le widget disparait.
+   C'est le cas d'usage NORMAL — un DJ met son logiciel en plein
+   ecran, c'est meme la premiere chose qu'il fait. Un widget de
+   cabine qu'on ne voit pas pendant qu'on mixe ne sert a rien.
+
+   Trois causes, corrigees ensemble :
+
+   1. Sur macOS, le plein ecran natif cree un ESPACE dedie.
+      Une fenetre ordinaire, meme « toujours au-dessus », reste
+      dans son espace d'origine : l'utilisateur bascule d'espace
+      et la laisse derriere lui. La seule fenetre qui suit est
+      une fenetre de type « panel » — c'est ce que sont les
+      palettes flottantes des logiciels de creation.
+
+   2. setVisibleOnAllWorkspaces etait pose UNE FOIS, a la
+      creation. Or l'appel a show() sur une fenetre masquee, et
+      certains changements d'espace, le perdent. On le repose
+      donc a chaque affichage.
+
+   3. L'ordre comptait : setAlwaysOnTop apres
+      setVisibleOnAllWorkspaces annulait une partie du reglage.
+      On finit desormais par la visibilite.
+
+   Et parce qu'aucun de ces trois points n'est garanti sur toutes
+   les versions du systeme, un raccourci clavier global ramene le
+   widget au premier plan quoi qu'il arrive.
+   ============================================================ */
+function poserAuDessus(w) {
+  if (!w || w.isDestroyed()) return;
+  try { w.setAlwaysOnTop(true, 'screen-saver'); } catch (e) {
+    try { w.setAlwaysOnTop(true); } catch (e2) {}
+  }
+  try {
+    if (w.setVisibleOnAllWorkspaces)
+      w.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true, skipTransformProcessType: true });
+  } catch (e) {}
+}
+
 function createWidget() {
   const d = screen.getPrimaryDisplay().workArea;
+  const mac = process.platform === 'darwin';
   widget = new BrowserWindow({
     width: 344, height: 548,
     x: d.x + d.width - 372, y: d.y + 40,
     frame: false, resizable: false, maximizable: false, fullscreenable: false,
+    /* « panel » : le seul type de fenetre qui flotte au-dessus d'une
+       application en plein ecran sur macOS. Ailleurs, le type par
+       defaut convient. */
+    type: mac ? 'panel' : undefined,
     icon: path.join(__dirname, '..', 'build', 'icon.png'),
     skipTaskbar: true, alwaysOnTop: true, backgroundColor: '#13161B',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
-  widget.setAlwaysOnTop(true, 'screen-saver');
-  if (widget.setVisibleOnAllWorkspaces) widget.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+  poserAuDessus(widget);
   widget.loadFile(path.join(__dirname, 'ui', 'widget.html'));
+  /* A chaque affichage : le reglage se perd au retour d'un
+     masquage ou d'un changement d'espace. */
+  widget.on('show', () => poserAuDessus(widget));
   widget.on('closed', () => { widget = null; });
   widget.on('close', e => { if (!app.isQuitting) { e.preventDefault(); widget.hide(); } });
+}
+
+/* Le filet : un raccourci qui ramene le widget, meme si le systeme
+   a decide de le cacher. Ctrl/Cmd + Maj + L — L comme Liaison, et
+   aucune application de mix ne l'utilise. */
+function poserRaccourci() {
+  const combo = process.platform === 'darwin' ? 'Command+Shift+L' : 'Control+Shift+L';
+  try {
+    globalShortcut.register(combo, () => {
+      if (!widget || widget.isDestroyed()) createWidget();
+      poserAuDessus(widget);
+      widget.show();
+      widget.focus();
+    });
+  } catch (e) { /* un autre logiciel l'a deja pris : tant pis */ }
 }
 function openLicence(view) {
   if (licence && !licence.isDestroyed()) {
@@ -259,7 +371,7 @@ function scheduleResuggest() {
   if (resugTimer || !current) return;
   resugTimer = setTimeout(() => {
     resugTimer = null;
-    if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+    if (current) send('suggestions', computeSuggestions(config.suggestCount));
   }, 4000);
 }
 
@@ -335,7 +447,7 @@ function scheduleStructRefresh() {
   if (structTimer) return;
   structTimer = setTimeout(() => {
     structTimer = null;
-    if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+    if (current) send('suggestions', computeSuggestions(config.suggestCount));
   }, 350);
 }
 
@@ -461,6 +573,11 @@ function currentDNA() {
   let dna = locales.blendDNA(pack, guestDNA, Object.keys(guestDNA).length ? config.guestWeight : 0);
   /* Le client passe avant le pack de pays : c'est sa soiree. */
   if (Object.keys(clientSet.dna).length) dna = locales.blendDNA({ dna: dna }, clientSet.dna, 0.45);
+  /* Et la fiche de soiree corrige en dernier : les genres que ce
+     client-la aime montent, ceux qu'il refuse tombent. On corrige,
+     on ne remplace pas — un mariage reste un mariage meme si les
+     maries adorent le disco. */
+  dna = lesSoirees().inflexion(dna);
   return dna;
 }
 
@@ -481,7 +598,15 @@ function arcAuto() {
 function computeSuggestions(limit) {
   if (!current) return [];
   const f = feat();
-  const n = Math.min(limit || config.suggestCount || 3, f.suggestions);
+  /* Le nombre de suggestions est celui que la licence ouvre — 3 en
+     essai, 5 en Resident, 7 en Collectif. Il etait plafonne a 3 pour
+     tout le monde parce que tous les appels passaient limit = 3 et que
+     config.suggestCount n'existait nulle part : la fenetre de reglages
+     affichait « Ouvert : 5 suggestions » a un client qui en recevait
+     trois. A 19 euros par mois, c'est la fonction vendue qui n'etait
+     pas livree. */
+  const voulu = limit || config.suggestCount || f.suggestions;
+  const n = Math.max(1, Math.min(voulu, f.suggestions));
   const mode = (config.mode === 'trend' && !f.trends) ? 'crowd' : config.mode;
 
   const tam = currentFilter();
@@ -569,7 +694,7 @@ function setCurrent(track, how) {
     bpm: current.bpm, energy: current.energy, how: how || 'auto',
     structure: structures.get(current.id) || null
   } : null);
-  send('suggestions', computeSuggestions(config.suggestCount || 3));
+  send('suggestions', computeSuggestions(config.suggestCount));
 }
 
 /* ---------------- source now-playing ---------------- */
@@ -656,7 +781,7 @@ ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(),
 ipcMain.handle('config:set', (e, patch) => {
   Object.assign(config, patch); saveConfig();
   if (patch.source) now.start(config.source, config.sourceOpts);
-  send('suggestions', computeSuggestions(config.suggestCount || 3));
+  send('suggestions', computeSuggestions(config.suggestCount));
   return config;
 });
 
@@ -674,7 +799,7 @@ ipcMain.handle('source:pickFile', async () => {
   return r.canceled ? null : r.filePaths[0];
 });
 
-ipcMain.handle('suggest', () => computeSuggestions(config.suggestCount || 3));
+ipcMain.handle('suggest', () => computeSuggestions(config.suggestCount));
 /* ---------------- listes du client ---------------- */
 ipcMain.handle('client:get', () => ({
   name: config.clientName || '',
@@ -704,7 +829,7 @@ ipcMain.handle('client:import', async (e, opt) => {
   config[side] = (config[side] || []).concat(added);
   saveConfig();
   rebuildClient();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   send('client', { stats: clientSet.stats });
   return { ok: true, lus: entries.length, ajoutes: added.length, stats: clientSet.stats };
 });
@@ -721,7 +846,7 @@ ipcMain.handle('client:clear', (e, side) => {
   config[side === 'banned' ? 'clientBanned' : 'clientWanted'] = [];
   saveConfig();
   rebuildClient();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   send('client', { stats: clientSet.stats });
   return { ok: true, stats: clientSet.stats };
 });
@@ -732,7 +857,7 @@ ipcMain.handle('client:remove', (e, opt) => {
     ((x.artist || '') + '|' + x.title).toLowerCase() !== String(opt.key).toLowerCase());
   saveConfig();
   rebuildClient();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   return { ok: true, stats: clientSet.stats };
 });
 
@@ -758,6 +883,51 @@ ipcMain.handle('gout:etat', () => {
   };
 });
 ipcMain.handle('gout:oublier', () => { leGout().oublier(); return { ok: true }; });
+
+/* ------------------------------------------------------------
+   Les soirees preparees.
+
+   Une fiche par soiree : contexte, listes du client, genres aimes
+   et evites, duree. On l'active en arrivant sur place et tout
+   bascule d'un coup — y compris le QR des invites, qui est
+   derive de l'identifiant de la fiche.
+   ------------------------------------------------------------ */
+ipcMain.handle('soirees:liste', () => ({
+  liste: lesSoirees().liste(),
+  active: lesSoirees().active(),
+  pays: locales.COUNTRIES, evenements: locales.EVENTS
+}));
+ipcMain.handle('soirees:creer', (e, patch) => lesSoirees().creer(patch || {}));
+ipcMain.handle('soirees:modifier', (e, o) => lesSoirees().modifier(o && o.id, (o && o.patch) || {}));
+ipcMain.handle('soirees:dupliquer', (e, o) => lesSoirees().dupliquer(o && o.id, o && o.nom));
+ipcMain.handle('soirees:supprimer', (e, id) => ({ ok: lesSoirees().supprimer(id) }));
+
+/* Activer une fiche : on applique ses reglages a la configuration
+   en cours, on reconstruit les listes du client, et on relance une
+   suggestion. Le DJ n'a rien d'autre a toucher. */
+ipcMain.handle('soirees:activer', (e, id) => {
+  const s = lesSoirees().activer(id);
+  if (!s) return { ok: false };
+  const r = lesSoirees().reglages(id);
+  config.sessionName = r.sessionName;
+  config.pack = r.pack;
+  config.clientWanted = r.clientWanted;
+  config.clientBanned = r.clientBanned;
+  /* Le QR des invites suit la fiche : chaque soiree a son jeton, donc
+     son lien. Un QR affiche la semaine derniere n'ouvre plus rien. */
+  config.sessionToken = r.sessionToken;
+  saveConfig();
+  rebuildClient();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
+  send('client', { stats: clientSet.stats });
+  return { ok: true, soiree: s, reglages: r };
+});
+ipcMain.handle('soirees:desactiver', () => {
+  lesSoirees().desactiver();
+  config.sessionToken = '';        /* on repart sur un jeton tire au hasard */
+  saveConfig();
+  return { ok: true };
+});
 
 /* Ou en est l'analyse de fond, et pourquoi le widget dit ce qu'il dit. */
 ipcMain.handle('analysis:state', () => {
@@ -844,20 +1014,87 @@ ipcMain.handle('session:start', async (e, opts) => {
   guests.stop();
   const url = await guests.start({
     port: config.guestPort, sessionName: config.sessionName,
+    token: config.sessionToken || undefined,
     cooldown: config.guestCooldown, maxPerDevice: config.guestMax,
     getLibrary: () => library,
     onRequest: () => {
+      majTendances();
       send('requests', requestList());
-      if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+      if (current) send('suggestions', computeSuggestions(config.suggestCount));
     }
   });
+  /* On n'ouvre une soiree que s'il n'y en a pas deja une en cours.
+     Sans ca, un DJ qui affiche le QR une heure apres le debut coupait
+     sa tracklist en deux et remettait a zero « ce que j'ai deja joue
+     ce soir » : le filtre anti-repetition et le badge « tu l'as passe
+     il y a vingt minutes » oubliaient la premiere heure. */
   if (!setlog) setlog = new SetLog(SETS());
-  setlog.open(config.sessionName, config.pack);
+  if (!setlog.current) setlog.open(config.sessionName, config.pack);
+  /* Et on repart d'une file de demandes vide : l'objet guests vit tant
+     que l'app tourne — lancee au login, elle reste dans la barre de
+     menus — donc les demandes du samedi et les quotas par telephone du
+     samedi etaient encore la dimanche. */
+  guests.clear();
+  majTendances();
   return { url: url, qr: await qrPNG(url), share: shareLinks(url, config.sessionName) };
 });
 ipcMain.handle('session:requests', () => requestList());
 ipcMain.handle('share:open', (e, url) => { shell.openExternal(url); return true; });
 ipcMain.handle('share:copy', (e, text) => { clipboard.writeText(text); return true; });
+/* ============================================================
+   Le glisser-deposer vers le deck.
+
+   Le DJ attrape une suggestion dans le widget et la lache sur un
+   deck de son logiciel de mix : le morceau se charge. C'est le
+   geste que tout le monde connait, et c'est le chainon qui
+   manquait — jusqu'ici il fallait retrouver le titre a la main
+   dans sa bibliotheque, ce qui reprend les vingt secondes que
+   Liaison venait de faire gagner.
+
+   Point important pour ce qu'on promet par ailleurs : Liaison
+   n'envoie toujours AUCUNE commande au logiciel de mix. On demande
+   au systeme d'exploitation de demarrer un glisser de FICHIER,
+   exactement comme si le DJ l'avait attrape dans son explorateur.
+   C'est lui qui le tire, c'est lui qui le lache, c'est son logiciel
+   qui decide d'en faire quelque chose. Rien n'est pilote.
+
+   Et ce n'est pas compte. Un glisser ne nous coute rien : le
+   limiter n'aurait aucune autre raison que de forcer un achat.
+   ============================================================ */
+let iconeGlisser = null;
+function iconeDeGlisser() {
+  if (iconeGlisser) return iconeGlisser;
+  try {
+    const p = path.join(__dirname, '..', 'build', 'icon-256.png');
+    let img = nativeImage.createFromPath(p);
+    if (img.isEmpty()) img = nativeImage.createFromPath(path.join(__dirname, '..', 'build', 'icon.png'));
+    /* macOS refuse une icone trop grande et Windows la deforme :
+       64 px est la taille que les deux acceptent sans broncher. */
+    iconeGlisser = img.isEmpty() ? nativeImage.createEmpty() : img.resize({ width: 64, height: 64 });
+  } catch (e) { iconeGlisser = nativeImage.createEmpty(); }
+  return iconeGlisser;
+}
+
+/* startDrag ne rend rien et doit partir pendant l'evenement dragstart :
+   on passe donc par send(), pas par invoke(). */
+ipcMain.on('drag:track', (e, id) => {
+  try {
+    const t = library.find(x => x.id === id);
+    if (!t || !t.path) return;
+    if (!fs.existsSync(t.path)) {
+      send('toast', { texte: 'Le fichier a bouge sur le disque — relance une lecture de bibliotheque.', rouge: true });
+      return;
+    }
+    e.sender.startDrag({ file: t.path, icon: iconeDeGlisser() });
+  } catch (err) { noterPanne('glisser-deposer', err); }
+});
+
+/* Le widget demande si un morceau est glissable avant d'afficher la poignee. */
+ipcMain.handle('drag:possible', (e, id) => {
+  const t = library.find(x => x.id === id);
+  return !!(t && t.path);
+});
+
 ipcMain.handle('qr:save', async (e, dataUrl) => {
   const r = await dialog.showSaveDialog({ defaultPath: 'liaison-qr.png' });
   if (r.canceled) return null;
@@ -891,7 +1128,7 @@ ipcMain.handle('filters:set', (e, patch) => {
   for (const k of ['fCrate', 'fSkipPlayed', 'fNoExplicit', 'fBpmMin', 'fBpmMax'])
     if (Object.prototype.hasOwnProperty.call(patch || {}, k)) config[k] = patch[k];
   saveConfig();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   const tam = currentFilter();
   send('filters', { restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active });
   return { ok: true, restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active };
@@ -907,7 +1144,7 @@ ipcMain.handle('filters:crates', () => {
    ============================================================ */
 ipcMain.handle('landing:plan', (e, minutes) => {
   const m = Math.max(0, Math.round(Number(minutes) || 0));
-  if (!m) { landPlan = null; landAt = 0; if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (!m) { landPlan = null; landAt = 0; if (current) send('suggestions', computeSuggestions(config.suggestCount));
             return { ok: false, note: 'Plan efface — Liaison revient a la courbe de la soiree.' }; }
   const tam = currentFilter();
   landPlan = landing.plan({
@@ -918,7 +1155,7 @@ ipcMain.handle('landing:plan', (e, minutes) => {
     banned: bannedSet(), wanted: clientSet.wanted
   });
   landAt = Date.now();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   return Object.assign({}, landPlan, { phase: landingNow() });
 });
 
@@ -929,7 +1166,7 @@ ipcMain.handle('landing:get', () =>
 
 ipcMain.handle('landing:clear', () => {
   landPlan = null; landAt = 0;
-  if (current) send('suggestions', computeSuggestions(config.suggestCount || 3));
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
   return { ok: true };
 });
 
@@ -1008,6 +1245,46 @@ ipcMain.handle('prepare:export', async (e, opt) => {
    La tracklist
    ============================================================ */
 ipcMain.handle('sets:list', () => (setlog ? setlog.list() : []));
+/* ------------------------------------------------------------
+   Le debrief de fin de soiree.
+
+   Personne ne donne jamais de retour a un DJ sur ce qu'il vient de
+   jouer. Liaison a tout note — l'heure, la duree reelle, le tempo,
+   la tonalite, l'energie, les genres. Il ne juge pas : il mesure,
+   et il rend des phrases.
+   ------------------------------------------------------------ */
+/* Le debrief est vendu avec Resident, et il l'etait deja sur le site :
+   il n'etait simplement pas ferme dans l'app. On le ferme — mais on
+   OFFRE le premier, une fois, en le disant.
+
+   Ce n'est pas une astuce de vente : c'est la seule facon honnete de
+   vendre un debrief. Personne ne peut juger sur une capture d'ecran ce
+   que valent les chiffres de SA soiree ; il faut les avoir vus une
+   fois. Celui qui n'accroche pas garde une app gratuite entiere, et
+   celui qui accroche sait exactement ce qu'il achete. */
+ipcMain.handle('sets:debrief', (e, id) => {
+  if (!setlog) return null;
+  const s = (id ? setlog.get(Number(id)) : null) || setlog.current;
+  if (!s) return null;
+  const D = debriefmod.debrief(s, { demandes: guests.top() });
+  if (!D) return { court: true, morceaux: (s.played || []).length };
+
+  const droit = moments.debriefAutorise({
+    replay: !!feat().replay,
+    dejaOffert: license.state.debriefOffert
+  });
+  if (!droit.ok) {
+    return { locked: true,
+      error: 'Le debrief complet fait partie de Resident. Le premier t\'a ete offert — ' +
+             'celui-la, il faut une licence.' };
+  }
+  if (droit.offert) {
+    license.state.debriefOffert = Date.now();
+    license._save();
+  }
+  return { debrief: D, phrases: debriefmod.enPhrases(D), offert: droit.offert };
+});
+
 ipcMain.handle('sets:tracklist', (e, id) => (setlog ? setlog.tracklist(id) : null));
 ipcMain.handle('sets:copy', (e, id) => {
   if (!setlog) return { ok: false };
@@ -1308,6 +1585,7 @@ app.whenReady().then(async () => {
   if (config.autoWidget) widget.hide();          // le widget attend son logiciel
   buildTray();
   wireWatcher();
+  poserRaccourci();
 
   if (config.launchAtLogin && app.setLoginItemSettings) {
     try { app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true }); } catch (e) {}
@@ -1316,7 +1594,6 @@ app.whenReady().then(async () => {
   license.refresh(false).then(() => {
     send('license', license.status());
     refreshTray();
-    if (license.tier() === 'none') openLicence('plans');
   });
   if (!license.state.seenWelcome) {
     license.state.seenWelcome = Date.now();
@@ -1324,7 +1601,154 @@ app.whenReady().then(async () => {
     openLicence('welcome');
   }
   if (config.autoLibrary) autoImport().then(refreshTray);
-  else if (config.libraryPath) importLibrary(config.libraryMode, config.libraryPath).then(refreshTray);
+  else if (config.libraryPath) importLibrary(config.libraryMode, config.libraryPath)
+    .then(refreshTray)
+    /* Le fichier a pu etre deplace ou reexporte depuis la derniere fois.
+       Sans ce catch, le rejet remontait au filet global : fenetre
+       « Liaison a rencontre un probleme » au demarrage, bibliotheque
+       vide, et aucune indication de ce qu'il fallait faire. */
+    .catch(e => {
+      send('status', { ok: false, msg: 'Bibliotheque introuvable — verifie le chemin dans les reglages' });
+      noterPanne('import de bibliotheque', e);
+    });
+
+  /* On ne demande pas au lancement : les vingt premieres secondes
+     appartiennent au scan de bibliotheque et au branchement du
+     logiciel de mix. Ensuite, deux fois par jour suffisent — une
+     version ne sort pas toutes les heures. */
+  setTimeout(regarderLesMaj, 20000);
+  setInterval(regarderLesMaj, 12 * 3600 * 1000);
+  setTimeout(regarderLEssai, 45000);
+  setInterval(regarderLEssai, 3600 * 1000);
+});
+
+/* ============================================================
+   Les mises a jour.
+
+   Rien ne se telecharge et rien ne se remplace tout seul : une
+   mise a jour qui se declenche a une heure du matin devant deux
+   cents personnes, c'est exactement ce qu'il ne faut pas. On
+   previent, une fois par version, et le DJ choisit son moment.
+   ============================================================ */
+let derniereMaj = null;
+
+/* ============================================================
+   Les deux moments qui decident si quelqu'un reste.
+
+   Un essai de quatorze jours qui s'arrete sans rien dire est un
+   client perdu en silence : l'application se met a proposer trois
+   titres au lieu de cinq, les fiches soirees disparaissent, et le
+   DJ en conclut que « ca marche plus ». On le lui dit donc, deux
+   fois, et jamais plus.
+
+   J-3 : un mot dans le widget. Pas une fenetre, pas un compte a
+   rebours rouge — un rappel, avec ce qu'il a reellement fait avec.
+
+   Le passage en gratuit : une fenetre, une seule fois, et JAMAIS
+   pendant un set en cours. Interrompre un DJ en soiree pour lui
+   parler d'argent est la meilleure facon de le perdre pour de bon.
+   ============================================================ */
+function bilanUsage() {
+  let sets = [];
+  try { sets = setlog.list() || []; } catch (e) {}
+  const minutes = sets.reduce((a, s) => a + (s.duree || 0), 0);
+  const d = (gout && gout.d) || {};
+  return {
+    sets: sets.length,
+    heures: Math.round(minutes / 60),
+    enchainements: d.n || 0,
+    pris: d.pris || 0,
+    titres: Array.isArray(library) ? library.length : 0
+  };
+}
+ipcMain.handle('stats:bilan', () => bilanUsage());
+
+/* Les tarifs du jour, avec un cache d'une heure : la fenetre de
+   licence peut s'ouvrir dix fois dans une soiree, le prix ne bouge
+   pas dix fois. */
+let tarifsCache = null, tarifsQuand = 0;
+ipcMain.handle('tarifs:get', async () => {
+  const n = Date.now();
+  if (tarifsCache && n - tarifsQuand < 3600000) return tarifsCache;
+  try {
+    tarifsCache = await require('./license').tarifs();
+    tarifsQuand = n;
+  } catch (e) {
+    tarifsCache = tarifsCache || require('./license').TARIFS_REPLI;
+  }
+  return tarifsCache;
+});
+
+function regarderLEssai() {
+  try {
+    /* D'abord la prolongation : elle change trialLeft, donc elle doit
+       etre decidee avant qu'on lise l'etat pour les deux annonces. */
+    const b0 = bilanUsage();
+    const av = license.status();
+    const pro = moments.prolongationDue({
+      tier: av.tier, trialLeft: av.trialLeft, trialStart: license.state.trialStart,
+      sets: b0.sets, dejaProlonge: license.state.prolonge
+    });
+    if (pro.prolonger && !setlog.current) {
+      license.state.prolonge = Date.now();
+      license.state.prolongeJours = pro.jours;
+      /* La fenetre de fin n'a plus lieu d'etre : l'essai continue. */
+      license.state.vuRappelEssai = 0;
+      license._save();
+      send('license', license.status());
+      send('toast', { texte: moments.phraseProlongation(b0.sets) });
+      refreshTray();
+      return;
+    }
+
+    const st = license.status();
+    const quoi = moments.aMontrer({
+      tier: st.tier,
+      trialLeft: st.trialLeft,
+      trialStart: license.state.trialStart,
+      vuRappel: license.state.vuRappelEssai,
+      vuFin: license.state.vuFinEssai,
+      setEnCours: !!setlog.current
+    });
+    if (quoi.rappel) {
+      license.state.vuRappelEssai = Date.now();
+      license._save();
+      send('toast', { texte: moments.phraseRappel(st.trialLeft, b0) });
+    }
+    if (quoi.fin) {
+      license.state.vuFinEssai = Date.now();
+      license._save();
+      openLicence('plans');
+    }
+  } catch (e) { noterPanne('suivi de l\'essai', e); }
+}
+
+async function regarderLesMaj() {
+  let r;
+  try { r = await maj.verifier(app.getVersion(), require('./license').API_LISTE || [require('./license').API]); }
+  catch (e) { return; }
+  if (!r || r.aJour) return;
+  derniereMaj = r;
+  /* Une version refusee ne revient pas a chaque lancement. La
+     suivante, si. */
+  if (config.majIgnoree === r.version) return;
+  send('maj', r);
+}
+
+ipcMain.handle('maj:etat', async () => {
+  if (!derniereMaj) {
+    try { derniereMaj = await maj.verifier(app.getVersion(), require('./license').API_LISTE || []); } catch (e) {}
+  }
+  return { courante: app.getVersion(), info: derniereMaj };
+});
+ipcMain.handle('maj:ouvrir', () => {
+  shell.openExternal((derniereMaj && derniereMaj.page) || 'https://liaisondj.app/telecharger');
+  return true;
+});
+ipcMain.handle('maj:ignorer', (e, version) => {
+  config.majIgnoree = String(version || '');
+  saveConfig();
+  return true;
 });
 /* ============================================================
    Le filet, sous tout le reste.
@@ -1381,14 +1805,18 @@ process.on('unhandledRejection', e => noterPanne('promesse rejetee', e));
 app.on('window-all-closed', () => { /* Liaison vit dans la barre de menus */ });
 app.on('activate', () => {
   if (!widget) createWidget();
-  if (license && license.tier() === 'none') openLicence('plans');
-  else if (settings && !settings.isDestroyed()) settings.focus();
+  if (settings && !settings.isDestroyed()) settings.focus();
   else openSettings();
 });
 app.on('before-quit', () => {
   app.isQuitting = true;
+  try { globalShortcut.unregisterAll(); } catch (e) {}
   watcher.stop(); now.stop(); guests.stop();
   if (libraryWatcher) libraryWatcher.stop();
   if (structCache) structCache.save();
+  /* L'apprentissage attend jusqu'a quatre secondes avant d'ecrire :
+     sans ce vidage, une fermeture rapide perdait les derniers reglages
+     appris — ou laissait intact ce qu'on venait d'effacer. */
+  try { if (gout) gout.ecrireMaintenant(); } catch (e) {}
   structPool.close();
 });

@@ -25,8 +25,16 @@ p.sub{color:var(--ink2);margin:0 0 26px;font-size:14.5px}
 .view{display:none}
 .view.on{display:block}
 
-.plans{display:flex;flex-direction:column;gap:9px;margin-bottom:8px}
-.plan{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:15px 17px;border:1px solid var(--line);
+.lancnote{margin:0 0 10px;font-family:var(--m);font-size:10.5px;line-height:1.55;color:var(--ink2)}
+.apres{margin:14px 0 16px;font-size:12.5px;line-height:1.62;color:var(--ink2)}
+.apres b{color:var(--ink);font-weight:600}
+.bil{margin:0 0 11px;padding:9px 12px;border-left:2px solid var(--blue);
+  font-size:12.5px;line-height:1.6;color:var(--ink2)}
+.bil b{color:var(--ink);font-weight:600}
+/* Quatre formules au lieu de trois depuis le retour du pass : la
+   colonne doit tenir dans une fenetre de 900 px. */
+.plans{display:flex;flex-direction:column;gap:7px;margin-bottom:8px}
+.plan{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 16px;border:1px solid var(--line);
 border-radius:5px;background:var(--card);cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,background .15s}
 .plan:hover{border-color:var(--ink3)}
 .plan.feat{border-color:var(--blue);background:var(--card2)}
@@ -71,6 +79,12 @@ display:flex;align-items:center;justify-content:center}
 .tiny{background:none;border:0;padding:0;font-family:var(--m);font-size:9.5px;letter-spacing:.14em;text-transform:uppercase;
 color:var(--ink3);cursor:pointer}
 .tiny:hover{color:var(--ink)}
+/* La note macOS de l'ecran d'accueil. */
+.macnote{margin:22px 0 0;padding:14px 16px;border:1px solid var(--rule);border-radius:4px;
+  font-size:13px;line-height:1.62;color:var(--ink2);text-align:left}
+.macnote b{color:var(--ink)}
+.macnote a{display:inline-block;margin-top:7px;color:var(--blue);text-decoration:underline;
+  text-underline-offset:3px}
 </style></head><body>
 <div class="drag"></div>
 <div class="wrap">
@@ -83,35 +97,68 @@ color:var(--ink3);cursor:pointer}
   <!-- ============ accueil ============ -->
   <section class="view" id="v-welcome">
     <h1>Le morceau d'après,<br>avant que tu le cherches.</h1>
-    <p class="sub">Liaison lit ton deck en direct et ne retient que les titres qui s'enchaînent vraiment. Tu as <b id="trialDays">14 jours</b> pour l'essayer, tout est ouvert.</p>
+    <p class="sub">Liaison lit ton deck en direct et ne retient que les titres qui s'enchaînent vraiment. Tu as <b id="trialDays">7 jours</b> pour l'essayer, tout est ouvert, sans carte bancaire.</p>
     <div class="feat-list">
       <div>Il lit ta bibliothèque tout seul — rien à importer</div>
       <div>Le widget s'ouvre avec ton logiciel de mix</div>
       <div>Sessions invités, courbe de soirée, rejeu de set</div>
       <div>Tout tourne en local, même sans réseau en cabine</div>
     </div>
+    <!-- La phrase qui decide, et personne ne la disait : un DJ qui
+         installe un essai de quatorze jours se demande d'abord ce
+         qu'il perd le quinzieme. Reponse : rien d'essentiel. -->
+    <p class="apres">Ensuite, <b>4,95&nbsp;€ la soirée</b> — un pass qui rouvre tout pendant
+      48 heures, parce qu'une soirée commencée samedi soir finit dimanche matin. Rien à l'année
+      si tu ne veux pas. Et si tu arrives au bout de l'essai sans avoir joué une seule soirée,
+      Liaison t'en rend sept, une fois.</p>
     <button class="btn" id="goTrial">Commencer</button>
     <button class="link" data-go="code">J'ai un code</button>
+
+    <!-- Sur Mac, l'utilisateur vient de voir « impossible de verifier le
+         developpeur » et s'est demande s'il installait un virus. On le
+         rassure ici, au premier ecran, pendant que la question est encore
+         fraiche — et pas trois jours plus tard dans un mail. -->
+    <p class="macnote" id="macNote" hidden>
+      <b>L'avertissement que macOS vient d'afficher est normal.</b>
+      Liaison n'est pas signée par un certificat Apple payant : c'est le message
+      standard pour toute application distribuée hors de l'App&nbsp;Store, et il ne dit
+      rien sur ce que fait le logiciel. Rien ne quitte ta machine — l'analyse est
+      entièrement locale.
+      <a href="#" id="macPlus">Pourquoi ce message, en détail</a>
+    </p>
   </section>
 
   <!-- ============ offres ============ -->
   <section class="view" id="v-plans">
     <h1 id="plansTitle">Continuer avec Liaison</h1>
     <p class="sub" id="plansSub">Choisis ta formule. Le paiement s'ouvre dans ton navigateur, tu reviens avec une clé.</p>
-    <div class="plans">
+    <!-- Ce que la personne a REELLEMENT fait avec l'app. Pas un argument
+         de vente invente : ses propres chiffres, pris dans ses fichiers. -->
+    <p class="bil" id="bilan" hidden></p>
+    <!-- Les prix sont ecrits par poserLesTarifs(), depuis /api/tarifs.
+         Ceux qui figurent ici sont le repli hors ligne : ce sont les
+         tarifs NORMAUX, jamais un tarif promotionnel. Annoncer un
+         prix de lancement a quelqu'un qui paiera le prix plein
+         serait un mensonge, meme involontaire. -->
+    <div class="plans" id="plans">
       <button class="plan feat" data-plan="resident">
-        <span class="n"><b>Résident</b><small>Tout, deux machines. 14 jours d'essai.</small></span>
-        <span class="p">19 €<em>/ mois</em></span>
+        <span class="n"><b>Résident</b><small>QR des invités, listes du client, tracklists, débrief. Deux machines.</small></span>
+        <span class="p"><span data-prix="resident">14,95 €</span><em>/ mois</em></span>
       </button>
-      <button class="plan" data-plan="pass">
-        <span class="n"><b>Pass soirée</b><small>Une nuit complète, sans abonnement.</small></span>
-        <span class="p">9 €<em>/ 14 h</em></span>
+      <button class="plan" data-plan="resident_an">
+        <span class="n"><b>Résident — à l'année</b><small data-sous="resident_an">Même chose, deux mois offerts.</small></span>
+        <span class="p"><span data-prix="resident_an">149 €</span><em>/ an</em></span>
       </button>
       <button class="plan" data-plan="collectif">
         <span class="n"><b>Collectif</b><small>Jusqu'à cinq DJs, mode B2B.</small></span>
-        <span class="p">49 €<em>/ mois</em></span>
+        <span class="p"><span data-prix="collectif">44,95 €</span><em>/ mois</em></span>
+      </button>
+      <button class="plan" data-plan="pass">
+        <span class="n"><b>Pass soirée</b><small>Tout Résident pendant 48 h — une soirée finit le lendemain matin.</small></span>
+        <span class="p"><span data-prix="pass">4,95 €</span><em>/ 48 h</em></span>
       </button>
     </div>
+    <p class="lancnote" id="lancNote" hidden></p>
     <button class="link" data-go="code">J'ai un code</button>
     <div class="foot">
       <span class="lbl">Paiement sécurisé par Stripe</span>
@@ -146,11 +193,30 @@ const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let ST = null;
 
+/* La hauteur etait ecrite en dur, vue par vue. Chaque phrase ajoutee
+   depuis coupait le bas d'un ecran — le bouton « Commencer » compris,
+   ce qui est le pire endroit possible. On mesure. */
+function ajusterHauteur() {
+  const v = document.querySelector('.view.on');
+  if (!v) return;
+  /* On mesure le bas de la vue affichee, pas scrollHeight : quand la
+     fenetre est plus haute que son contenu, scrollHeight vaut la
+     fenetre, et la mesure ne sert plus a rien. */
+  const bas = v.getBoundingClientRect().bottom + window.scrollY;
+  const marge = parseFloat(getComputedStyle(document.body).paddingBottom) || 0;
+  const h = Math.ceil(bas + marge + 8);
+  /* Au-dela du plafond, la fenetre ne grandit plus : le contenu
+     defile. Mieux vaut faire defiler que couper un bouton. */
+  document.body.style.overflowY = h > 900 ? 'auto' : '';
+  window.liaison.setHeight(Math.max(380, Math.min(900, h)));
+}
 function go(view) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('on'));
   $('#v-' + view).classList.add('on');
   if (view === 'code') setTimeout(() => $('#key').focus(), 60);
-  window.liaison.setHeight(view === 'plans' ? 620 : view === 'code' ? 470 : view === 'done' ? 430 : 600);
+  requestAnimationFrame(ajusterHauteur);
+  /* Les polices et l'icone arrivent apres : on remesure une fois. */
+  setTimeout(ajusterHauteur, 260);
 }
 document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.dataset.go));
 
@@ -158,7 +224,7 @@ function renderState(st) {
   ST = st;
   const s = $('#state');
   if (st.tier === 'trial') s.textContent = 'Essai — ' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + ' restants';
-  else if (st.tier === 'none') s.textContent = 'Essai terminé';
+  else if (st.tier === 'expire') s.textContent = 'Essai terminé';
   else s.textContent = 'Licence ' + st.label + ' — active';
   $('#trialDays').textContent = st.trialLeft + ' jours';
 }
@@ -209,17 +275,93 @@ $('#activate').onclick = async () => {
 
 window.liaison.on('license', renderState);
 
+/* La note macOS ne s'affiche que la ou l'avertissement existe.
+   Sur Windows, SmartScreen a son propre message et sa propre page. */
+const surMac = /Mac/i.test(navigator.platform || '') || /Mac OS X/i.test(navigator.userAgent || '');
+const surWin = /Win/i.test(navigator.platform || '') || /Windows/i.test(navigator.userAgent || '');
+if (surMac || surWin) {
+  const n = $('#macNote');
+  n.hidden = false;
+  if (surWin) {
+    n.innerHTML = '<b>L\'ecran bleu que Windows vient d\'afficher est normal.</b> ' +
+      'Liaison n\'a pas de certificat d\'editeur payant : SmartScreen affiche cet ecran pour ' +
+      'toute application encore peu telechargee, et il ne dit rien sur ce que fait le logiciel. ' +
+      'Rien ne quitte ta machine — l\'analyse est entierement locale. ' +
+      '<a href="#" id="macPlus">Pourquoi ce message, en detail</a>';
+  }
+  $('#macPlus').onclick = e => {
+    e.preventDefault();
+    window.liaison.openExternal('https://liaisondj.app/premiere-ouverture.html');
+  };
+}
+
+/* Le bilan personnel.
+
+   Un argumentaire generique se lit une fois et ne convainc personne.
+   Ses propres chiffres, si. On ne montre le bloc que s'il y a
+   vraiment quelque chose a montrer — une ligne « 0 set, 0
+   enchainement » serait un argument contre nous, et honnetement
+   merite. */
+/* Les tarifs viennent du serveur, jamais du fichier. */
+async function poserLesTarifs() {
+  let t;
+  try { t = await window.liaison.tarifs(); } catch (e) { return; }
+  if (!t || !t.plans) return;
+  document.querySelectorAll('[data-prix]').forEach(el => {
+    const p = t.plans[el.dataset.prix];
+    if (p && p.euro) el.textContent = p.euro + ' €';
+  });
+  const sous = document.querySelector('[data-sous="resident_an"]');
+  const an = t.plans.resident_an;
+  if (sous && an && an.parMois) {
+    sous.textContent = 'Même chose, ' + (t.moisOfferts || 2) + ' mois offerts — soit ' +
+      an.parMois + ' € par mois.';
+  }
+  /* L'offre de lancement porte sur l'annee, jamais sur le mensuel :
+     un tarif mensuel qui danse apprend a attendre la remise suivante
+     au lieu de s'abonner. */
+  const note = document.getElementById('lancNote');
+  if (note && t.lancement && an && an.barre) {
+    note.textContent = 'Offre de lancement : l\'année retire ' + (t.moisOfferts || 3) +
+      ' mois au lieu de deux — ' + an.euro + ' € au lieu de ' + an.euroPlein +
+      ' €. Un abonnement garde son prix tant qu\'il court.';
+    note.hidden = false;
+  }
+  ajusterHauteur();
+}
+
+async function poserLeBilan() {
+  let b;
+  try { b = await window.liaison.bilan(); } catch (e) { return; }
+  if (!b || (!b.sets && b.enchainements < 5)) return;
+  const bouts = [];
+  if (b.sets) bouts.push('<b>' + b.sets + ' set' + (b.sets > 1 ? 's' : '') + '</b>');
+  if (b.heures >= 1) bouts.push('<b>' + b.heures + ' h</b> de musique');
+  if (b.enchainements >= 5) {
+    const taux = b.enchainements ? Math.round(b.pris / b.enchainements * 100) : 0;
+    bouts.push('<b>' + b.enchainements + ' enchaînements</b>' +
+      (taux >= 5 ? ', dont <b>' + taux + ' %</b> sortis de Liaison' : ''));
+  }
+  if (!bouts.length) return;
+  const el = document.getElementById('bilan');
+  el.innerHTML = 'Depuis que tu l\'as installé : ' + bouts.join(', ') + '.';
+  el.hidden = false;
+}
+
 (async () => {
   $('#ico').src = await window.liaison.iconDataUrl();
   const st = await window.liaison.licenseStatus();
   renderState(st);
   const view = new URLSearchParams(location.search).get('v')
-    || (st.tier === 'none' ? 'plans' : st.key ? 'plans' : 'welcome');
-  if (view === 'plans' && st.tier === 'none') {
+    || (st.tier === 'expire' && st.trialLeft <= 0 ? 'plans' : st.key ? 'plans' : 'welcome');
+  if (view === 'plans' && st.tier === 'expire') {
     $('#plansTitle').textContent = 'Ton essai est terminé';
-    $('#plansSub').textContent = 'Le widget continue de proposer un enchaînement, mais les sessions invités et le rejeu de set sont fermés.';
+    $('#plansSub').textContent = 'Le widget reste installé et continue d\'afficher ton deck, mais il ne propose plus d\'enchaînement. Un pass soirée rouvre tout pendant 48 heures — le temps d\'une soirée entière, celle qui finit le lendemain matin. Si tu joues souvent, l\'abonnement revient moins cher dès la troisième soirée.';
+    await poserLeBilan();
   }
+  if (view === 'plans') await poserLesTarifs();
   go(view);
+  setTimeout(ajusterHauteur, 400);
 })();
 </script>
 </body></html>

@@ -269,11 +269,44 @@ class StructurePool {
       const cb = this.pending.get(m.id);
       this.pending.delete(m.id);
       w.busy = false;
+      w.jobId = null;
       try { w.unref(); } catch (e) {}
       if (cb) (m.ok ? cb.resolve(m.result) : cb.reject(new Error(m.error)));
       this._drain();
     });
-    w.on('error', () => { w.busy = false; try { w.unref(); } catch (e) {} this._drain(); });
+    /* Un fil qui meurt emportait avec lui la promesse du travail en
+       cours : ni resolue ni rejetee, elle pendait pour toujours. Cote
+       main.js, ni .then ni .catch ne se declenchaient, donc l'entree
+       n'etait jamais retiree de structBusy — et le morceau restait
+       marque « en cours d'analyse » a vie. Consequence visible : les
+       plans de mix (« lance a 3:12, bascule les basses a 4:04 »)
+       cessaient d'apparaitre pour le reste de la soiree, en silence.
+
+       On rejette donc ce qui appartenait a ce fil, on le retire de la
+       liste — sinon _free() continuait de le proposer, un fil mort —
+       et on laisse _drain() en recreer un. */
+    w.on('error', err => {
+      w.busy = false;
+      if (w.jobId != null) {
+        const cb = this.pending.get(w.jobId);
+        this.pending.delete(w.jobId);
+        w.jobId = null;
+        if (cb) cb.reject(err instanceof Error ? err : new Error('fil de structure interrompu'));
+      }
+      this.workers = this.workers.filter(x => x !== w);
+      try { w.terminate(); } catch (e) {}
+      this._drain();
+    });
+    w.on('exit', () => {
+      if (w.jobId != null) {
+        const cb = this.pending.get(w.jobId);
+        this.pending.delete(w.jobId);
+        w.jobId = null;
+        if (cb) cb.reject(new Error('fil de structure arrete'));
+      }
+      this.workers = this.workers.filter(x => x !== w);
+      this._drain();
+    });
     try { w.unref(); } catch (e) {}
     this.workers.push(w);
     return w;
@@ -299,6 +332,7 @@ class StructurePool {
       }
       const job = this.queue.shift();
       w.busy = true;
+      w.jobId = job.id;                      /* pour rejeter si le fil meurt */
       try { w.ref(); } catch (e) {}          /* le fil retient le process tant qu'il calcule */
       this.pending.set(job.id, job);
       w.postMessage({ id: job.id, path: job.path, bpm: job.bpm });

@@ -8,6 +8,7 @@ const crypto = require('crypto');
 const os = require('os');
 const fs = require('fs');
 const path = require('path');
+const ecrire = require('./ecrire');
 const QR = require('qrcode');
 const { match, search, keyOf } = require('./engine');
 
@@ -166,13 +167,34 @@ class GuestServer {
       let dev = (req.headers.cookie || '').match(/(?:^|;\s*)lsn=([A-Za-z0-9_-]{10,32})/);
       dev = dev ? dev[1] : null;
       const fresh = !dev;
-      if (!dev) dev = crypto.randomBytes(12).toString('base64url');
+      /* Sans cookie, on derive une identite de l'adresse reseau plutot
+         que d'en tirer une neuve : sinon il suffit de ne pas renvoyer le
+         cookie pour repartir a zero a chaque requete — donc plus de
+         plafond de cinq demandes, plus de delai de 90 secondes, et un
+         compteur qui affiche « 300 demandes » pour un seul telephone.
+         Sur le wifi d'un club, plusieurs invites peuvent partager une
+         adresse : c'est pour ca que le cookie reste prioritaire, et que
+         cette voie n'est qu'un filet. */
+      if (!dev) dev = 'a' + crypto.createHmac('sha256', self.token)
+        .update(self._adresse(req)).digest('base64url').slice(0, 20);
       const setCookie = () => 'lsn=' + dev + '; Path=/; Max-Age=86400; SameSite=Lax';
 
       if (u.pathname === '/api/search') {
         /* Un invite tape sur un telephone : fautes, pas d'accents, mots
-           dans le desordre. La recherche exacte ne trouverait rien. */
-        const q = u.searchParams.get('q') || '';
+           dans le desordre. La recherche exacte ne trouverait rien.
+
+           MAIS : ce serveur tourne dans le processus principal de
+           l'application. Une recherche longue ne ralentit pas « la page
+           invite », elle GELE le widget, la detection du deck et tout le
+           reste. Sur 30 000 titres, une requete de 8 000 caracteres sans
+           correspondance bloquait 22 secondes d'affilee — et il suffisait
+           de la repeter pour tuer la soiree.
+
+           Donc : la requete est coupee a 64 caracteres, et une meme
+           adresse ne peut pas relancer une recherche plus de trois fois
+           par seconde. Aucun invite de bonne foi ne s'en apercoit. */
+        const q = String(u.searchParams.get('q') || '').slice(0, 64);
+        if (!self._peutChercher(req)) { res.writeHead(429); return res.end('[]'); }
         const hits = search(q, self.getLibrary(), 6, 0.34)
           .map(h => ({ title: h.track.title, artist: h.track.artist, have: true }));
         /* On laisse toujours la porte ouverte : si le DJ ne l'a pas,
@@ -219,6 +241,25 @@ class GuestServer {
     if (!b.length || a.length !== b.length) return false;
     return crypto.timingSafeEqual(a, b);
   }
+  /* L'adresse de l'appelant, derriere un eventuel relais. */
+  _adresse(req) {
+    const x = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
+    return x || (req.socket && req.socket.remoteAddress) || 'inconnu';
+  }
+
+  /* Trois recherches par seconde et par adresse. Une frappe au clavier
+     en declenche une toutes les 220 ms : la marge est large. */
+  _peutChercher(req) {
+    const ip = this._adresse(req);
+    const n = Date.now();
+    if (!this._cherches) this._cherches = new Map();
+    if (this._cherches.size > 500) this._cherches.clear();
+    const e = this._cherches.get(ip);
+    if (!e || n - e.t > 1000) { this._cherches.set(ip, { t: n, c: 1 }); return true; }
+    e.c++;
+    return e.c <= 3;
+  }
+
   /* ============================================================
      Les regles de la file.
 
@@ -252,6 +293,17 @@ class GuestServer {
       return { ok: false, reste: Math.ceil(this.cooldown - since),
                error: 'Encore un instant avant la prochaine.' };
 
+    /* La file ne grossit pas indefiniment : sur une soiree de huit
+       heures, chaque titre distinct demande y reste, et rien ne l'en
+       sort. Deux cents lignes suffisent tres largement a « ce que la
+       salle reclame » ; au-dela, on oublie les plus anciennes et les
+       moins demandees. */
+    if (this.requests.size >= 200 && !this.requests.has(k)) {
+      const vieilles = Array.from(this.requests.entries())
+        .sort((a, b) => (a[1].n - b[1].n) || (a[1].at - b[1].at))
+        .slice(0, 20);
+      for (const [cle] of vieilles) this.requests.delete(cle);
+    }
     const cur = this.requests.get(k) || { title: title, artist: artist, n: 0, at: now, first: now };
     cur.n++; cur.at = now;
     this.requests.set(k, cur);
@@ -285,15 +337,24 @@ function shareLinks(url, sessionName) {
 /* ---------- journal de set ---------- */
 class SetLog {
   constructor(file) { this.file = file; this.sets = this._load(); }
-  _load() { try { return JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch (e) { return []; } }
-  _save() { try { fs.mkdirSync(path.dirname(this.file), { recursive: true }); fs.writeFileSync(this.file, JSON.stringify(this.sets, null, 1)); } catch (e) {} }
+  _load() { return ecrire.lireJSON(this.file, []); }
+  /* Ecriture atomique : ce fichier est reecrit a chaque morceau joue.
+     Une coupure au mauvais moment effacait toute la nuit. */
+  _save() { ecrire.ecrireJSON(this.file, this.sets); }
   open(name, pack) { this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] }; this.sets.unshift(this.current); this._save(); return this.current; }
   play(track, transition) {
     if (!this.current) this.open('Session', null);
     const last = this.current.played[this.current.played.length - 1];
     if (last && last.id === track.id) return;
+    /* Les genres sont conserves. Sans eux, la penalite de saturation du
+       moteur — celle qui empeche sept tech house d'affilee — recevait
+       des morceaux sans tags et rendait donc TOUJOURS zero. Le defaut
+       « 47 % du set dans un seul genre » que cette penalite existe pour
+       corriger etait donc intact, en silence. */
     this.current.played.push({ id: track.id, title: track.title, artist: track.artist,
-      bpm: track.bpm, key: track.key, energy: track.energy, at: Date.now(), transition: transition || null });
+      bpm: track.bpm, key: track.key, energy: track.energy,
+      tags: Array.isArray(track.tags) ? track.tags.slice(0, 6) : [],
+      at: Date.now(), transition: transition || null });
     this._save();
   }
   list() { return this.sets.map(s => ({ id: s.id, name: s.name, pack: s.pack, at: s.at, n: s.played.length,

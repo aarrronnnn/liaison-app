@@ -55,6 +55,15 @@ border:1px solid var(--line);color:var(--ink2);text-decoration:none;cursor:point
 .mrow .deja b{color:var(--blue);font-weight:600}
 .pools{margin-top:14px;border-top:1px solid var(--line);padding-top:12px;font-size:13px;color:var(--ink2);line-height:1.65}
 .pools a{color:var(--blue)}
+.soirL{border:1px solid var(--rule);border-radius:4px;padding:9px 11px;margin:0 0 7px;cursor:pointer;
+  display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;background:transparent;transition:.13s}
+.soirL:hover{border-color:var(--ink2)}
+.soirL.sel{border-color:var(--blue);box-shadow:inset 3px 0 0 var(--blue);background:var(--paper2)}
+.soirL b{font-size:13.5px;flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.soirL span:not(.pill){flex:1 0 100%;color:var(--ink3);font-size:12px;font-family:var(--m)}
+textarea{width:100%;box-sizing:border-box;background:var(--white);color:var(--ink);border:1px solid var(--rule);
+  border-radius:4px;padding:8px 10px;font-family:var(--b);font-size:13.5px;line-height:1.5;resize:vertical}
+textarea:focus{outline:none;border-color:var(--blue)}
 .mono{font-family:var(--m);font-size:11.5px;color:var(--ink2);word-break:break-all}
 table{width:100%;border-collapse:collapse;margin-top:10px;font-size:13px}
 th,td{text-align:left;padding:8px 6px;border-bottom:1px solid var(--line)}
@@ -217,11 +226,27 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
       <label>Pas encore de cle</label>
       <p class="tips">L'essai dure 14 jours, toutes fonctions ouvertes. Ensuite, le widget continue de proposer un enchainement, mais les sessions invites et le rejeu de set se ferment.</p>
       <div class="row">
-        <button id="buyRes">Resident — 19 €/mois</button>
-        <button class="g" id="buyPass">Pass soiree — 9 €</button>
-        <button class="g" id="buyCol">Collectif — 49 €/mois</button>
+        <button id="buyRes">Resident</button>
+        <button class="g" id="buyCol">Collectif</button>
       </div>
       <p class="tips" id="licApi" style="margin-top:12px"></p>
+      <p class="tips" id="licTarifs" style="margin-top:6px"></p>
+
+      <!-- Ou en est ma version. Deux questions reviennent toujours :
+           « est-ce que j'ai la derniere ? » et « est-ce que je dois
+           desinstaller avant ? ». On y repond ici, une fois pour
+           toutes, plutot que dans un mail. -->
+      <hr style="border:0;border-top:1px solid var(--rule);margin:18px 0">
+      <label>Ta version</label>
+      <div class="state" id="majState" style="font-size:13.5px;line-height:1.7">Verification…</div>
+      <div class="row">
+        <button id="majVerifier" class="g">Verifier maintenant</button>
+        <button id="majPage" class="g">Ouvrir la page de telechargement</button>
+      </div>
+      <p class="tips" style="margin-top:12px"><b>Installer une mise a jour ne demande jamais de desinstaller.</b>
+        Sur Mac, tu glisses la nouvelle version dans Applications et tu remplaces l'ancienne.
+        Sur Windows, tu lances l'installeur par-dessus. Tes reglages, ta bibliotheque deja lue,
+        tes fiches soirees et ton historique restent en place — ils ne vivent pas dans l'application.</p>
     </div>
   </div>
 </div>
@@ -281,6 +306,53 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
         <input type="checkbox" id="optLogin"> Lancer Liaison au demarrage de la machine</label>
       <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
         <input type="checkbox" id="optAnnounce"> Pro DJ Link : se declarer sur le reseau si aucun paquet n'arrive</label>
+    </div>
+  </div>
+</div>
+
+<div class="card" id="soireesCard">
+  <h2>Tes soirees <span class="pill" id="soirPill">—</span></h2>
+  <p class="tips">Une fiche par soirée : le contexte, les titres que le client veut, ceux qu'il refuse,
+    les genres à privilégier et à éviter. Tu la prépares dans la semaine, tu l'actives en arrivant,
+    et tout bascule d'un coup — <b>y compris le QR des invités</b>, propre à chaque soirée.</p>
+  <div class="grid">
+    <div>
+      <label>Fiches enregistrées</label>
+      <div id="soirListe" class="state" style="margin-top:8px"></div>
+      <div class="row">
+        <button id="soirNouvelle">Nouvelle soirée</button>
+        <button id="soirDupliquer" class="g">Dupliquer</button>
+      </div>
+    </div>
+    <div id="soirEdit">
+      <label>Nom de la soirée</label>
+      <input type="text" id="soirNom" placeholder="Mariage Léa &amp; Sam">
+      <div class="two">
+        <div><label>Date</label><input type="text" id="soirDate" placeholder="2026-09-12"></div>
+        <div><label>Lieu</label><input type="text" id="soirLieu" placeholder="Domaine du Bois"></div>
+      </div>
+      <div class="two">
+        <div><label>Pays</label><select id="soirPays"></select></div>
+        <div><label>Type d'événement</label><select id="soirEvt"></select></div>
+      </div>
+      <label>Durée annoncée (minutes)</label>
+      <input type="number" id="soirDuree" min="30" max="720" value="240">
+      <label>Genres que le client aime <span style="color:var(--ink3)">— un par ligne</span></label>
+      <textarea id="soirAimes" rows="2" placeholder="disco&#10;funk"></textarea>
+      <label>Genres à éviter</label>
+      <textarea id="soirEvites" rows="2" placeholder="techno"></textarea>
+      <label>Titres voulus <span style="color:var(--ink3)">— un par ligne</span></label>
+      <textarea id="soirVoulus" rows="3" placeholder="Daft Punk - Get Lucky"></textarea>
+      <label>Titres interdits</label>
+      <textarea id="soirInterdits" rows="2" placeholder="Rick Astley - Never Gonna Give You Up"></textarea>
+      <label>Notes</label>
+      <textarea id="soirNotes" rows="2" placeholder="Discours à 22 h, gâteau vers minuit"></textarea>
+      <div class="row">
+        <button id="soirEnregistrer">Enregistrer</button>
+        <button id="soirActiver" class="g">Activer cette soirée</button>
+        <button id="soirSupprimer" class="g">Supprimer</button>
+      </div>
+      <p class="tips" id="soirEtat" style="margin-top:12px"></p>
     </div>
   </div>
 </div>
@@ -421,6 +493,29 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
   </div>
 </div>
 
+<div class="card" id="debriefCard">
+  <h2>Ton debrief <span class="pill" id="dbPill">apres la soiree</span></h2>
+  <p class="tips">Personne ne donne jamais de retour a un DJ sur ce qu'il vient de jouer. La salle etait
+    pleine ou vide, tu as une impression, et c'est tout. Liaison a note l'heure, la duree reelle,
+    le tempo, la tonalite, l'energie et les genres de chaque morceau — il te rend les chiffres.
+    <b>Aucun conseil, aucune note</b> : des mesures, et ce que tu en fais ne le regarde pas.</p>
+  <div class="grid">
+    <div>
+      <label>Quelle soiree</label>
+      <select id="dbSel"></select>
+      <div class="row" style="margin-top:12px">
+        <button id="dbVoir">Voir le debrief</button>
+        <button class="g" id="dbCopier">Copier</button>
+      </div>
+      <div id="dbCourbe" style="margin-top:18px"></div>
+    </div>
+    <div>
+      <div class="state" id="dbTexte" style="font-size:13.5px;line-height:1.7">Choisis une soiree, puis <b>Voir le debrief</b>.</div>
+      <div id="dbTop" style="margin-top:14px"></div>
+    </div>
+  </div>
+</div>
+
 <div class="card">
   <h2>8 — Tes tracklists</h2>
   <p class="tips">Liaison note tout ce qui est passe, avec l'heure et la duree reelle de chaque morceau. De quoi repondre a « tu peux m'envoyer ta tracklist&nbsp;? » sans rien retaper, et remplir une declaration sans reconstituer la soiree de memoire.</p>
@@ -479,9 +574,13 @@ async function renderPack() {
   PACK = p;
   $('#moments').innerHTML = (p.moments || []).map(m => '<li><b>' + esc(m.label) + '</b> — ' + esc(m.brief) + '</li>').join('');
   $('#packTips').textContent = p.tips || '';
-  const top = Object.entries(p.dna).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]);
-  $('#packLine').innerHTML = 'Ce que Liaison va privilegier : <b>' + top.map(esc).join(' · ') + '</b>'
-    + (p.avoid.length ? ' — ecarte : ' + p.avoid.map(esc).join(', ') : '');
+  /* Un pack incomplet ne doit pas tuer l'initialisation : cette fonction
+     est appelee depuis le bloc de demarrage, et une exception ici laissait
+     la moitie de la fenetre vide sans le moindre message. */
+  const dna = p.dna || {}, avoid = p.avoid || [];
+  const top = Object.entries(dna).sort((a, b) => b[1] - a[1]).slice(0, 5).map(x => x[0]);
+  $('#packLine').innerHTML = 'Ce que Liaison va privilegier : <b>' + (top.length ? top.map(esc).join(' · ') : '—') + '</b>'
+    + (avoid.length ? ' — ecarte : ' + avoid.map(esc).join(', ') : '');
 }
 function renderSrcOpts() {
   const v = $('#source').value;
@@ -496,16 +595,19 @@ function renderSrcOpts() {
 function renderLic(st){
   if (!st) return;
   $('#licPill').textContent = st.label + (st.tier === 'trial' ? ' · ' + st.trialLeft + ' j' : '');
-  $('#licPill').className = 'pill' + (st.tier === 'none' ? '' : ' ok');
+  $('#licPill').className = 'pill' + (st.tier === 'expire' ? '' : ' ok');
   const bits = [];
   bits.push('Machine : <b>' + esc(st.deviceName) + '</b>');
   if (st.key) bits.push('Cle : <b>' + esc(st.key) + '</b>');
   if (st.tier === 'trial') bits.push('Essai — <b>' + st.trialLeft + ' jours</b> restants');
-  if (st.tier === 'none') bits.push("<b>Essai termine.</b> Le moteur ne propose plus qu'un seul enchainement.");
+  if (st.tier === 'expire') bits.push("<b>Essai termine.</b> Le widget reste installe et continue d'afficher le morceau en cours, mais il ne propose plus d'enchainement. Un <b>pass soiree a 4,95 €</b> rouvre tout pendant 48 heures — assez pour une soiree qui commence samedi 19 h et finit dimanche 5 h. Un abonnement Resident revient moins cher des la troisieme soiree du mois.");
   if (st.until) bits.push('Valide jusqu au <b>' + new Date(st.until).toLocaleDateString('fr-FR') + '</b>');
   if (st.cacheUntil) bits.push('Fonctionne hors ligne jusqu au <b>' + new Date(st.cacheUntil).toLocaleDateString('fr-FR') + '</b>');
   if (st.lastCheck) bits.push('Derniere verification : ' + new Date(st.lastCheck).toLocaleString('fr-FR'));
-  bits.push('Ouvert : ' + st.features.suggestions + ' suggestions · sessions ' + (st.features.sessions ? 'oui' : 'non') + ' · rejeu de set ' + (st.features.replay ? 'oui' : 'non'));
+  /* Le detail des droits arrive du processus principal. S'il manque une
+     seule fois, on n'ecrit pas cette ligne plutot que de vider la fenetre. */
+  const f = st.features;
+  if (f) bits.push('Ouvert : ' + f.suggestions + ' suggestions · sessions ' + (f.sessions ? 'oui' : 'non') + ' · rejeu de set ' + (f.replay ? 'oui' : 'non'));
   $('#licState').innerHTML = bits.join('<br>');
   $('#licApi').textContent = 'Serveur de licences : ' + st.api;
   if (st.key) $('#licKey').value = st.key;
@@ -532,7 +634,6 @@ $('#licFree').onclick = async () => {
   renderLic(await window.liaison.licenseStatus());
 };
 $('#buyRes').onclick = () => window.liaison.licenseBuy('resident');
-$('#buyPass').onclick = () => window.liaison.licenseBuy('pass');
 $('#buyCol').onclick = () => window.liaison.licenseBuy('collectif');
 window.liaison.on('license', renderLic);
 
@@ -554,6 +655,7 @@ async function relire(force) {
   try { await window.liaison.rescanLibrary({ force: !!force }); }
   finally { b1.disabled = b2.disabled = false; }
   renderSources(); renderScanInfo();
+}
 
 /* ------------------------------------------------------------
    Ce que Liaison a appris — en phrases, pas en coefficients.
@@ -582,7 +684,178 @@ $('#goutOublier').onclick = async () => {
 };
 renderGout();
 setInterval(renderGout, 20000);
+
+/* ------------------------------------------------------------
+   Ou en est ma version.
+   ------------------------------------------------------------ */
+async function renderMaj() {
+  const boite = $('#majState');
+  let r;
+  try { r = await window.liaison.majEtat(); } catch (e) { boite.textContent = 'Verification impossible.'; return; }
+  const v = '<b>Version ' + esc(r.courante) + '</b>';
+  if (!r.info) {
+    boite.innerHTML = v + ' — impossible de joindre le site. ' +
+      'Ce n\'est pas une panne : Liaison fonctionne entierement hors ligne, ' +
+      'la verification reessaiera plus tard.';
+    return;
+  }
+  if (r.info.aJour) {
+    boite.innerHTML = v + ' — <span style="color:var(--ok)">c\'est la plus recente.</span>' +
+      (r.info.publie ? ' Publiee le ' + new Date(r.info.publie).toLocaleDateString('fr-FR') + '.' : '');
+    return;
+  }
+  boite.innerHTML = v + ' — <b style="color:var(--blue)">la ' + esc(r.info.version) + ' est disponible</b>' +
+    (r.info.publie ? ', publiee le ' + new Date(r.info.publie).toLocaleDateString('fr-FR') : '') + '.' +
+    (r.info.notes ? '<br><span style="color:var(--ink2)">' + esc(r.info.notes).slice(0, 400) + '</span>' : '');
 }
+$('#majVerifier').onclick = () => { $('#majState').textContent = 'Verification…'; renderMaj(); };
+$('#majPage').onclick = () => window.liaison.majOuvrir();
+window.liaison.on('maj', renderMaj);
+renderMaj();
+
+/* ------------------------------------------------------------
+   Les fiches soirees.
+
+   Une fiche, ce n'est pas un raccourci de confort : c'est ce qui
+   evite de re-saisir a 21 h, dans une cabine mal eclairee, la
+   liste des titres que la mariee refuse. On prepare tranquillement
+   chez soi, on active en arrivant, et tout bascule d'un coup —
+   pack pays/evenement, listes du client, gouts, et le QR des
+   invites qui devient propre a cette soiree-la.
+   ------------------------------------------------------------ */
+let SOIR = { liste: [], active: null, pays: [], evenements: [] };
+let soirSel = null;
+
+const lignes = v => String(v || '').split('\n').map(x => x.trim()).filter(Boolean);
+
+function soirRemplirMenus() {
+  if ($('#soirPays').options.length) return;
+  $('#soirPays').innerHTML = SOIR.pays
+    .map(c => '<option value="' + c.id + '">' + c.flag + '  ' + esc(c.label) + '</option>').join('');
+  $('#soirEvt').innerHTML = SOIR.evenements
+    .map(e => '<option value="' + e.id + '">' + esc(e.label) + '</option>').join('');
+}
+
+/* La liste de gauche. L'active porte une pastille : dans une cabine,
+   on doit voir en une seconde quelle fiche pilote la soiree. */
+function soirRendre() {
+  const actif = SOIR.active && SOIR.active.id;
+  $('#soirPill').textContent = SOIR.active ? SOIR.active.nom : (SOIR.liste.length ? 'aucune active' : 'aucune fiche');
+  $('#soirPill').className = 'pill' + (SOIR.active ? ' ok' : '');
+  if (!SOIR.liste.length) {
+    $('#soirListe').innerHTML = '<p class="tips" style="margin:0">Aucune fiche pour l\'instant. ' +
+      '<b>Nouvelle soiree</b> en cree une : nom, date, lieu, et ce que le client veut ou refuse.</p>';
+    return;
+  }
+  $('#soirListe').innerHTML = SOIR.liste.map(x => {
+    const on = x.id === soirSel, act = x.id === actif;
+    return '<div class="soirL' + (on ? ' sel' : '') + '" data-id="' + x.id + '">' +
+      '<b>' + esc(x.nom) + '</b>' +
+      (act ? '<span class="pill ok">en cours</span>' : '') +
+      '<span>' + esc([x.date, x.lieu].filter(Boolean).join(' · ') || 'sans date') + '</span></div>';
+  }).join('');
+  Array.from($('#soirListe').querySelectorAll('.soirL')).forEach(el => {
+    el.onclick = () => { soirSel = el.dataset.id; soirRendre(); soirAfficher(); };
+  });
+}
+
+/* Le formulaire de droite, rempli depuis la fiche choisie. */
+function soirAfficher() {
+  const f = SOIR.liste.find(x => x.id === soirSel);
+  $('#soirEdit').style.display = f ? '' : 'none';
+  if (!f) return;
+  soirRemplirMenus();
+  $('#soirNom').value = f.nom || '';
+  $('#soirDate').value = f.date || '';
+  $('#soirLieu').value = f.lieu || '';
+  $('#soirPays').value = f.pays || 'fr';
+  $('#soirEvt').value = f.evenement || 'club';
+  $('#soirDuree').value = f.dureeMin || 240;
+  $('#soirAimes').value = (f.genresAimes || []).join('\n');
+  $('#soirEvites').value = (f.genresEvites || []).join('\n');
+  $('#soirVoulus').value = (f.voulus || []).join('\n');
+  $('#soirInterdits').value = (f.interdits || []).join('\n');
+  $('#soirNotes').value = f.notes || '';
+  const actif = SOIR.active && SOIR.active.id === f.id;
+  $('#soirActiver').textContent = actif ? 'Desactiver' : 'Activer cette soiree';
+  $('#soirEtat').innerHTML = actif
+    ? '<b>Cette fiche pilote la soiree.</b> Le pack, les listes du client et le QR des invites en viennent. ' +
+      'Le lien invite de cette fiche est <span class="mono">' + esc(f.id) + '</span> — il change d\'une soiree a l\'autre, ' +
+      'donc les demandes d\'hier n\'arrivent pas ce soir.'
+    : 'Prepare-la tranquillement. <b>Activer</b> bascule tout d\'un coup : pack, listes, gouts, QR.';
+}
+
+async function soirCharger(garderSel) {
+  let r;
+  try { r = await window.liaison.soireesListe(); } catch (e) { return; }
+  SOIR = r || SOIR;
+  if (!garderSel || !SOIR.liste.find(x => x.id === soirSel))
+    soirSel = (SOIR.active && SOIR.active.id) || (SOIR.liste[0] && SOIR.liste[0].id) || null;
+  soirRendre(); soirAfficher();
+}
+
+/* Ce que le formulaire contient, sous la forme attendue par la fiche. */
+function soirPatch() {
+  return {
+    nom: $('#soirNom').value.trim() || 'Soiree sans nom',
+    date: $('#soirDate').value.trim(),
+    lieu: $('#soirLieu').value.trim(),
+    pays: $('#soirPays').value,
+    evenement: $('#soirEvt').value,
+    dureeMin: Math.max(30, Math.min(720, Number($('#soirDuree').value) || 240)),
+    genresAimes: lignes($('#soirAimes').value),
+    genresEvites: lignes($('#soirEvites').value),
+    voulus: lignes($('#soirVoulus').value),
+    interdits: lignes($('#soirInterdits').value),
+    notes: $('#soirNotes').value.trim()
+  };
+}
+
+$('#soirNouvelle').onclick = async () => {
+  const f = await window.liaison.soireeCreer({ nom: 'Nouvelle soiree' });
+  soirSel = f && f.id;
+  await soirCharger(true);
+  $('#soirNom').focus(); $('#soirNom').select();
+};
+$('#soirEnregistrer').onclick = async () => {
+  if (!soirSel) return;
+  await window.liaison.soireeModifier(soirSel, soirPatch());
+  await soirCharger(true);
+  $('#soirEtat').innerHTML = '<b>Enregistre.</b> ' + $('#soirEtat').innerHTML;
+};
+$('#soirDupliquer').onclick = async () => {
+  if (!soirSel) return;
+  const f = await window.liaison.soireeDupliquer(soirSel);
+  soirSel = f && f.id;
+  await soirCharger(true);
+};
+$('#soirSupprimer').onclick = async () => {
+  if (!soirSel) return;
+  await window.liaison.soireeSupprimer(soirSel);
+  soirSel = null;
+  await soirCharger(false);
+};
+$('#soirActiver').onclick = async () => {
+  if (!soirSel) return;
+  const actif = SOIR.active && SOIR.active.id === soirSel;
+  /* On enregistre avant d'activer : sinon une modification saisie mais
+     non validee serait perdue au moment ou elle compte le plus. */
+  if (!actif) await window.liaison.soireeModifier(soirSel, soirPatch());
+  if (actif) await window.liaison.soireeDesactiver();
+  else await window.liaison.soireeActiver(soirSel);
+  await soirCharger(true);
+  /* Le reste de la fenetre suit : le pack et les listes ont change. */
+  try {
+    C = await window.liaison.getConfig();
+    const cut = String(C.config.pack || 'fr-club').indexOf('-');
+    $('#country').value = String(C.config.pack || 'fr-club').slice(0, cut);
+    $('#event').value = String(C.config.pack || 'fr-club').slice(cut + 1);
+    $('#sessName').value = C.config.sessionName || '';
+    await renderPack();
+  } catch (e) {}
+};
+soirCharger(false);
+
 $('#reScan').onclick = () => relire(false);
 $('#reScanTout').onclick = () => relire(true);
 window.liaison.on('progress', p => {
@@ -776,7 +1049,7 @@ async function renderTracklist() {
   const tb = $('#tlTable').querySelector('tbody');
   if (!id) { tb.innerHTML = '<tr><td colspan="4" style="color:#8A9099">Aucune soiree enregistree pour l instant.</td></tr>'; return; }
   const t = await window.liaison.tracklist(id);
-  if (!t || !t.lignes.length) { tb.innerHTML = '<tr><td colspan="4" style="color:#8A9099">Cette soiree ne contient aucun morceau.</td></tr>'; return; }
+  if (!t || !t.lignes || !t.lignes.length) { tb.innerHTML = '<tr><td colspan="4" style="color:#8A9099">Cette soiree ne contient aucun morceau.</td></tr>'; return; }
   tb.innerHTML = t.lignes.map(l =>
     '<tr><td class="mono">' + esc(l.heure) + '</td>' +
     '<td>' + esc(l.title) + ' <span class="pill">' + esc(l.artist) + '</span></td>' +
@@ -790,6 +1063,95 @@ async function renderTracklist() {
 }
 
 $('#tlSel').onchange = renderTracklist;
+/* ------------------------------------------------------------
+   Le debrief. Une barre par heure, et des phrases.
+   ------------------------------------------------------------ */
+function dbBarres(courbe) {
+  if (!courbe || !courbe.length) return '';
+  const max = 10;
+  return '<div style="display:flex;align-items:flex-end;gap:4px;height:110px;' +
+    'border-bottom:1.5px solid var(--ink);padding-bottom:2px">' +
+    courbe.map(c => {
+      const h = Math.max(4, Math.round(c.e / max * 100));
+      return '<div title="' + c.h + ' h — energie ' + c.e + '" style="flex:1;display:flex;' +
+        'flex-direction:column;justify-content:flex-end;height:100%">' +
+        '<span style="display:block;font-family:var(--m);font-size:9px;color:var(--ink3);' +
+        'text-align:center;margin-bottom:3px">' + c.e + '</span>' +
+        '<span style="display:block;background:var(--blue);border-radius:2px 2px 0 0;height:' + h + '%"></span>' +
+        '</div>';
+    }).join('') + '</div>' +
+    '<div style="display:flex;gap:4px;margin-top:4px">' +
+    courbe.map(c => '<span style="flex:1;text-align:center;font-family:var(--m);font-size:9.5px;' +
+      'color:var(--ink3)">' + c.h + ' h</span>').join('') + '</div>';
+}
+
+let dbDernier = null;
+async function dbAfficher() {
+  const id = $('#dbSel').value;
+  $('#dbTexte').textContent = 'Calcul…';
+  let r;
+  try { r = await window.liaison.setDebrief(id ? Number(id) : null); }
+  catch (e) { $('#dbTexte').textContent = 'Impossible de lire cette soiree.'; return; }
+  if (!r) {
+    $('#dbTexte').innerHTML = 'Aucune soiree enregistree pour l\'instant. ' +
+      'Le debrief se remplit tout seul pendant que tu joues.';
+    $('#dbCourbe').innerHTML = ''; $('#dbTop').innerHTML = '';
+    $('#dbPill').textContent = 'rien a montrer';
+    return;
+  }
+  if (r.locked) {
+    $('#dbTexte').innerHTML = esc(r.error) +
+      ' <a href="#" id="dbPlans" style="color:var(--blue)">Voir les formules</a>';
+    $('#dbCourbe').innerHTML = ''; $('#dbTop').innerHTML = '';
+    $('#dbPill').textContent = 'Resident';
+    $('#dbPill').className = 'pill';
+    const a = $('#dbPlans');
+    if (a) a.onclick = ev => { ev.preventDefault(); window.liaison.openLicence('plans'); };
+    return;
+  }
+  if (r.court) {
+    $('#dbTexte').innerHTML = 'Cette soiree ne compte que <b>' + r.morceaux + '</b> morceau(x). ' +
+      'Il en faut au moins trois pour que les chiffres veuillent dire quelque chose.';
+    $('#dbCourbe').innerHTML = ''; $('#dbTop').innerHTML = '';
+    return;
+  }
+  dbDernier = r;
+  const D = r.debrief;
+  $('#dbPill').textContent = r.offert ? 'offert, une fois' : D.morceaux + ' morceaux';
+  $('#dbPill').className = 'pill ok';
+  const intro = r.offert
+    ? '<div style="margin:0 0 14px;padding:11px 13px;border-left:2px solid var(--blue);' +
+      'font-size:13px;line-height:1.6;color:var(--ink2)">Le debrief fait partie de <b>Resident</b>. ' +
+      'Celui-ci t\'est offert — pour que tu voies ce que ca donne sur <b>ta</b> soiree, ' +
+      'et pas sur une capture d\'ecran.</div>'
+    : '';
+  $('#dbTexte').innerHTML = intro + r.phrases.map(p =>
+    '<div style="margin:0 0 13px"><b style="display:block;font-size:13px">' + esc(p.t) + '</b>' +
+    '<span style="color:var(--ink2)">' + esc(p.d) + '</span></div>').join('');
+  $('#dbCourbe').innerHTML =
+    '<label style="margin-bottom:8px;display:block">Energie reellement jouee, heure par heure</label>' +
+    dbBarres(D.courbe);
+  const m = (D.enchainements && D.enchainements.meilleurs) || [];
+  $('#dbTop').innerHTML = m.length
+    ? '<label>Tes trois meilleurs enchainements</label>' +
+      '<table style="margin-top:8px"><tbody>' + m.map(x =>
+        '<tr><td class="n">' + x.note + '</td><td>' + esc(x.de) + ' <span class="pill">' + esc(x.deA) + '</span>' +
+        '<br><span style="color:var(--ink3)">vers</span> ' + esc(x.vers) + ' <span class="pill">' + esc(x.versA) + '</span></td>' +
+        '<td class="mono">' + esc(x.cle) + '<br>' + x.tempo + ' %</td>' +
+        '<td class="mono">' + esc(x.quand) + '</td></tr>').join('') + '</tbody></table>'
+    : '';
+}
+$('#dbVoir').onclick = dbAfficher;
+$('#dbCopier').onclick = () => {
+  if (!dbDernier || !dbDernier.phrases) return;
+  const D = dbDernier.debrief;
+  const txt = 'Liaison — debrief : ' + D.nom +
+    dbDernier.phrases.map(p => '\n\n' + p.t + '\n' + p.d).join('');
+  window.liaison.copy(txt);
+  $('#dbCopier').textContent = 'Copie';
+  setTimeout(() => $('#dbCopier').textContent = 'Copier', 1400);
+};
+
 $('#tlCopy').onclick = async () => {
   const r = await window.liaison.copySet(Number($('#tlSel').value));
   $('#tlState').textContent = r && r.ok ? 'Tracklist copiee — colle-la ou tu veux.' : 'Rien a copier.';
@@ -851,6 +1213,7 @@ window.liaison.on('app', () => renderApps());
     : '<option value="">Aucun set enregistre</option>';
   $('#setSel').innerHTML = opts;
   $('#tlSel').innerHTML = opts;
+  $('#dbSel').innerHTML = opts;
   renderTracklist();
 })();
 
@@ -960,6 +1323,10 @@ window.liaison.clientGet().then(st => {
   /* Chaque rubrique dit : ce que c'est, a quoi ca sert, et ce que
      tu as a faire. Trois lignes, pas une notice. */
   var COURTS = [
+    [/ton debrief/i,                   'Le debrief', 'Ce que tu viens de jouer',
+      'Personne ne donne jamais de retour a un DJ sur ce qu\'il vient de jouer. Liaison a note l\'heure, la duree reelle, le tempo, la tonalite, l\'energie et les genres de chaque morceau : il te rend la courbe reellement jouee, tes trois meilleurs enchainements et la part de chaque famille de genres. <b>Des mesures, aucun conseil.</b>'],
+    [/tes soirees/i,                   'Tes soirees', 'Une fiche par date',
+      'Une soiree se prepare la semaine d\'avant, pas a 21 h dans une cabine mal eclairee. Une fiche retient le lieu, la duree, les genres voulus, les titres imposes et ceux qui sont refuses. <b>Tu l\'actives en arrivant et tout bascule d\'un coup</b> — contexte, listes du client, et le QR des invites, propre a cette soiree.'],
     [/sante de ta bibliotheque|^\s*\d*\s*[—-]?\s*sante/i, 'Sante', 'Le controle qualite',
       'Sur des milliers de morceaux accumules pendant des annees, il y a forcement des tempos faux, des tonalites qui ne collent pas et des fichiers disparus. Liaison compare ce que dit ta base a ce qu\'il mesure lui-meme, et te montre l\'ecart. <b>Il ne corrige rien tout seul</b> : c\'est ta bibliotheque.'],
     [/bibliotheque$|ta bibliotheque/i, 'Bibliotheque', 'D\'ou viennent tes morceaux',
