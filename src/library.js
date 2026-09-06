@@ -401,13 +401,50 @@ function hash53(s) {
   return (a % 2097152) * 4294967296 + b;
 }
 
-/* Le chemin, mis a plat : meme fichier vu par deux logiciels
-   (l'un avec file://, l'autre sans, l'un en majuscules) doit
-   donner le meme identifiant. */
+/* ============================================================
+   Le chemin, mis a plat.
+
+   Le meme fichier est nomme differemment par chaque logiciel. Pour
+   savoir que « le fichier que rekordbox tient ouvert » est « ce
+   morceau de la bibliotheque », il faut ramener les deux ecritures
+   a une seule. Quatre pieges, tous rencontres pour de vrai :
+
+   1. LES ACCENTS. C'est le plus grave, et le plus invisible.
+      macOS ecrit les noms de fichiers en Unicode DECOMPOSE : le
+      « é » de « Café » y est stocke comme « e » suivi d'un accent
+      combinant. rekordbox et iTunes, eux, stockent la forme
+      COMPOSEE, un seul caractere. Les deux s'affichent « Café » a
+      l'ecran et sont differents octet pour octet.
+
+      Consequence : tout morceau dont le chemin porte un accent
+      etait introuvable. Sur une bibliotheque francaise — Café,
+      Éric, Noël, Christine and the Queens — et plus encore sur une
+      bibliotheque rangee par iTunes, qui construit les dossiers a
+      partir des noms d'artistes, ca represente une part enorme du
+      catalogue. Le widget restait « en chargement » sans jamais
+      dire pourquoi.
+
+      On ramene donc tout a la forme composee.
+
+   2. LE VOLUME SYSTEME. Depuis Catalina, le disque de demarrage
+      est coupe en deux et certains outils rapportent le chemin
+      complet : /System/Volumes/Data/Users/... au lieu de /Users/...
+
+   3. /private. /private/var et /var designent le meme dossier.
+
+   4. file://, les antislashs, le « /: » de rekordbox, la casse.
+      Ceux-la etaient deja traites.
+   ============================================================ */
 function cleChemin(p) {
   let x = String(p || '').replace(/\\/g, '/');
   try { if (x.indexOf('file://') === 0) x = decodeURIComponent(x.replace(/^file:\/\/(localhost)?/, '')); } catch (e) {}
-  return x.replace(/\/:/g, '/').replace(/\/+/g, '/').toLowerCase();
+  x = x.replace(/\/:/g, '/').replace(/\/+/g, '/');
+  /* La forme composee, avant la mise en minuscules : c'est ce qui
+     reconcilie le disque et les bases des logiciels de mix. */
+  try { x = x.normalize('NFC'); } catch (e) {}
+  x = x.replace(/^\/System\/Volumes\/Data(?=\/)/i, '');
+  x = x.replace(/^\/private(?=\/(var|tmp|etc)\/)/i, '');
+  return x.toLowerCase();
 }
 
 /* Un morceau est utilisable des que le logiciel de mix nous a

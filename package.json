@@ -9,7 +9,7 @@
     "dist:mac": "electron-builder --mac --arm64 --publish never",
     "dist:mac-intel": "electron-builder --mac --x64 --publish never",
     "dist:win": "electron-builder --win --x64 --publish never",
-    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-licence-ui.js"
+    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-chemins.js && node build/test-suggestions.js && node build/test-rekordbox.js && node build/test-essai.js && node build/test-licence-ui.js"
   },
   "author": "Liaison",
   "license": "UNLICENSED",

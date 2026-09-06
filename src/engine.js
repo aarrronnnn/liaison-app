@@ -40,6 +40,18 @@ function tempoScore(a, b) {
 const energyScore = (cur, e, arc) =>
   Math.max(4, 100 - Math.abs(e - (arc === 'up' ? cur + 1.4 : arc === 'down' ? cur - 1.6 : cur + 0.2)) * 16);
 
+/* Ce que vaut un morceau qu'on n'a pas encore ecoute.
+
+   Volontairement bas, et pas neutre : sur ces deux axes, ne pas
+   savoir doit couter. Un titre non mesure ne doit sortir que s'il
+   n'y a rien de mieux — jamais devant un titre mesure qui colle.
+   EN_NEUTRE, lui, sert quand le morceau EN COURS n'est pas mesure :
+   la comparaison ne veut alors rien dire pour personne, on met tout
+   le monde a la meme valeur au lieu de tirer au sort. */
+const EN_INCONNU = 38;
+const TI_INCONNU = 34;
+const EN_NEUTRE  = 55;
+
 const timbreScore = (a, b) => {
   if (!a || !b) return 60;
   return Math.max(10, 100 - Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * 11);
@@ -247,7 +259,11 @@ function suggest(cur, library, opt) {
      qui ne ressort pas n'est pas une reservation. */
   const epingle = opt.epingle || null;
 
-  return library
+  /* Le morceau en cours est-il mesure ? S'il ne l'est pas, comparer
+     son energie a celle des autres n'a aucun sens. */
+  const curMesure = cur.energy != null;
+
+  const candidats = library
     .filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
       /* Le morceau epingle traverse le crible de tempo. Sans cette
          exception, une cloture reservee a 118 BPM alors que le set
@@ -257,10 +273,46 @@ function suggest(cur, library, opt) {
          affiche — au DJ de decider s'il la cale ou s'il coupe. */
       (t.bpm > 0) && (t.id === epingle || passeLeCrible(cur.bpm, t.bpm, opt.marge)))
     .map(t => {
+      /* meme test que dans rescue() : analyse faite ET energie posee */
+      t.mesure = !!t.analyzed && t.energy != null;
       const h = harmScore(cur.key, t.key);
       const tp = tempoScore(cur.bpm, t.bpm);
-      const en = energyScore(cur.energy == null ? 5 : cur.energy, t.energy == null ? 5 : t.energy, arc);
-      const ti = timbreScore(cur.timbre, t.timbre);
+      /* ------------------------------------------------------------
+         « Inconnu » n'est pas « parfait ».
+
+         Ces deux lignes remplacaient une mesure absente par une
+         valeur neutre : energie 5 contre energie 5, et timbre nul
+         note 60. Neutre voulait dire BON. Le calcul :
+
+           energyScore(5, 5, 'up')  =  77,6
+           timbreScore(null, null)  =  60
+
+         Or l'energie et le timbre pesent 29 % de la note. Un morceau
+         jamais analyse encaissait donc 29 % de points GRATUITS,
+         pendant qu'un morceau reellement mesure, mais dont l'energie
+         collait moins bien, tombait a 74. L'inconnu battait le connu.
+
+         C'est ce qui a produit une nappe d'ambiance derriere un
+         morceau de club : elle passait le crible de tempo grace au
+         BPM invente par rekordbox, ne perdait rien sur l'harmonie
+         faute de tonalite, et raflait les 29 % restants sans avoir
+         jamais ete ecoutee.
+
+         Le defaut existait avant, mais il ne se voyait pas : la
+         bibliotheque ecartait les morceaux non mesures. Depuis
+         qu'ils y entrent — pour que l'analyse de fond puisse les
+         traiter — il fallait apprendre au moteur a s'en mefier.
+
+         Un morceau non mesure vaut donc BAS sur ces deux axes : il
+         ne sort que s'il n'y a rien de mieux. Et quand le morceau EN
+         COURS n'est pas mesure non plus, la comparaison d'energie ne
+         veut plus rien dire pour personne : on neutralise l'axe pour
+         tout le monde au lieu de punir au hasard.
+         ------------------------------------------------------------ */
+      const en = curMesure
+        ? (t.mesure ? energyScore(cur.energy, t.energy, arc) : EN_INCONNU)
+        : EN_NEUTRE;
+      const ti = (cur.timbre && t.timbre) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
       const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend) / W;
@@ -300,8 +352,25 @@ function suggest(cur, library, opt) {
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
                transition: transitionOf(cur, t, tp, h) };
     })
-    .sort((a, b) => b.total - a.total)
-    .slice(0, limit);
+    .sort((a, b) => b.total - a.total);
+
+  /* ------------------------------------------------------------
+     Le mesure passe devant, quand il y en a assez.
+
+     Baisser la note d'un morceau inconnu ne suffit pas : sur une
+     bibliotheque a peine importee, ils sont des milliers et
+     finissent par remplir la liste a force de nombre. Tant qu'il
+     existe de quoi remplir la liste avec des morceaux reellement
+     ecoutes, on ne propose qu'eux.
+
+     Le seuil est le double de la liste, pas son exact compte : il
+     faut de quoi choisir, pas seulement de quoi remplir. En
+     dessous, on melange — sinon l'application ne proposerait rien
+     pendant la premiere demi-heure d'analyse, ce qui serait pire.
+     ------------------------------------------------------------ */
+  const mesures = candidats.filter(c => c.track.mesure);
+  const retenus = mesures.length >= limit * 2 ? mesures : candidats;
+  return retenus.slice(0, limit);
 }
 
 

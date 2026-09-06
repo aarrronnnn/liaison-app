@@ -225,10 +225,25 @@ class License {
      Les deux corrections sont simples et n'empechent personne
      d'utiliser le produit normalement :
 
-     — un second temoin est ecrit A COTE, sous un nom discret, et
-       on retient TOUJOURS la date la plus ancienne des deux. Il
-       faut donc trouver et effacer les deux fichiers, et il n'y
-       a rien qui les relie ;
+     — des temoins sont ecrits a plusieurs endroits, et on retient
+       TOUJOURS la date la plus ancienne de tous. Il en existe
+       trois : license.json, un fichier voisin, et un troisieme
+       DANS LE DOSSIER PERSONNEL, hors du dossier de l'app.
+
+       Ce troisieme est celui qui compte. Les deux premiers vivent
+       cote a cote : un seul « rm -rf » du dossier de donnees les
+       emporte ensemble, et l'essai repartait a zero. Le troisieme
+       survit a l'effacement du dossier de l'application, et il
+       survit aussi a une desinstallation complete.
+
+       Il est nomme en clair — ~/.liaison/essai — et decrit dans la
+       politique de confidentialite. On ne cache rien : on rend
+       simplement la remise a zero volontaire au lieu d'accidentelle.
+
+       Il porte l'empreinte de la machine qui l'a ecrit. Un temoin
+       venu d'un AUTRE ordinateur — restauration Time Machine, copie
+       du dossier personnel — est ignore : quelqu'un qui change de
+       machine a droit a son essai, ce n'est pas lui qu'on vise ;
 
      — on garde la date la plus haute jamais vue. Si l'horloge
        recule, on continue de compter a partir de cette date. Une
@@ -240,30 +255,64 @@ class License {
      coutent trente secondes a ecrire et arretent l'immense
      majorite des abus, qui sont opportunistes.
      ============================================================ */
-  _temoinFichier() {
-    return path.join(path.dirname(this.file), '.liaison-init');
-  }
-  _lireTemoin() {
+  /* Les emplacements des temoins, du plus fragile au plus durable.
+     Le second est hors du dossier de l'application : c'est lui qui
+     survit a « je jette le dossier et je recommence ». */
+  _temoinFichiers() {
+    const out = [path.join(path.dirname(this.file), '.liaison-init')];
     try {
-      const j = JSON.parse(Buffer.from(fs.readFileSync(this._temoinFichier(), 'utf8'), 'base64').toString('utf8'));
-      return (j && typeof j.t === 'number') ? j : null;
-    } catch (e) { return null; }
+      const maison = os.homedir();
+      if (maison) out.push(path.join(maison, '.liaison', 'essai'));
+    } catch (e) { /* pas de dossier personnel lisible : on fait sans */ }
+    return out;
   }
+
+  /** Tous les temoins lisibles, ceux d'une autre machine ecartes. */
+  _lireTemoins() {
+    const out = [];
+    for (const f of this._temoinFichiers()) {
+      try {
+        const j = JSON.parse(Buffer.from(fs.readFileSync(f, 'utf8'), 'base64').toString('utf8'));
+        if (!j || typeof j.t !== 'number') continue;
+        /* `d` absent = temoin d'avant cette version : on l'accepte,
+           sinon on redonnerait un essai neuf a tous les utilisateurs
+           en cours au moment de la mise a jour. */
+        if (j.d && j.d !== this.device) continue;
+        out.push(j);
+      } catch (e) { /* absent ou illisible : on passe */ }
+    }
+    return out;
+  }
+
+  /** Le plus ancien debut connu, tous temoins confondus. */
+  _debutTemoin() {
+    const t = this._lireTemoins().map(x => x.t).filter(x => x > 0);
+    return t.length ? Math.min.apply(null, t) : null;
+  }
+  /** La date la plus haute jamais vue, tous temoins confondus. */
+  _vuTemoin() {
+    const v = this._lireTemoins().map(x => x.v || 0);
+    return v.length ? Math.max.apply(null, v) : 0;
+  }
+
   _ecrireTemoin(o) {
-    try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
-      fs.writeFileSync(this._temoinFichier(), Buffer.from(JSON.stringify(o), 'utf8').toString('base64'));
-    } catch (e) {}
+    const avec = Object.assign({ d: this.device }, o);
+    for (const f of this._temoinFichiers()) {
+      try {
+        fs.mkdirSync(path.dirname(f), { recursive: true });
+        fs.writeFileSync(f, Buffer.from(JSON.stringify(avec), 'utf8').toString('base64'));
+      } catch (e) { /* un emplacement en lecture seule ne doit rien casser */ }
+    }
   }
 
   /** L'heure, corrigee des reculs d'horloge. */
   maintenant() {
     const n = Date.now();
-    const vu = Math.max(this.state.vuMax || 0, (this._lireTemoin() || {}).v || 0);
+    const vu = Math.max(this.state.vuMax || 0, this._vuTemoin());
     if (n > vu) {
       this.state.vuMax = n;
-      const t = this._lireTemoin() || {};
-      if (n - (t.v || 0) > 3600000) this._ecrireTemoin({ t: t.t || n, v: n });
+      const debut = this._debutTemoin();
+      if (n - vu > 3600000) this._ecrireTemoin({ t: debut || n, v: n });
       return n;
     }
     /* l'horloge a recule : on s'en tient a ce qu'on a deja vu */
@@ -273,17 +322,19 @@ class License {
   /** Demarre l'essai au tout premier lancement. */
   ensureTrial() {
     const n = this.maintenant();
-    const t = this._lireTemoin();
-    /* la date la plus ancienne des deux temoins fait foi */
-    const debuts = [this.state.trialStart, t && t.t].filter(x => typeof x === 'number' && x > 0);
+    const vuT = this._debutTemoin();
+    /* la date la plus ancienne de tous les temoins fait foi */
+    const debuts = [this.state.trialStart, vuT].filter(x => typeof x === 'number' && x > 0);
     const debut = debuts.length ? Math.min.apply(null, debuts) : n;
     if (this.state.trialStart !== debut) { this.state.trialStart = debut; this._save(); }
-    if (!t || t.t !== debut) this._ecrireTemoin({ t: debut, v: Math.max(n, (t && t.v) || 0) });
+    /* On reecrit systematiquement : c'est ce qui repose le temoin
+       manquant quand un seul des trois a ete efface. */
+    this._ecrireTemoin({ t: debut, v: Math.max(n, this._vuTemoin()) });
     return this.trialLeft();
   }
   trialLeft() {
-    const t = this._lireTemoin();
-    const debuts = [this.state.trialStart, t && t.t].filter(x => typeof x === 'number' && x > 0);
+    const vuT = this._debutTemoin();
+    const debuts = [this.state.trialStart, vuT].filter(x => typeof x === 'number' && x > 0);
     if (!debuts.length) return TRIAL_DAYS;
     const debut = Math.min.apply(null, debuts);
     const used = (this.maintenant() - debut) / 86400000;
