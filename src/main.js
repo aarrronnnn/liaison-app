@@ -1635,10 +1635,10 @@ let derniereMaj = null;
 /* ============================================================
    Les deux moments qui decident si quelqu'un reste.
 
-   Un essai de quatorze jours qui s'arrete sans rien dire est un
-   client perdu en silence : l'application se met a proposer trois
-   titres au lieu de cinq, les fiches soirees disparaissent, et le
-   DJ en conclut que « ca marche plus ». On le lui dit donc, deux
+   Un essai de sept jours qui s'arrete sans rien dire est un client
+   perdu en silence : depuis qu'il n'y a plus de formule gratuite,
+   l'application ne se degrade pas, elle se VERROUILLE — et le DJ en
+   conclut que « ca marche plus ». On le lui dit donc, deux
    fois, et jamais plus.
 
    J-3 : un mot dans le widget. Pas une fenetre, pas un compte a

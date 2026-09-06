@@ -213,7 +213,7 @@ class License {
 
      1. EFFACER LE FICHIER. trialStart vivait uniquement dans
         license.json, dans un dossier que l'utilisateur peut
-        ouvrir. Le supprimer redonnait quatorze jours, autant de
+        ouvrir. Le supprimer redonnait sept jours, autant de
         fois qu'on veut.
 
      2. RECULER L'HORLOGE. Toutes les dates — fin d'essai, date

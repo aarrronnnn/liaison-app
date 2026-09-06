@@ -99,7 +99,7 @@ function debriefAutorise(e) {
    d'horloge : on compte des jours alors que la valeur se mesure en
    soirees.
 
-   D'ou une prolongation, UNE seule, de quatorze jours, accordee
+   D'ou une prolongation, UNE seule, de sept jours, accordee
    automatiquement a qui arrive au bout sans avoir joue au moins deux
    soirees. Ce n'est pas une faveur commerciale : c'est rendre a l'essai
    ce qu'il promettait.
