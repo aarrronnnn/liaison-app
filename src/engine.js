@@ -217,11 +217,33 @@ function suggest(cur, library, opt) {
   const trends = opt.trends || new Map();
   const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
   const limit = opt.limit || 5;
-  /* Sans tempo sur le morceau en cours, tout le calcul part en NaN :
-     tempoScore divise par cur.bpm. Ca n'arrivait pas tant que la
-     bibliotheque ecartait les morceaux sans tempo — ils y entrent
-     maintenant, en attendant d'etre mesures. */
-  if (!cur || !(cur.bpm > 0)) return [];
+  if (!cur) return [];
+  /* ------------------------------------------------------------
+     Le morceau en cours n'a pas de tempo. Ce n'est pas une raison
+     de ne rien proposer.
+
+     J'avais mis ici « pas de tempo, on renvoie une liste vide »,
+     pour eviter que tempoScore ne divise par zero. C'etait une
+     rustine, et elle a produit le pire symptome possible : un DJ
+     avec vingt-deux mille morceaux dans sa bibliotheque, qui
+     charge un titre dont le tag de tempo manque, et a qui
+     l'application repond « rien ne se cale ». Rien de plus faux,
+     et rien de plus decourageant.
+
+     Or l'absence de tempo n'empeche pas de proposer : elle empeche
+     seulement de CALER. La tonalite, le genre, l'energie, la
+     notoriete disent encore beaucoup. On neutralise donc l'axe du
+     tempo — meme note pour tout le monde, il ne departage plus —
+     et on classe sur le reste, en le disant clairement.
+
+     Le tempo du morceau en cours finira par arriver : l'analyse de
+     fond le mesure. En attendant, on aide.
+     ------------------------------------------------------------ */
+  const sansTempo = !(cur.bpm > 0);
+  /* Une note de tempo constante : presente pour que le reste du
+     calcul et l'affichage fonctionnent, neutre pour qu'elle ne
+     classe personne. */
+  const TEMPO_MUET = { s: 50, pct: null, ratio: 1, delta: 0, muet: true };
   /* ------------------------------------------------------------
      Les poids, et pourquoi ils ne sont plus fixes.
 
@@ -261,7 +283,16 @@ function suggest(cur, library, opt) {
 
   /* Le morceau en cours est-il mesure ? S'il ne l'est pas, comparer
      son energie a celle des autres n'a aucun sens. */
-  const curMesure = cur.energy != null;
+  const curMesure = !!cur.analyzed;
+
+  /* Combien de morceaux de la bibliotheque portent un tempo ? S'ils
+     sont trop peu nombreux pour remplir une liste, on ouvre la porte
+     a ceux qui n'en ont pas encore : mieux vaut une proposition non
+     calee qu'un ecran vide. */
+  let avecTempo = 0;
+  for (let i = 0; i < library.length && avecTempo < limit * 4; i++)
+    if (library[i].bpm > 0) avecTempo++;
+  const accepterSansTempo = avecTempo < limit * 4;
 
   const candidats = library
     .filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
@@ -271,12 +302,47 @@ function suggest(cur, library, opt) {
          on la reservait toute la soiree pour qu'elle ne sorte
          jamais. Elle apparait donc avec son vrai ecart de tempo
          affiche — au DJ de decider s'il la cale ou s'il coupe. */
-      (t.bpm > 0) && (t.id === epingle || passeLeCrible(cur.bpm, t.bpm, opt.marge)))
+      /* ------------------------------------------------------------
+         Le candidat sans tempo : exclu, alors qu'on venait de
+         l'accepter dans la bibliotheque.
+
+         « t.bpm > 0 » ecartait en dur tout morceau au tag de tempo
+         absent — exactement ceux que finalize() laisse desormais
+         entrer pour que l'analyse de fond les mesure. Pour un DJ
+         qui joue un dossier de MP3 achetes sans tag TBPM, AUCUN
+         morceau ne passait : « 22 000 titres » d'un cote, « rien ne
+         se cale » de l'autre.
+
+         On les accepte donc en dernier recours, quand ceux qui ont
+         un tempo ne suffisent pas a remplir la liste. Ils ne
+         volent la place de personne : ils comblent un vide.
+         ------------------------------------------------------------ */
+      (t.bpm > 0
+        ? (sansTempo || t.id === epingle || passeLeCrible(cur.bpm, t.bpm, opt.marge))
+        : accepterSansTempo))
     .map(t => {
-      /* meme test que dans rescue() : analyse faite ET energie posee */
-      t.mesure = !!t.analyzed && t.energy != null;
+      /* ------------------------------------------------------------
+         Un seul critere : l'analyse a-t-elle tourne ?
+
+         Le test disait « analyse faite ET energie posee ». Il ne
+         valait rien : finalize() pose une energie de 5 et un timbre
+         [5,5,5] sur TOUS les morceaux, analyses ou non, pour que le
+         widget puisse s'ouvrir en trois secondes. Rien n'est donc
+         jamais nul, et la moitie du test etait toujours vraie.
+
+         Pire : deux morceaux non analyses portent le meme timbre
+         [5,5,5], et timbreScore d'un vecteur avec lui-meme vaut
+         100 sur 100. Le morceau jamais ecoute ne recevait pas 60
+         comme je le croyais, il recevait le maximum.
+
+         C'est ce que mon premier correctif avait manque, parce que
+         mon essai fabriquait des morceaux a la main avec timbre a
+         null au lieu de les faire passer par finalize(). La
+         correction marchait sur l'etabli et pas en cabine.
+         ------------------------------------------------------------ */
+      t.mesure = !!t.analyzed;
       const h = harmScore(cur.key, t.key);
-      const tp = tempoScore(cur.bpm, t.bpm);
+      const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm);
       /* ------------------------------------------------------------
          « Inconnu » n'est pas « parfait ».
 
@@ -312,7 +378,7 @@ function suggest(cur, library, opt) {
       const en = curMesure
         ? (t.mesure ? energyScore(cur.energy, t.energy, arc) : EN_INCONNU)
         : EN_NEUTRE;
-      const ti = (cur.timbre && t.timbre) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
+      const ti = (curMesure && t.mesure) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
       const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend) / W;
@@ -388,8 +454,22 @@ function suggest(cur, library, opt) {
    ============================================================ */
 const mmss = t => {
   if (!isFinite(t) || t < 0) t = 0;
-  const m = Math.floor(t / 60), s = Math.round(t % 60);
-  return m + ':' + (s < 10 ? '0' : '') + (s === 60 ? 0 : s);
+  /* ------------------------------------------------------------
+     La minute qu'on oubliait de reporter.
+
+     Les secondes etaient arrondies APRES avoir calcule les minutes.
+     A 179,7 s, la minute vaut 2 et les secondes arrondissent a 60 :
+     le code remettait les secondes a zero sans avancer la minute et
+     affichait « 2:0 » — pour un point situe a 3:00.
+
+     Un repere de mix faux d'une MINUTE, et il tombait environ une
+     fois sur quatre. Le DJ lance sa platine B trop tot, en direct.
+
+     On arrondit donc d'abord, on decoupe ensuite.
+     ------------------------------------------------------------ */
+  const total = Math.round(t);
+  const m = Math.floor(total / 60), s = total % 60;
+  return m + ':' + (s < 10 ? '0' : '') + s;
 };
 
 function mixPlan(cur, next, curS, nextS, tp) {
@@ -465,7 +545,11 @@ function rescue(cur, library, opt) {
   const structures = opt.structures || new Map();
   const wanted = opt.wanted || new Set();
   const limit = opt.limit || 3;
-  if (!cur || !(cur.bpm > 0)) return [];
+  if (!cur) return [];
+  /* Meme raison que dans suggest() : sans tempo on ne cale pas, mais
+     on propose quand meme. Un bouton de sauvetage qui repond « rien »
+     est exactement l'inverse de ce pour quoi il existe. */
+  const sansTempo = !(cur.bpm > 0);
 
   /* Le sauvetage ignore la courbe de soiree, mais pas la memoire :
      remonter la piste avec le meme artiste qu'il y a trois titres
@@ -476,9 +560,15 @@ function rescue(cur, library, opt) {
 
   const out = [];
   for (const t of library) {
-    if (t.id === cur.id || banned.has(keyOf(t)) || !(t.bpm > 0)) continue;
-    const tp = tempoScore(cur.bpm, t.bpm);
-    if (tp.s < 52) continue;                     /* injouable maintenant : on passe */
+    /* Meme raison que dans suggest() : un morceau sans tag de tempo
+       n'est pas un mauvais morceau, c'est un morceau pas encore
+       mesure. Le bouton de sauvetage ne peut pas se permettre de
+       l'ignorer — c'est souvent le seul vivier disponible. */
+    if (t.id === cur.id || banned.has(keyOf(t))) continue;
+    if (!(t.bpm > 0) && !sansTempo) continue;
+    const tp = sansTempo ? { s: 50, pct: null, ratio: 1, delta: 0, muet: true }
+                         : tempoScore(cur.bpm, t.bpm);
+    if (!sansTempo && tp.s < 52) continue;       /* injouable maintenant : on passe */
 
     const h = harmScore(cur.key, t.key);
 
@@ -502,7 +592,7 @@ function rescue(cur, library, opt) {
        notoriete dit deja s'il remonte une salle, et c'est meme le
        critere principal d'un sauvetage.
        ------------------------------------------------------------ */
-    const mesuree = !!t.analyzed && t.energy != null;
+    const mesuree = !!t.analyzed;   /* finalize() pose une energie sur tout : seul analyzed fait foi */
     const e = t.energy == null ? 5 : t.energy;
     if (mesuree && e < 5.4) continue;            /* mesure basse : on l'ecarte */
     if (!mesuree && (t.pop == null ? 40 : t.pop) < 30) continue;

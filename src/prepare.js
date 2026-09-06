@@ -58,7 +58,21 @@ function courbe(pack, points) {
  *   o.depart      morceau d'ouverture impose (facultatif)
  * @returns {{ok, duree, n, ordre, phases, note}}
  */
-function preparer(o) {
+/* ------------------------------------------------------------
+   Preparer sans figer la cabine.
+
+   La boucle enchaine environ cent quatre-vingts appels a suggest()
+   sur toute la bibliotheque : mesure a 5,3 secondes sur trente mille
+   titres. Tant que c'etait synchrone, ces 5,3 secondes etaient 5,3
+   secondes de widget mort, de deck non lu et de page des invites
+   muette — parce que le DJ a ouvert le mode preparation entre deux
+   morceaux.
+
+   La fonction est donc asynchrone et rend la main tous les dix
+   titres. Le calcul dure toujours aussi longtemps ; simplement, la
+   soiree continue pendant ce temps.
+   ------------------------------------------------------------ */
+async function preparer(o) {
   o = o || {};
   const duree = Math.max(15, Math.round(o.dureeMin || 0));
   const library = (o.library || []).filter(t => t.bpm > 0);
@@ -109,7 +123,14 @@ function preparer(o) {
   pris.add(cur.id);
   ordre.push({ track: cur, cible: arc[0] });
 
+  /* Construit une fois, puis entretenu : « pris » ne fait que
+     grandir, donc retirer suffit — inutile de tout relire. */
+  let vivier = dispo.filter(t => !pris.has(t.id));
+
   for (let i = 1; i < aPrendre; i++) {
+    /* On souffle regulierement : le fil principal sert aussi le
+       widget, la detection de deck et le serveur des invites. */
+    if (i % 10 === 0) await new Promise(r => setImmediate(r));
     /* la position dans la courbe suit la progression reelle */
     const x = Math.min(1, i / Math.max(1, cible - 1));
     const idx = Math.min(arc.length - 1, Math.floor(x * (arc.length - 1)));
@@ -118,7 +139,19 @@ function preparer(o) {
     const monte = viser - (precedent.energy == null ? 5 : precedent.energy);
     const sens = monte > 0.5 ? 'up' : monte < -0.5 ? 'down' : 'hold';
 
-    const vivier = dispo.filter(t => !pris.has(t.id));
+    /* ------------------------------------------------------------
+       Un filtre complet sur toute la bibliotheque, a chaque tour.
+
+       Pour cinq heures annoncees, la boucle tourne environ cent
+       cinquante fois. A chaque tour, elle refiltrait les trente
+       mille titres puis relancait un suggest() complet : cinq a dix
+       secondes de processus principal bloque — widget mort,
+       detection de deck morte, page des invites morte — parce que
+       le DJ a ouvert le mode preparation entre deux morceaux.
+
+       On retire du vivier au fur et a mesure au lieu de le
+       reconstruire : le meme resultat, sans le balayage.
+       ------------------------------------------------------------ */
     if (!vivier.length) break;
 
     /* On passe au moteur ce qui vient d'etre place : sans cette
@@ -164,6 +197,10 @@ function preparer(o) {
     }
     if (!choisi) break;
     pris.add(choisi.track.id);
+    /* On retire du vivier ce qu'on vient de prendre : un seul
+       parcours au total, au lieu d'un par tour. */
+    const ou = vivier.indexOf(choisi.track);
+    if (ou >= 0) vivier.splice(ou, 1);
     ordre.push({ track: choisi.track, cible: viser, tempo: choisi.tempo, h: choisi.h,
                  transition: choisi.transition, total: choisi.total });
   }

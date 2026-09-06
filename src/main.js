@@ -1,5 +1,5 @@
 'use strict';
-const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, screen, Tray, Menu, nativeImage, globalShortcut } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, clipboard, shell, screen, Tray, Menu, nativeImage, globalShortcut, powerMonitor } = require('electron');
 const path = require('path');
 const fs = require('fs');
 
@@ -407,8 +407,22 @@ function elaguerStructures() {
 }
 
 function rebuildCrates(sources) {
+  /* ------------------------------------------------------------
+     Une lecture ratee ne relache pas le filtre du DJ.
+
+     Sur exception, la liste etait vidée — puis, plus bas, le filtre
+     de crate etait remis a null ET SAUVEGARDE. Scenario reel : un DJ
+     de mariage coche « seulement Vin d'honneur » avant le service ;
+     un reimport automatique se declenche (Serato reecrit sa base des
+     qu'on ajoute un titre) ; la lecture rate une fois ; le filtre
+     saute sans un mot et le moteur repropose toute la bibliotheque
+     pendant le repas.
+
+     On garde donc l'ancienne liste quand la lecture echoue : mieux
+     vaut une liste un peu vieille qu'un filtre efface.
+     ------------------------------------------------------------ */
   try { crateList = cratesmod.readAll(sources || librarySources, library); }
-  catch (e) { crateList = []; }
+  catch (e) { return; }
   if (config.fCrate && !crateList.some(c => c.id === config.fCrate)) {
     config.fCrate = null;
     saveConfig();
@@ -566,7 +580,24 @@ function landingNow() {
 function currentDNA() {
   const pack = locales.byId(config.pack);
   const guestDNA = {};
-  for (const r of guests.top()) {
+  /* ------------------------------------------------------------
+     Vingt demandes suffisent a lire l'ADN de la salle.
+
+     guests.top() rend TOUTE la file — jusqu'a deux cents entrees —
+     alors que les deux autres appelants se limitent deja a vingt et
+     douze. Or currentDNA() tourne a chaque changement de morceau, a
+     chaque recalcul de fond (toutes les 4 s pendant l'analyse) ET a
+     chaque demande d'invite.
+
+     A 19 h, zero demande, tout est instantane. A 1 h du matin, cent
+     quatre-vingts titres demandes, donc cent quatre-vingts
+     rapprochements flous a chaque telephone qui valide. Le widget
+     rame « a partir du milieu de la soiree » — le symptome le plus
+     difficile a faire remonter par un testeur.
+
+     Les vingt plus demandes disent deja ce que la salle veut.
+     ------------------------------------------------------------ */
+  for (const r of guests.top().slice(0, 20)) {
     const m = engine.match(r.artist + ' ' + r.title, library, 0.5);
     if (m) for (const tag of m.track.tags || []) guestDNA[tag] = Math.min(100, (guestDNA[tag] || 40) + r.n * 8);
   }
@@ -649,7 +680,11 @@ function computeSuggestions(limit) {
       title: r.track.title, artist: r.track.artist, key: r.track.key, bpm: r.track.bpm,
       energy: r.track.energy, id: r.track.id, path: r.track.path,
       total: r.total, transition: r.transition.n, why: r.transition.d,
-      delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
+      /* Sans tempo sur le morceau en cours, cette division rendait NaN
+         et le widget affichait « -NaN % » sur les cinq lignes : la
+         correction du « rien ne se cale » redonnait des propositions
+         que le DJ jugeait cassees. null se tait proprement. */
+      delta: current.bpm > 0 ? Math.round((r.tempo.delta / current.bpm) * 1000) / 10 : null,
       trend: r.trend, h: Math.round(r.h), tempoS: Math.round(r.tempo.s),
       crowd: r.crowd, timbre: Math.round(r.timbreScore),
       plan: plan, introBars: st && st.ok ? st.introBars : null, client: !!r.client,
@@ -976,7 +1011,11 @@ ipcMain.handle('rescue', () => {
       key: r.track.key, bpm: r.track.bpm, energy: r.track.energy, path: r.track.path,
       total: r.total, why: r.why, introBars: r.introBars, client: !!r.client,
       transition: r.transition.n,
-      delta: Math.round((r.tempo.delta / current.bpm) * 1000) / 10,
+      /* Sans tempo sur le morceau en cours, cette division rendait NaN
+         et le widget affichait « -NaN % » sur les cinq lignes : la
+         correction du « rien ne se cale » redonnait des propositions
+         que le DJ jugeait cassees. null se tait proprement. */
+      delta: current.bpm > 0 ? Math.round((r.tempo.delta / current.bpm) * 1000) / 10 : null,
       plan: planFor(r.track),
       deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
@@ -1011,10 +1050,38 @@ ipcMain.handle('track:search', (e, q) => {
 
 ipcMain.handle('session:start', async (e, opts) => {
   if (!feat().sessions) return { error: 'Les sessions invites demandent une licence active.', locked: true };
+  /* ------------------------------------------------------------
+     Rouvrir le panneau ne doit ni changer le QR, ni vider la file.
+
+     Trois defauts se cumulaient ici, et le declencheur etait banal :
+     le DJ rouvre les reglages a 1 h du matin pour remontrer le QR.
+
+     1. Le jeton n'etait tire d'un tirage stable que si le DJ
+        utilisait les fiches de soiree. Sinon, chaque demarrage en
+        tirait un NEUF — et tous les QR deja affiches ou imprimes
+        repondaient « lien invalide ».
+     2. guests.clear() etait inconditionnel : demandes de la soiree,
+        classement des plus demandes et quotas par telephone,
+        effaces d'un coup. Le commentaire ne protegeait que la
+        tracklist ; la file, elle, sautait.
+     3. Aucun try : si le port etait deja pris, la promesse remontait
+        jusqu'a un bouton sans catch — aucun message, et le serveur
+        precedent venait d'etre arrete.
+
+     On fixe donc le jeton une fois pour toutes, on ne vide qu'a
+     l'ouverture d'une NOUVELLE soiree, et on attrape.
+     ------------------------------------------------------------ */
+  if (!config.sessionToken) {
+    config.sessionToken = require('crypto').randomBytes(9).toString('base64url');
+    saveConfig();
+  }
+  const nouvelleSoiree = !setlog || !setlog.current;
   guests.stop();
-  const url = await guests.start({
+  let url;
+  try {
+  url = await guests.start({
     port: config.guestPort, sessionName: config.sessionName,
-    token: config.sessionToken || undefined,
+    token: config.sessionToken,
     cooldown: config.guestCooldown, maxPerDevice: config.guestMax,
     getLibrary: () => library,
     onRequest: () => {
@@ -1023,6 +1090,11 @@ ipcMain.handle('session:start', async (e, opts) => {
       if (current) send('suggestions', computeSuggestions(config.suggestCount));
     }
   });
+  } catch (err) {
+    noterPanne('serveur des invites', err);
+    return { error: 'Le serveur des invites n\'a pas pu demarrer : ' + err.message +
+             '\nEssaie un autre port dans les reglages.' };
+  }
   /* On n'ouvre une soiree que s'il n'y en a pas deja une en cours.
      Sans ca, un DJ qui affiche le QR une heure apres le debut coupait
      sa tracklist en deux et remettait a zero « ce que j'ai deja joue
@@ -1034,7 +1106,9 @@ ipcMain.handle('session:start', async (e, opts) => {
      que l'app tourne — lancee au login, elle reste dans la barre de
      menus — donc les demandes du samedi et les quotas par telephone du
      samedi etaient encore la dimanche. */
-  guests.clear();
+  /* Uniquement quand la soiree commence vraiment. Rouvrir le panneau
+     en cours de set n'efface plus ce que les invites ont demande. */
+  if (nouvelleSoiree) guests.clear();
   majTendances();
   return { url: url, qr: await qrPNG(url), share: shareLinks(url, config.sessionName) };
 });
@@ -1196,7 +1270,7 @@ ipcMain.handle('health:reveal', (e, id) => {
    ============================================================ */
 let dernierePrepa = null;
 
-ipcMain.handle('prepare:build', (e, opt) => {
+ipcMain.handle('prepare:build', async (e, opt) => {
   opt = opt || {};
   const tam = currentFilter();
   /* ce qui a deja ete joue dans une soiree du meme nom */
@@ -1208,7 +1282,7 @@ ipcMain.handle('prepare:build', (e, opt) => {
       for (const p of s.played) eviter.add(p.id);
     }
   }
-  dernierePrepa = prepare.preparer({
+  dernierePrepa = await prepare.preparer({
     library: tam.tracks.tracks,
     dureeMin: Number(opt.minutes) || 0,
     pack: locales.byId(config.pack),
@@ -1462,13 +1536,45 @@ function wireWatcher() {
     if (config.autoLibrary && !library.length) await autoImport(app_.librarySource);
     refreshTray();
   });
+  /* ------------------------------------------------------------
+     Fermer un logiciel n'eteint pas Liaison si un autre tourne.
+
+     « open » n'est emis qu'a la transition absent -> present. Donc :
+     Serato ouvert depuis 19 h, le DJ lance rekordbox a 23 h (Liaison
+     bascule dessus), puis quitte rekordbox a 1 h. On eteignait tout —
+     et comme Serato n'a jamais disparu, il ne pouvait plus emettre
+     « open ». Plus aucune detection jusqu'a ce qu'on relance Serato
+     ou Liaison. En pleine soiree.
+
+     On reprend donc le premier logiciel encore ouvert, et on ne
+     s'eteint que s'il n'y en a plus aucun.
+     ------------------------------------------------------------ */
+  async function reprendre(app_) {
+    activeApp = app_;
+    send('app', { id: app_.id, label: app_.label, open: true });
+    if (config.autoWidget && widget) { widget.show(); widget.setAlwaysOnTop(true, 'screen-saver'); }
+    const kind = app_.nowSource;
+    config.source = kind; saveConfig();
+    const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
+    try { now.start(kind, opts); } catch (e) { noterPanne('reprise de source ' + kind, e); }
+    if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
+    refreshTray();
+  }
+
   watcher.on('close', app_ => {
     if (activeApp && activeApp.id === app_.id) {
-      activeApp = null;
       now.stop();
       stopRekordboxFichiers();
       current = null;
       send('app', { id: app_.id, label: app_.label, open: false });
+      const restants = watcher.current().filter(a => a.id !== app_.id);
+      if (restants.length) {
+        activeApp = null;
+        reprendre(restants[0]);
+        refreshTray();
+        return;
+      }
+      activeApp = null;
       if (config.autoWidget && widget) widget.hide();
     }
     refreshTray();
@@ -1808,15 +1914,71 @@ app.on('activate', () => {
   if (settings && !settings.isDestroyed()) settings.focus();
   else openSettings();
 });
+/* ============================================================
+   Le couvercle qu'on referme pendant le repas.
+
+   Rien ne reagissait a la veille. Trois choses en souffraient, et
+   toutes les trois se voient au pire moment — quand le DJ relance
+   la piste apres le service :
+
+   — la socket Pro DJ Link est liee une fois et jamais recreee. Si
+     la pile reseau perd son abonnement multicast au reveil, plus
+     aucun paquet n'arrive : Liaison repete « Pro DJ Link
+     silencieux » toutes les quinze secondes et conseille au DJ
+     d'aller verifier son materiel, alors que le materiel va bien ;
+
+   — l'adresse du reseau local peut changer (bascule wifi, autre
+     borne). Le QR affiche a l'entree pointe alors dans le vide, et
+     rien ne le signale, ni au DJ ni aux invites ;
+
+   — l'horloge a saute de plusieurs heures : tout ce qui compte du
+     temps doit etre relu, pas extrapole.
+
+   Au reveil, on relance donc proprement la source en cours et on
+   previent le widget que le lien des invites merite un coup d'oeil.
+   ============================================================ */
+try {
+  powerMonitor.on('resume', () => {
+    setTimeout(() => {
+      try {
+        if (activeApp) {
+          const kind = activeApp.nowSource;
+          const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
+          now.stop();
+          stopRekordboxFichiers();
+          now.start(kind, opts);
+          if (kind === 'prolink') startRekordboxFichiers();
+        }
+        /* L'adresse a pu changer : on le dit plutot que de laisser un
+           QR mort a l'entree de la salle. */
+        if (guests && guests.enMarche && guests.enMarche()) {
+          send('conseils', [{
+            cle: 'reveil-reseau', quand: 'invites',
+            titre: 'Verifie le lien des invites',
+            texte: 'L\'ordinateur sort de veille. Si le reseau a change, l\'adresse du QR ' +
+                   'affiche a l\'entree ne repond plus.',
+            marche: ['Ouvre les reglages, section Invites',
+                     'Reaffiche le QR : il porte l\'adresse actuelle']
+          }]);
+        }
+      } catch (e) { noterPanne('reveil de veille', e); }
+    }, 2500);   /* on laisse le reseau se remettre debout */
+  });
+} catch (e) { /* powerMonitor n'existe pas partout : ce n'est pas grave */ }
+
 app.on('before-quit', () => {
   app.isQuitting = true;
   try { globalShortcut.unregisterAll(); } catch (e) {}
   watcher.stop(); now.stop(); guests.stop();
   if (libraryWatcher) libraryWatcher.stop();
-  if (structCache) structCache.save();
+  if (structCache) structCache.save(true);
   /* L'apprentissage attend jusqu'a quatre secondes avant d'ecrire :
      sans ce vidage, une fermeture rapide perdait les derniers reglages
      appris — ou laissait intact ce qu'on venait d'effacer. */
   try { if (gout) gout.ecrireMaintenant(); } catch (e) {}
+  /* Le journal des sets regroupe ses ecritures toutes les quinze
+     secondes : sans ce vidage, les derniers morceaux d'une soiree
+     partiraient a la poubelle a la fermeture. */
+  try { if (setlog) setlog.vider(); } catch (e) {}
   structPool.close();
 });

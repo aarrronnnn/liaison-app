@@ -138,8 +138,24 @@ function start(opts, cb) {
   const apparu = new Map();
   let horloge = 0;
 
+  /* ------------------------------------------------------------
+     Un relevé a la fois.
+
+     On sonde toutes les 3 s une commande a qui on laisse 4 s. Rien
+     n'empechait deux relevés de se chevaucher — et quand ils se
+     chevauchent, le meme fichier est compte DEUX fois dans le meme
+     intervalle. Un morceau simplement survole dans le navigateur de
+     rekordbox atteignait alors les deux confirmations d'un coup et
+     devenait « le morceau en cours ». C'est precisement la porte de
+     securite qui saute, au pire moment.
+     ------------------------------------------------------------ */
+  let enCours = false;
+
   function tour() {
+    if (enCours) return;
+    enCours = true;
     tousLesFichiers(list => {
+      enCours = false;
       if (list === null) {
         vus.clear();
         if (!annonce) { annonce = true; cb.onStatus({ ok: false, msg: 'rekordbox n\'est pas lance' }); }

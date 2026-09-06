@@ -478,15 +478,64 @@ function watch(sources, onChange) {
      compte qui change veut dire qu'on a ajoute ou retire quelque
      chose. C'est grossier, mais ca ne reveille pas le disque plus
      d'une fois par minute et ca rattrape ce que fs.watch rate. */
+/* ------------------------------------------------------------
+     Compter sans bloquer, et pas toutes les minutes.
+
+     Le comptage utilisait lib.walk(), un parcours recursif ENTIEREMENT
+     SYNCHRONE, relance toutes les 60 secondes sur le processus qui
+     tient le widget. Sur les vingt-deux mille fichiers d'un disque
+     externe emporte en soiree, ca gelait tout — detection de deck
+     comprise — une fois par minute, toute la nuit.
+
+     Deux corrections. D'abord le parcours rend la main entre chaque
+     dossier : le widget continue de vivre pendant le comptage.
+     Ensuite on espace a cinq minutes — ce balayage n'est qu'un filet
+     derriere fs.watch, qui reagit lui en une seconde ; il n'a jamais
+     eu besoin d'etre aussi bavard.
+
+     Et on ne lance jamais deux comptages a la fois : sur un disque
+     lent, ils s'empileraient.
+     ------------------------------------------------------------ */
   const comptes = new Map();
-  const compter = d => { try { return lib.walk(d, []).length; } catch (e) { return -1; } };
-  for (const s of dossiers) comptes.set(s.path, compter(s.path));
-  const balayage = dossiers.length ? setInterval(() => {
-    for (const s of dossiers) {
-      const n = compter(s.path);
-      if (n >= 0 && n !== comptes.get(s.path)) { comptes.set(s.path, n); signalerDossier(s); }
+
+  /* Parcours asynchrone, borne, qui souffle entre chaque dossier. */
+  async function compterDoux(racine) {
+    let n = 0;
+    const pile = [racine];
+    let vus = 0;
+    while (pile.length) {
+      const d = pile.pop();
+      let entrees;
+      try { entrees = await fs.promises.readdir(d, { withFileTypes: true }); }
+      catch (e) { continue; }
+      for (const e of entrees) {
+        if (e.name.charAt(0) === '.') continue;
+        const p = path.join(d, e.name);
+        if (e.isDirectory()) pile.push(p);
+        else if (lib.AUDIO_EXT ? lib.AUDIO_EXT.test(e.name) : /\.(mp3|wav|aiff?|flac|m4a|aac|ogg|wma)$/i.test(e.name)) n++;
+      }
+      /* On rend la main a l'interface tous les 40 dossiers : le
+         widget reste vivant meme sur une arborescence enorme. */
+      if (++vus % 40 === 0) await new Promise(r => setTimeout(r, 0));
+      if (vus > 20000) break;            /* garde-fou : arborescence pathologique */
     }
-  }, 60000) : null;
+    return n;
+  }
+
+  let comptageEnCours = false;
+  async function toutCompter(premier) {
+    if (comptageEnCours) return;
+    comptageEnCours = true;
+    try {
+      for (const s of dossiers) {
+        const n = await compterDoux(s.path);
+        if (premier) { comptes.set(s.path, n); continue; }
+        if (n >= 0 && n !== comptes.get(s.path)) { comptes.set(s.path, n); signalerDossier(s); }
+      }
+    } finally { comptageEnCours = false; }
+  }
+  toutCompter(true);
+  const balayage = dossiers.length ? setInterval(() => { toutCompter(false); }, 300000) : null;
   if (balayage && balayage.unref) balayage.unref();
 
   for (const s of surveilles) {

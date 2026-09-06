@@ -315,7 +315,10 @@ class GuestServer {
 
   top() { return Array.from(this.requests.values()).sort((a, b) => b.n - a.n || b.at - a.at); }
   clear() { this.requests.clear(); this.devices.clear(); }
-  stop() { if (this.server) try { this.server.close(); } catch (e) {} }
+  stop() { if (this.server) try { this.server.close(); } catch (e) {} this.server = null; }
+  /* Le serveur tourne-t-il ? Utilise au reveil de veille, pour ne
+     signaler le lien des invites que s'il y a un lien a signaler. */
+  enMarche() { return !!this.server; }
 }
 
 /* ---------- QR et partage ---------- */
@@ -340,8 +343,43 @@ class SetLog {
   _load() { return ecrire.lireJSON(this.file, []); }
   /* Ecriture atomique : ce fichier est reecrit a chaque morceau joue.
      Une coupure au mauvais moment effacait toute la nuit. */
-  _save() { ecrire.ecrireJSON(this.file, this.sets); }
-  open(name, pack) { this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] }; this.sets.unshift(this.current); this._save(); return this.current; }
+  /* ------------------------------------------------------------
+     Ecrire l'historique complet a chaque morceau, avec vidage disque
+     force, sur le fil qui tient le widget.
+
+     ecrireJSON fait copie de sauvegarde + ecriture + fsync + rename,
+     le tout synchrone. Et « this.sets » porte TOUT l'historique, sans
+     elagage. Pour un resident au bout d'un an — une cinquantaine de
+     sets de cent vingt morceaux — c'est plusieurs mega-octets ecrits
+     a chaque changement de titre, pendant que le meme fil sert la
+     page des invites et lit les paquets Pro DJ Link. Ca ne casse pas
+     le premier soir : ca empire chaque semaine.
+
+     Deux corrections. On regroupe les ecritures — au plus une toutes
+     les quinze secondes — et on borne l'historique a soixante sets.
+     Le set en cours n'est jamais perdu : on ecrit aussi a la
+     fermeture et a l'arret de l'application.
+     ------------------------------------------------------------ */
+  _save(tout_de_suite) {
+    if (this.sets.length > 60) this.sets.length = 60;
+    if (tout_de_suite) {
+      if (this._minuteur) { clearTimeout(this._minuteur); this._minuteur = null; }
+      this._enAttente = false;
+      ecrire.ecrireJSON(this.file, this.sets);
+      return;
+    }
+    if (this._minuteur) { this._enAttente = true; return; }
+    ecrire.ecrireJSON(this.file, this.sets);
+    this._minuteur = setTimeout(() => {
+      this._minuteur = null;
+      if (this._enAttente) { this._enAttente = false; this._save(); }
+    }, 15000);
+    if (this._minuteur.unref) this._minuteur.unref();
+  }
+  /* Appelee avant de quitter : on n'attend pas le regroupement. */
+  vider() { try { this._save(true); } catch (e) {} }
+
+  open(name, pack) { this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] }; this.sets.unshift(this.current); this._save(true); return this.current; }
   play(track, transition) {
     if (!this.current) this.open('Session', null);
     const last = this.current.played[this.current.played.length - 1];

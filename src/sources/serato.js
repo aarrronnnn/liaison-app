@@ -13,7 +13,31 @@ function sessionsDir(custom) {
   return fs.existsSync(music) ? music : alt;
 }
 
+/* ------------------------------------------------------------
+   Chercher le fichier le plus recent, sans balayer le dossier
+   toutes les secondes et demie.
+
+   newest() faisait un readdirSync PLUS un statSync par fichier, a
+   chaque tour de boucle, toute la nuit, sur le fil du widget. Un
+   resident accumule des centaines de tracklists ou de sessions en
+   deux ans : plusieurs centaines de statSync toutes les 1,5 s.
+
+   La date du DOSSIER change des qu'un fichier y est cree ou
+   renomme. On ne relit donc la liste que dans ce cas ; le reste du
+   temps, un seul statSync sur le dossier suffit.
+   ------------------------------------------------------------ */
+let _cacheDossier = { dir: null, mtime: 0, best: null, a: 0 };
+
 function newest(dir) {
+  try {
+    const d = fs.statSync(dir);
+    const memeDossier = _cacheDossier.dir === dir;
+    /* Rien n'a bouge et on a regarde il y a moins de 30 s : on garde. */
+    if (memeDossier && d.mtimeMs === _cacheDossier.mtime && Date.now() - _cacheDossier.a < 30000)
+      return _cacheDossier.best;
+    _cacheDossier = { dir: dir, mtime: d.mtimeMs, best: null, a: Date.now() };
+  } catch (e) { return null; }
+
   let best = null, bestT = 0;
   let list = [];
   try { list = fs.readdirSync(dir); } catch (e) { return null; }

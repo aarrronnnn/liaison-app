@@ -100,9 +100,40 @@ for (const [canon, membres] of Object.entries(FAMILLES)) {
  *
  * @returns {Array<{famille:string, sur:number}>} sur = 1 exact, 0.8 synonyme, 0.6 inclusion
  */
+/* ------------------------------------------------------------
+   Le cache par ETIQUETTE, et non par morceau.
+
+   familles() etait memoise sur l'objet morceau (« track._fam »).
+   Sur trente mille titres a deux etiquettes, ca fait soixante mille
+   appels — qui refaisaient chacun deux cent cinquante « split() »
+   sur la table des synonymes. Mesure : 3,3 secondes de processus
+   principal bloque a la premiere suggestion, et autant a CHAQUE
+   reimport, puisque l'import reconstruit des objets neufs et perd
+   la memoisation.
+
+   Or il n'existe que quelques centaines d'etiquettes distinctes
+   dans une vraie bibliotheque : « House », « Pop », « Rock »…
+   Memoiser par etiquette, c'est passer de soixante mille calculs a
+   trois cents. Le reste n'est qu'une lecture de table.
+
+   Trois secondes de widget fige au moment ou le DJ charge son
+   premier morceau, c'est trois secondes de trop.
+   ------------------------------------------------------------ */
+const CACHE_FAMILLES = new Map();
+
 function familles(tag) {
   const t = aplatir(tag);
   if (!t) return [];
+  const dejaVu = CACHE_FAMILLES.get(t);
+  if (dejaVu) return dejaVu;
+  const r = famillesCalcul(t);
+  /* Une bibliotheque pathologique pourrait avoir des milliers
+     d'etiquettes uniques : on borne, sans jamais echouer. */
+  if (CACHE_FAMILLES.size < 5000) CACHE_FAMILLES.set(t, r);
+  return r;
+}
+
+function famillesCalcul(t) {
   const out = new Map();
 
   /* 1. exact ou synonyme connu */

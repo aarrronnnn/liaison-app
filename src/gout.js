@@ -146,8 +146,27 @@ class Gout {
       const valeurs = {
         h:  engine.harmScore(cur.key, joue.key),
         tp: tp.s,
-        en: engine.energyScore(cur.energy == null ? 5 : cur.energy, joue.energy == null ? 5 : joue.energy, o.arc || 'hold'),
-        ti: engine.timbreScore(cur.timbre, joue.timbre),
+        /* ------------------------------------------------------------
+           On n'apprend pas d'une mesure qui n'existe pas.
+
+           Ces deux lignes notaient l'energie et le timbre meme quand
+           l'analyse n'avait pas tourne. Or finalize() pose un timbre
+           [5,5,5] identique sur tous les morceaux non analyses, et
+           timbreScore d'un vecteur avec lui-meme vaut 100 sur 100.
+
+           Resultat, verifie : sur une premiere soiree avec une
+           bibliotheque fraiche, chaque enchainement enseignait « ce
+           DJ tient enormement au timbre » — le poids montait jusqu'a
+           son plafond, et Liaison appliquait ce biais toutes les
+           soirees suivantes. Le resume affiche au DJ le confirmait,
+           ce qui rendait l'erreur credible et invisible.
+
+           null = axe ignore pour cet enchainement.
+           ------------------------------------------------------------ */
+        en: (cur.analyzed && joue.analyzed)
+              ? engine.energyScore(cur.energy, joue.energy, o.arc || 'hold') : null,
+        ti: (cur.analyzed && joue.analyzed)
+              ? engine.timbreScore(cur.timbre, joue.timbre) : null,
         cr: 0, td: 0
       };
       /* la salle et la tendance ne se recalculent pas sans le pack
@@ -175,6 +194,9 @@ class Gout {
       for (const c of CRITERES) {
         if (c === 'td' && rang < 0) continue;
         if (c === 'cr' && !o.dna && rang < 0) continue;
+        /* Mesure absente : on n'apprend rien de cet axe cette fois-ci.
+           Mieux vaut apprendre lentement que d'apprendre faux. */
+        if (valeurs[c] == null) continue;
         const med = mediane(props.map(p => (
           c === 'h' ? p.h : c === 'tp' ? p.tempo.s : c === 'en' ? p.energyScore :
           c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd : p.trend)));
@@ -184,9 +206,14 @@ class Gout {
     }
 
     /* --- 2. l'ecart de tempo qu'il ose reellement --- */
-    const tp2 = engine.tempoScore(cur.bpm, joue.bpm);
-    const ecart = Math.abs(tp2.delta) / cur.bpm;
-    this.d.ecartTempo = (1 - 0.08) * this.d.ecartTempo + 0.08 * clamp(ecart, 0, 0.3);
+    /* Sans tempo sur l'un des deux, l'ecart ne veut rien dire — et la
+       division rendait NaN, qui contaminait ensuite la moyenne pour
+       toute la duree du fichier de gout. */
+    if (cur.bpm > 0 && joue.bpm > 0) {
+      const tp2 = engine.tempoScore(cur.bpm, joue.bpm);
+      const ecart = Math.abs(tp2.delta) / cur.bpm;
+      this.d.ecartTempo = (1 - 0.08) * this.d.ecartTempo + 0.08 * clamp(ecart, 0, 0.3);
+    }
 
     /* --- 3. rejoue-t-il les memes artistes ? --- */
     const nom = String(joue.artist || '').toLowerCase().trim();

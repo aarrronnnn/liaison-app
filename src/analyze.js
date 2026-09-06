@@ -16,6 +16,8 @@ function ffmpegPath() {
   return 'ffmpeg';
 }
 
+/* Un morceau ne se decode pas en plus de ca : au-dela, c'est bloque. */
+const DELAI_FFMPEG = 90000;
 const SR = 22050, N = 2048, HOP = 1024;
 
 /* ---------- FFT radix-2 en place ---------- */
@@ -70,12 +72,37 @@ function decode(file, seconds) {
     let bytes = 0;
     p.stdout.on('data', d => { chunks.push(d); bytes += d.length; });
     p.stderr.on('data', () => {});
-    p.on('error', reject);
-    p.on('close', code => {
+    /* ------------------------------------------------------------
+       Un ffmpeg qui ne rend jamais la main.
+
+       Il n'y avait ni delai ni « kill ». Sur un fichier abime, un
+       partage reseau qui ne repond plus ou une cle USB qu'on vient
+       de debrancher, ffmpeg peut rester la sans jamais emettre ni
+       « error » ni « close ». La promesse ne se resout alors JAMAIS :
+       le fil reste occupe a vie, le morceau reste marque « en
+       cours », et — avec deux fils seulement — deux fichiers penibles
+       suffisent a faire disparaitre les points de mix pour le reste
+       de la nuit. En silence, ce qui est le pire.
+       ------------------------------------------------------------ */
+    let fini = false;
+    const minuteur = setTimeout(() => {
+      if (fini) return;
+      fini = true;
+      try { p.kill('SIGKILL'); } catch (e) {}
+      reject(new Error('ffmpeg : delai depasse (' + path.basename(file) + ')'));
+    }, DELAI_FFMPEG);
+    const terminer = (fn) => (...a) => {
+      if (fini) return;
+      fini = true;
+      clearTimeout(minuteur);
+      fn(...a);
+    };
+    p.on('error', terminer(reject));
+    p.on('close', terminer(code => {
       if (!bytes) return reject(new Error('ffmpeg: aucun echantillon (' + path.basename(file) + ')'));
       const buf = Buffer.concat(chunks, bytes - (bytes % 4));
       resolve(new Float32Array(buf.buffer, buf.byteOffset, buf.length / 4));
-    });
+    }));
   });
 }
 

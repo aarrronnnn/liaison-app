@@ -16,6 +16,8 @@ const fs = require('fs');
 const path = require('path');
 const { ffmpegPath } = require('./analyze');
 
+/* Un morceau ne se decode pas en plus de ca : au-dela, c'est bloque. */
+const DELAI_FFMPEG = 180000;
 const SR = 11025;      // suffisant : on mesure des enveloppes, pas des hauteurs
 const HOP = 256;       // 43 trames par seconde
 const WIN = 512;
@@ -29,12 +31,37 @@ function decodeAll(file) {
     let bytes = 0;
     p.stdout.on('data', d => { chunks.push(d); bytes += d.length; });
     p.stderr.on('data', () => {});
-    p.on('error', reject);
-    p.on('close', () => {
+    /* ------------------------------------------------------------
+       Un ffmpeg qui ne rend jamais la main.
+
+       Il n'y avait ni delai ni « kill ». Sur un fichier abime, un
+       partage reseau qui ne repond plus ou une cle USB qu'on vient
+       de debrancher, ffmpeg peut rester la sans jamais emettre ni
+       « error » ni « close ». La promesse ne se resout alors JAMAIS :
+       le fil reste occupe a vie, le morceau reste marque « en
+       cours », et — avec deux fils seulement — deux fichiers penibles
+       suffisent a faire disparaitre les points de mix pour le reste
+       de la nuit. En silence, ce qui est le pire.
+       ------------------------------------------------------------ */
+    let fini = false;
+    const minuteur = setTimeout(() => {
+      if (fini) return;
+      fini = true;
+      try { p.kill('SIGKILL'); } catch (e) {}
+      reject(new Error('ffmpeg : delai depasse (' + path.basename(file) + ')'));
+    }, DELAI_FFMPEG);
+    const terminer = (fn) => (...a) => {
+      if (fini) return;
+      fini = true;
+      clearTimeout(minuteur);
+      fn(...a);
+    };
+    p.on('error', terminer(reject));
+    p.on('close', terminer(() => {
       if (!bytes) return reject(new Error('ffmpeg : aucun echantillon (' + path.basename(file) + ')'));
       const buf = Buffer.concat(chunks, bytes - (bytes % 4));
       resolve(new Float32Array(buf.buffer, buf.byteOffset, buf.length / 4));
-    });
+    }));
   });
 }
 
@@ -223,14 +250,53 @@ class StructureCache {
     this.dirty = false;
   }
   key(track) {
+    /* ------------------------------------------------------------
+       Un statSync par suggestion, a chaque recalcul.
+
+       key() est appele pour le morceau en cours ET chacune des cinq
+       a sept suggestions. Sur un disque USB qui vient de s'endormir
+       — couvercle referme pendant le repas — chaque statSync attend
+       le reveil du volume : plusieurs centaines de millisecondes,
+       six fois, au moment ou le DJ relance la piste.
+
+       La date d'un fichier ne change pas pendant une soiree. On la
+       retient une minute.
+       ------------------------------------------------------------ */
+    if (!this._dates) this._dates = new Map();
+    const vu = this._dates.get(track.path);
+    if (vu && Date.now() - vu.a < 60000) return vu.k;
     let mt = 0;
     try { mt = Math.round(fs.statSync(track.path).mtimeMs); } catch (e) {}
-    return track.path + '|' + mt;
+    const k = track.path + '|' + mt;
+    if (this._dates.size > 8000) this._dates.clear();
+    this._dates.set(track.path, { k: k, a: Date.now() });
+    return k;
   }
   get(track) { return this.map.get(this.key(track)) || null; }
   set(track, value) { this.map.set(this.key(track), value); this.dirty = true; }
-  save() {
+  /* ------------------------------------------------------------
+     Regrouper les ecritures du cache de structure.
+
+     save() reconstruit quatre mille entrees, les serialise et les
+     ecrit — synchrone, sur le fil du widget. Or il etait appele a
+     CHAQUE structure calculee, et ensureStructure() en demande une
+     pour le morceau en cours plus chacune des suggestions : trois a
+     six reecritures completes a chaque changement de morceau, au
+     moment precis ou le DJ regarde ses propositions.
+
+     Une toutes les vingt secondes suffit largement : ce cache n'est
+     qu'une economie de calcul, le perdre ne coute qu'un recalcul.
+     before-quit appelle save(true) et rien n'est perdu.
+     ------------------------------------------------------------ */
+  save(tout_de_suite) {
     if (!this.dirty) return;
+    if (!tout_de_suite) {
+      if (this._minuteur) return;
+      this._minuteur = setTimeout(() => { this._minuteur = null; this.save(true); }, 20000);
+      if (this._minuteur.unref) this._minuteur.unref();
+      return;
+    }
+    if (this._minuteur) { clearTimeout(this._minuteur); this._minuteur = null; }
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const obj = {};
@@ -319,13 +385,32 @@ class StructurePool {
   _drain() {
     while (this.queue.length) {
       const w = this._free();
-      /* Aucun fil disponible et aucun ne peut naitre : plutot que de
-         laisser la promesse pendre pour toujours, on calcule ici meme.
-         C'est plus lent, mais l'app reste juste. */
+      /* ------------------------------------------------------------
+         Aucun fil ne peut naitre : on renonce, on ne calcule pas ici.
+
+         Le repli calculait la structure DANS le processus principal
+         — « plus lent, mais l'app reste juste », disait le commentaire
+         que j'ai ecrit. C'etait faux au mauvais endroit : structure()
+         decode le morceau entier puis fait deux passes synchrones sur
+         quatre millions d'echantillons, soit environ une seconde par
+         morceau. Et ensureStructure() en demande une pour le morceau
+         en cours PLUS chacune des cinq suggestions, a chaque
+         changement de titre : six secondes de widget gele par morceau
+         joue, toute la nuit, sur un poste ou les fils sont refuses.
+
+         Un DJ prefere mille fois perdre les points de mix que perdre
+         son widget. On rejette donc proprement — main.js sort l'id de
+         structBusy, l'app continue sans les reperes, et le reste
+         (suggestions, deck, invites) fonctionne normalement.
+         ------------------------------------------------------------ */
       if (!w) {
         if (this.workers.length === 0) {
+          if (!this._prevenu) {
+            this._prevenu = true;
+            try { console.warn('Structure : aucun fil disponible, les points de mix sont desactives.'); } catch (e) {}
+          }
           const job = this.queue.shift();
-          structure(job.path, job.bpm).then(job.resolve, job.reject);
+          job.reject(new Error('structure indisponible : aucun fil de calcul'));
           continue;
         }
         return;

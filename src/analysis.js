@@ -250,20 +250,42 @@ class AnalysisService {
 
   _pousser() {
     if (this.arrete || this.sansFils) return;
+    /* ------------------------------------------------------------
+       Le disque qui s'absente ne doit pas geler la soiree.
+
+       Sur fichier injoignable, la boucle faisait « continue » SANS
+       consommer de fil : elle traversait donc toute la file. Et
+       _suivant() reparcourt la Map entiere a chaque appel. Sur dix-
+       huit mille morceaux restants, c'est un parcours en n carre,
+       plus un statSync par morceau, sur le fil qui tient le widget.
+
+       Scenario : le SSD externe s'endort pendant le repas, ou se
+       demonte au reveil de veille. Le marquage « absent » expire au
+       bout d'une minute, et prioriser() rappelle _pousser() a CHAQUE
+       changement de morceau — donc la traversee complete recommence,
+       toute la nuit.
+
+       On borne donc le nombre d'echecs consecutifs par passe : au
+       troisieme fichier introuvable, on arrete et on reessaiera plus
+       tard. Le disque revenu, tout repart tout seul.
+       ------------------------------------------------------------ */
+    let echecs = 0;
     while (this.libres.length) {
       const id = this._suivant();
       if (id == null) return;
       const t = this.tracks.get(id);
       const e = this.file.get(id);
-      if (!t || !e) { this.file.delete(id); continue; }
+      if (!t || !e) { this.file.delete(id); if (++echecs >= 3) return; continue; }
 
       /* le disque est-il revenu ? */
       const st = AnalysisCache.stamp(t.path);
       if (st === null) {
         t.offline = true;
         this.absents.set(id, Date.now() + RELANCE_MS);
+        if (++echecs >= 3) return;    /* le volume est parti : on n'insiste pas */
         continue;
       }
+      echecs = 0;
       if (t.offline) { t.offline = false; this.absents.delete(id); }
       e.stamp = st;
 

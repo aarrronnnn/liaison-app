@@ -258,7 +258,13 @@ function readAll(sources, library) {
   const vus = new Set();
   return out
     .sort((a, b) => b.ids.length - a.ids.length)
-    .slice(0, 60)
+    /* 60 etait un plafond arbitraire, applique APRES un tri par taille
+     decroissante : les petites listes tombaient dehors. Or ce sont
+     exactement celles qu'on filtre — « Vin d'honneur », « Ouverture
+     de bal » font vingt titres, pas mille. Un DJ de mariage a
+     couramment quatre-vingts listes ; la sienne disparaissait, et le
+     filtre qui pointait dessus etait relache en silence. */
+  .slice(0, 300)
     .map(c => {
       let id = 'c_' + slug(c.source + '_' + c.name);
       let n = 2;
