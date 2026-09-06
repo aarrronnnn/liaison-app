@@ -125,6 +125,10 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
 /* La cloture reservee, quand son heure est venue. Elle est en tete
    parce que le moteur l'y met — l'etiquette dit pourquoi. */
 .mm .clo{color:var(--blueLit);font-weight:700}
+/* « hors bulle » : une nuance, pas une alerte. Le morceau est
+   propose parce qu'il n'y avait pas mieux DANS la bulle — le DJ
+   doit pouvoir le reperer d'un coup d'oeil sans que ca crie. */
+.mm .hb{color:var(--dim);font-weight:700;letter-spacing:.04em}
 .mm .deja.grave{color:var(--redLit)}
 
 /* ---------- analyse de fond ----------
@@ -412,6 +416,16 @@ transition:.18s;pointer-events:none}
   <button class="chip" id="majPlusTard" title="Ne plus le dire pour cette version">Plus tard</button>
 </div>
 
+<!-- La bulle, quand elle est posee. On affiche CE SUR QUOI elle est
+     ancree, pas seulement qu'elle est active : « Bulle · variete ·
+     annees 80 » se verifie d'un coup d'oeil, « Bulle ON » ne se
+     verifie pas du tout. -->
+<div class="licbar" id="bulBar">
+  <span class="lbl" id="bulTxt" style="color:var(--blueLit)"></span>
+  <button class="chip" id="bulRe" style="margin-left:auto" title="Refaire la bulle autour du morceau qui tourne">Recentrer</button>
+  <button class="chip" id="bulOff" title="Revenir aux suggestions normales">Sortir</button>
+</div>
+
 <div class="foot">
   <span class="seg">
     <!-- « Auto » d'abord, et par defaut : personne, en cabine, ne
@@ -423,6 +437,8 @@ transition:.18s;pointer-events:none}
     <button class="chip fl" data-arc="hold" aria-pressed="false" aria-label="Tenir" title="Forcer : tenir le niveau">=</button>
     <button class="chip fl" data-arc="down" aria-pressed="false" aria-label="Baisser" title="Forcer : redescendre">↓</button>
   </span>
+  <!-- L'idee de Peter Helliot : rester dans la meme bulle. -->
+  <button class="chip" id="btnBulle" aria-pressed="false" title="Rester dans le style du morceau qui tourne">Bulle</button>
   <button class="chip" id="btnFilt" aria-pressed="false" title="Filtres de cabine">Filtres<span class="badge" id="filtN" style="display:none">0</span></button>
   <button class="chip" id="btnLand" aria-pressed="false" title="Temps restant et descente">Fin</button>
   <button class="chip req" id="btnReq" title="Demandes des invites">Demandes<span class="badge" id="reqN" style="display:none">0</span></button>
@@ -635,7 +651,7 @@ function renderSug(list) {
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.cloture || r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.client ? (r.cloture?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="mm">${r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? (r.cloture?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -658,7 +674,7 @@ function renderSos(list) {
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.client || (r.deja && r.deja.texte) ? `<span class="bd">${r.client ? '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? (r.client?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="mm">${r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsBulle ? '<span class="hb">HORS BULLE</span>' : ''}${r.client ? (r.horsBulle?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -672,6 +688,85 @@ $('#list').addEventListener('click', async e => {
   const r = await window.liaison.loadTrack(Number(b.dataset.id));
   if (r && r.ok) toast('« ' + r.copied + ' » copie — colle dans ta recherche', view === 'sos');
 });
+/* ============================================================
+   La bulle, cote cabine.
+
+   Un seul bouton. On appuie pendant un morceau : ce morceau
+   devient la reference, et tout ce qu'on propose ensuite lui
+   ressemble. On rappuie : on en sort.
+
+   Ce que l'ancrage a de precieux, c'est qu'il ne derive pas. Une
+   bulle qui suivrait le morceau en cours se deplacerait d'un pas
+   a chaque titre, et une soiree annees 80 finirait ailleurs sans
+   que personne ne voie le glissement. La reference est donc figee
+   tant que le DJ ne demande pas de la deplacer — d'ou
+   « Recentrer », qui est le geste a faire en changeant de bloc.
+   ============================================================ */
+let bulEtat = null;
+
+function renderBulle(b) {
+  bulEtat = b || null;
+  const on = !!bulEtat;
+  $('#bulBar').classList.toggle('on', on);
+  $('#btnBulle').setAttribute('aria-pressed', on ? 'true' : 'false');
+  if (on) {
+    $('#bulTxt').innerHTML = 'Bulle · ' + esc(bulEtat.etiquette) +
+      '<span style="opacity:.62"> — comme « ' + esc(bulEtat.titre) + ' »</span>' +
+      /* L'annee du morceau est connue, mais pas celle du reste de la
+         bibliotheque : la bulle tient le style et pas la decennie.
+         C'est reparable — une relecture complete des tags — donc on
+         le dit au lieu de laisser croire que l'epoque est prise en
+         compte. */
+      (bulEtat.epoquePerdue
+        ? '<span style="opacity:.62"> · epoque non lue (' + bulEtat.partAnnees +
+          ' % de ta bibliotheque est datee) — « Tout relire » dans les reglages</span>'
+        : '');
+  }
+  /* En bulle, la courbe tient : les quatre boutons de pente ne
+     commandent plus rien. Les laisser cliquables ferait croire le
+     contraire, et un reglage qui ne fait rien est pire qu'un
+     reglage absent. On les met en veille, en disant pourquoi. */
+  document.querySelectorAll('[data-arc]').forEach(o => {
+    o.disabled = on;
+    o.style.opacity = on ? '.42' : '';
+    /* Pendant l'atterrissage, c'est le plan de fin de set qui
+       commande la courbe, bulle ou pas : la phrase ne promet donc
+       que ce qui est vrai dans les deux cas. */
+    o.title = on ? 'En bulle, la pente est tenue — sauf pendant l\'atterrissage, ou le plan de fin commande'
+                 : (o.dataset.arc === 'auto' ? 'Liaison suit la pente que tu joues'
+                    : 'Forcer : ' + ({ up: 'monter', hold: 'tenir le niveau', down: 'redescendre' }[o.dataset.arc]));
+    /* Laisser « ↑ Monter » visiblement enfonce pendant que le moteur
+       tient le niveau, c'est un reglage qui ment. */
+    o.setAttribute('aria-pressed',
+      on ? (o.dataset.arc === 'hold' ? 'true' : 'false')
+         : (o.dataset.arc === (cfg.arc || 'auto') ? 'true' : 'false'));
+  });
+  fitHeight();
+}
+
+/* Un seul geste, appele de deux endroits : le bouton du bas et le
+   « Sortir » de la barre. Chainer l'un sur le onclick de l'autre
+   marchait, mais rejouait la logique de bascule sur un bouton qui
+   ne dit qu'une chose — sortir. */
+async function basculerBulle() {
+  const avant = !!bulEtat;
+  const b = await window.liaison.bulleBasculer();
+  if (b && b.impossible) { toast(b.raison, true); return; }
+  renderBulle(b);
+  if (avant) toast('Bulle levee');
+  else if (b) toast('Bulle posee — ' + b.etiquette +
+                    (b.epoquePerdue ? ' (epoque indisponible)' : ''));
+}
+$('#btnBulle').onclick = basculerBulle;
+$('#bulOff').onclick = basculerBulle;
+$('#bulRe').onclick = async () => {
+  const b = await window.liaison.bulleRecentrer();
+  if (b && b.impossible) { toast(b.raison, true); return; }
+  renderBulle(b);
+  if (b) toast('Bulle recentree — ' + b.etiquette);
+};
+window.liaison.on('bulle', renderBulle);
+
 $('#btnSettings').onclick = () => window.liaison.openSettings();
 $('#btnHide').onclick = () => window.liaison.hideWidget();
 $('#btnSearch').onclick = () => { $('#search').classList.toggle('on'); $('#q').focus(); fitHeight(); };
@@ -1053,6 +1148,7 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
   try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
   if (!lastSug.length) $('#list').innerHTML = etatVide();
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', o.dataset.arc === cfg.arc ? 'true' : 'false'));
+  try { renderBulle(await window.liaison.bulleGet()); } catch (e) {}
   if (c.license) licState(c.license);
   const n = await window.liaison.nowPlaying();
   if (n && n.id != null) { try { curStruct = await window.liaison.structure(n.id); } catch (e) {} }

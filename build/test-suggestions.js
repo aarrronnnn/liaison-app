@@ -177,6 +177,58 @@ const nom = t => (t.path || '').replace('/m/', '').replace('.mp3', '');
            !r.some(x => nom(x.track) === 'lent'), '');
 }
 
+/* ============================================================
+   6. Le meme morceau, deux fois dans la meme nuit.
+
+   Mesure sur une soiree simulee de 120 enchainements et 22 000
+   titres : 82 morceaux distincts. Trente-huit repetitions — un
+   tube repasse a une heure d'intervalle, et c'est la salle qui
+   l'entend avant le DJ.
+
+   Le moteur se souvenait des artistes et des genres joues, jamais
+   des MORCEAUX. Le widget, lui, affichait bien une pastille
+   « deja passe » : on signalait le probleme au lieu de l'eviter.
+
+   C'est une penalite et non un interdit — sur une petite
+   bibliotheque, un morceau deja joue vaut mieux qu'une liste
+   vide — mais elle doit suffire a le faire passer derriere
+   n'importe quelle alternative correcte.
+   ============================================================ */
+{
+  const bruts = [GUETTA];
+  for (let i = 1; i <= 12; i++) bruts.push(titreMesure(i));
+  const bib = viaBibliotheque(bruts);
+  const cur = bib[0];
+
+  /* sans memoire : on releve le favori du moteur */
+  const avant = engine.suggest(cur, bib, { limit: 5, arc: 'up' });
+  const favori = avant[0].track;
+
+  /* on le joue, puis on redemande */
+  const apres = engine.suggest(cur, bib, { limit: 5, arc: 'up', recent: [favori] });
+  const rang = apres.findIndex(x => x.track.id === favori.id);
+  verifier('6. un morceau joue ce soir ne revient pas en tete',
+           rang !== 0, rang === -1 ? 'sorti de la liste' : 'retombe en position ' + (rang + 1));
+
+  /* ---------- le temoin ----------
+     Sans la penalite, le favori restait le favori : on le verifie
+     en neutralisant la memoire des titres. */
+  const M = engine.memoireDe([favori]);
+  const avecMemoire = engine.penaliteVariete(favori, M, {});
+  const sansMemoire = engine.penaliteVariete(favori, M, { rejeu: true });
+  console.log('  temoin — penalite du deja-joue : %d avec, %d sans',
+              Math.round(avecMemoire), Math.round(sansMemoire));
+  verifier('6bis. et le sauvetage, lui, a le droit de le rejouer',
+           sansMemoire > avecMemoire, 'le SOS ignore le deja-joue, par choix');
+
+  /* ---------- rien d'autre a proposer ----------
+     Un seul candidat, deja joue : il doit quand meme sortir. */
+  const duo = viaBibliotheque([GUETTA, titreMesure(1)]);
+  const seul = engine.suggest(duo[0], duo, { limit: 5, arc: 'up', recent: [duo[1]] });
+  verifier('6ter. mais il ressort s\'il n\'y a rien d\'autre',
+           seul.length === 1, seul.length + ' proposition');
+}
+
 if (echecs) {
   console.error('\n' + echecs + ' cas de suggestion en echec.');
   process.exit(1);

@@ -271,6 +271,7 @@ async function importLibrary(mode, p) {
   rebuildClient();
   rebuildCrates([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
   config.libraryMode = mode; config.libraryPath = p; saveConfig();
+  revaliderBulle();
   send('library', { n: library.length, crates: crateList.length });
   /* la bibliotheque est jouable des maintenant ; l'analyse suit */
   startAnalysis();
@@ -310,6 +311,11 @@ async function autoImport(preferKind) {
        arrivent ensuite, morceau par morceau, sans bloquer. */
     library = libmod.finalize(merged);
     indexChemins = null;
+    /* La base du logiciel de mix est reecrite en pleine soiree des
+       que le DJ ajoute un morceau, et cette relecture est
+       automatique. La bulle doit y survivre : on verifie que son
+       ancrage existe encore, on ne l'efface pas par principe. */
+    revaliderBulle();
     rebuildClient();
     rebuildCrates(ordered);
     elaguerStructures();
@@ -626,6 +632,68 @@ function arcAuto() {
   return leGout().arcObserve(joues);
 }
 
+/* ============================================================
+   La bulle — l'etat, cote application.
+
+   Elle n'est PAS dans la configuration, et c'est voulu : une bulle
+   designe un morceau precis d'une bibliotheque precise. La garder
+   d'une soiree a l'autre, c'est la retrouver un mois plus tard
+   ancree sur un titre qu'on ne joue plus, sans savoir pourquoi les
+   suggestions se sont retrecies. Elle vit le temps d'une session,
+   comme la memoire des morceaux joues.
+   ============================================================ */
+let bulleActive = null;
+
+/** @returns {object} l'etat, ou { impossible, raison } si on ne peut pas poser. */
+function poserBulle(track) {
+  if (!track) { bulleActive = null; return null; }
+  /* On ancre sur le vivier REELLEMENT propose, pas sur la
+     bibliotheque entiere. Un DJ dont la crate annees 80 est datee a
+     100 % mais dont la bibliotheque ne l'est qu'a 20 % voyait l'axe
+     des epoques desactive — sur le seul ensemble ou il aurait
+     parfaitement marche. */
+  let vivier = library;
+  try { vivier = currentFilter().tracks.tracks; } catch (e) {}
+  if (!vivier || vivier.length < 50) vivier = library;
+  const b = engine.bulle.ancrer(track, vivier);
+  if (!b || b.impossible) { bulleActive = null; return b || null; }
+  bulleActive = b;
+  return etatBulle();
+}
+
+/* ------------------------------------------------------------
+   Apres un reimport, l'ancrage designe-t-il encore quelque chose ?
+
+   Les identifiants sont deterministes — ils viennent du chemin du
+   fichier — donc une bibliotheque reimportee depuis les memes
+   sources rend le meme morceau. Effacer la bulle a chaque
+   reimport, c'etait la faire disparaitre en pleine soiree chaque
+   fois que Serato reecrit sa base. On verifie donc, et on ne
+   retire que si le morceau a vraiment disparu.
+   ------------------------------------------------------------ */
+function revaliderBulle() {
+  if (!bulleActive) return;
+  const encore = library.find(t => t.id === bulleActive.id);
+  if (!encore) { bulleActive = null; send('bulle', null); return; }
+  /* Le morceau est toujours la, mais l'objet est neuf : on refait
+     l'ancrage dessus. Garder l'ancien, c'etait garder son genre
+     d'avant si le DJ vient de le retaguer, et une part d'annees
+     calculee sur une bibliotheque qui n'existe plus. */
+  const b = engine.bulle.ancrer(encore, library);
+  if (b && !b.impossible) { bulleActive = b; send('bulle', etatBulle()); }
+}
+
+function etatBulle() {
+  if (!bulleActive) return null;
+  return {
+    titre: bulleActive.titre, artiste: bulleActive.artiste,
+    etiquette: bulleActive.etiquette, annee: bulleActive.annee,
+    avecAnnees: bulleActive.avecAnnees, partAnnees: bulleActive.partAnnees,
+    epoquePerdue: !!bulleActive.epoquePerdue,
+    famille: bulleActive.famille
+  };
+}
+
 function computeSuggestions(limit) {
   if (!current) return [];
   const f = feat();
@@ -647,14 +715,26 @@ function computeSuggestions(limit) {
   /* Pendant l'atterrissage, c'est le plan qui commande la courbe :
      le DJ a annonce une heure de fin, elle prime sur le pack. */
   const ph = landingNow();
-  const arc = ph ? ph.arc : (config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc);
+  /* ------------------------------------------------------------
+     En bulle, la courbe tient.
+
+     C'est la moitie de la demande : « l'app cherche a augmenter le
+     rythme ». La montee d'energie est ce qui fait sortir du style
+     — un cran plus haut a chaque titre, et au bout de six on n'est
+     plus dans la meme soiree. Une soiree a theme se joue sur un
+     plateau. L'atterrissage de fin de set garde la priorite : quand
+     il faut redescendre, il faut redescendre.
+     ------------------------------------------------------------ */
+  const arc = ph ? ph.arc
+                 : bulleActive ? 'hold'
+                 : (config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc);
 
   /* Ce que Liaison a appris de ce DJ. Neutre les douze premiers
      enchainements, puis de plus en plus present. */
   const g = leGout().reglages();
 
   const bruts = engine.suggest(current, vivier, {
-    dna: currentDNA(), arc: arc, mode: mode,
+    dna: currentDNA(), arc: arc, mode: mode, bulle: bulleActive,
     poids: g.poids, marge: g.marge, variete: g.variete,
     banned: bannedSet(), wanted: clientSet.wanted,
     trends: trends, limit: n,
@@ -689,6 +769,10 @@ function computeSuggestions(limit) {
       crowd: r.crowd, timbre: Math.round(r.timbreScore),
       plan: plan, introBars: st && st.ok ? st.introBars : null, client: !!r.client,
       cloture: !!r.cloture,
+      /* « hors bulle » n'est pas une erreur : c'est ce que Liaison a
+         trouve de mieux quand la bulle ne remplit pas la liste. On le
+         dit plutot que de le cacher — ou de ne rien proposer. */
+      bulle: r.bulle, horsBulle: bulleActive ? !r.dansBulle : false,
       /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
       deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
@@ -715,7 +799,8 @@ function setCurrent(track, how) {
         propositions: dernieresPropositions,
         recents: setlog && setlog.current ? setlog.current.played : [],
         dna: currentDNA(),
-        arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc
+        arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc,
+        bulle: !!bulleActive
       });
     }
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
@@ -835,6 +920,38 @@ ipcMain.handle('source:pickFile', async () => {
 });
 
 ipcMain.handle('suggest', () => computeSuggestions(config.suggestCount));
+
+/* ---------------- la bulle ----------------
+   Un seul bouton, trois gestes : poser, recentrer, sortir. */
+ipcMain.handle('bulle:get', () => etatBulle());
+ipcMain.handle('bulle:basculer', () => {
+  if (bulleActive) { poserBulle(null); send('bulle', null); }
+  else {
+    /* Sans morceau en cours il n'y a rien a quoi s'accrocher. On le
+       dit — la premiere version repondait « bulle levee » a
+       quelqu'un qui essayait d'en poser une. */
+    if (!current) return { impossible: true, raison: 'Aucun morceau en cours : lance un titre d\'abord.' };
+    const r = poserBulle(current);
+    if (r && r.impossible) return r;
+    send('bulle', r);
+  }
+  send('suggestions', computeSuggestions(config.suggestCount));
+  return etatBulle();
+});
+/* Recentrer : la soiree change de theme sans sortir du mode. Le DJ
+   passe du bloc annees 80 au bloc annees 2000, il reancre.
+   Sans morceau en cours, on ne touche a RIEN : la premiere version
+   detruisait silencieusement la bulle si le logiciel de mix venait
+   de se fermer. */
+ipcMain.handle('bulle:recentrer', () => {
+  if (!current) return { impossible: true, raison: 'Aucun morceau en cours : la bulle est inchangee.' };
+  const avant = bulleActive;
+  const r = poserBulle(current);
+  if (r && r.impossible) { bulleActive = avant; return r; }
+  send('bulle', r);
+  send('suggestions', computeSuggestions(config.suggestCount));
+  return etatBulle();
+});
 /* ---------------- listes du client ---------------- */
 ipcMain.handle('client:get', () => ({
   name: config.clientName || '',
@@ -1003,6 +1120,7 @@ ipcMain.handle('rescue', () => {
     banned: bannedSet(), wanted: clientSet.wanted,
     structures: structures,
     recent: setlog && setlog.current ? setlog.current.played : [],
+    bulle: bulleActive,
     limit: 3
   }).map(r => {
     ensureStructure(r.track);
@@ -1011,6 +1129,7 @@ ipcMain.handle('rescue', () => {
       key: r.track.key, bpm: r.track.bpm, energy: r.track.energy, path: r.track.path,
       total: r.total, why: r.why, introBars: r.introBars, client: !!r.client,
       transition: r.transition.n,
+      bulle: r.bulle, horsBulle: bulleActive ? !r.dansBulle : false,
       /* Sans tempo sur le morceau en cours, cette division rendait NaN
          et le widget affichait « -NaN % » sur les cinq lignes : la
          correction du « rien ne se cale » redonnait des propositions
@@ -1566,6 +1685,15 @@ function wireWatcher() {
       now.stop();
       stopRekordboxFichiers();
       current = null;
+      /* Le widget gardait l'ancien morceau a l'ecran, et se croyait
+         donc en mesure de poser ou de recentrer une bulle. On dit
+         explicitement qu'il n'y a plus rien qui tourne. */
+      send('now', null);
+      /* Et la liste avec. Sans ca, l'ecran se contredisait : l'entete
+         disait « en attente » pendant que cinq propositions et leurs
+         reperes de mix — « lance a 2:34 » — restaient affiches pour
+         un morceau qui n'est plus sur le deck. */
+      send('suggestions', []);
       send('app', { id: app_.id, label: app_.label, open: false });
       const restants = watcher.current().filter(a => a.id !== app_.id);
       if (restants.length) {

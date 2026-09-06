@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('liaison', {
   pickLibrary: mode => invoke('library:pick', mode),
   suggest: () => invoke('suggest'),
   rescue: () => invoke('rescue'),
+  /* la bulle : rester dans le meme style */
+  bulleGet: () => invoke('bulle:get'),
+  bulleBasculer: () => invoke('bulle:basculer'),
+  bulleRecentrer: () => invoke('bulle:recentrer'),
   clientGet: () => invoke('client:get'),
   clientImport: opt => invoke('client:import', opt),
   clientClear: side => invoke('client:clear', side),

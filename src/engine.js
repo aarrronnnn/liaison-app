@@ -5,6 +5,7 @@
    ============================================================ */
 
 const genres = require('./genres');
+const bulle = require('./bulle');
 
 const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
 
@@ -125,8 +126,33 @@ const keyOf = t => {
    remonte quand meme.
    ------------------------------------------------------------ */
 function memoireDe(recent) {
-  const M = { artistes: new Map(), familles: new Map(), n: 0 };
+  const M = { artistes: new Map(), familles: new Map(), titres: new Map(), n: 0 };
   if (!recent || !recent.length) return M;
+  /* ------------------------------------------------------------
+     Le meme morceau, deux fois dans la nuit.
+
+     Mesure sur une soiree simulee de 120 enchainements : 82 titres
+     distincts. Trente-huit repetitions — et en mode bulle, ou le
+     vivier est volontairement etroit, 49 distincts seulement. Un
+     tube repasse a une heure d'intervalle, et c'est la salle qui
+     le remarque avant le DJ.
+
+     Le moteur n'avait aucune notion du « deja joue ce soir » : il
+     se souvenait des artistes et des genres, pas des morceaux. Le
+     widget, lui, affichait bien une pastille DEJA PASSE — on
+     signalait le probleme au lieu de l'eviter.
+
+     C'est une penalite, pas un interdit, conformement au reste de
+     cette memoire : sur une petite bibliotheque, un morceau deja
+     passe vaut mieux qu'une liste vide, et il ressort alors avec
+     sa pastille. Mais il ne ressort que la.
+     ------------------------------------------------------------ */
+  for (let i = 0; i < recent.length; i++) {
+    const id = recent[i] && recent[i].id;
+    if (id == null) continue;
+    const rang = recent.length - 1 - i;
+    if (!M.titres.has(id) || M.titres.get(id) > rang) M.titres.set(id, rang);
+  }
   /* Deux fenetres differentes, parce que les deux problemes n'ont
      pas la meme echelle. Un genre sature s'entend sur une demi-heure
      — vingt-quatre titres. Un artiste qui revient s'entend sur toute
@@ -137,9 +163,11 @@ function memoireDe(recent) {
   const derniers = recent.slice(-48);
   M.n = pourGenres.length;
   for (const t of pourGenres) {
+    if (!t) continue;
     for (const [f] of genres.famillesDe(t)) M.familles.set(f, (M.familles.get(f) || 0) + 1);
   }
   derniers.forEach((t, i) => {
+    if (!t) return;
     /* le plus recent pese le plus : rang 0 = le dernier joue */
     const rang = derniers.length - 1 - i;
     const a = String(t.artist || '').toLowerCase().trim();
@@ -148,10 +176,36 @@ function memoireDe(recent) {
   return M;
 }
 
-/** Ce que la memoire retire a un candidat. Toujours negatif ou nul. */
-function penaliteVariete(t, M) {
+/** Ce que la memoire retire a un candidat. Toujours negatif ou nul.
+ *
+ *  @param {boolean} sansFamille  ne pas penaliser le genre sature.
+ *    En mode bulle, rester dans la meme famille N'EST PAS un defaut :
+ *    c'est la demande. Sans cette exception, les deux mecaniques se
+ *    combattaient — la bulle poussait la variete francaise en avant,
+ *    la memoire la faisait redescendre des le quatrieme titre, et le
+ *    mode se defaisait tout seul au bout d'un quart d'heure.
+ *    La penalite d'ARTISTE, elle, reste : une soiree annees 80 n'est
+ *    pas une soiree Michael Jackson.
+ */
+function penaliteVariete(t, M, opt) {
   if (!M || !M.n) return 0;
+  /* Compatibilite : l'ancien troisieme argument etait un booleen. */
+  const o = (opt === true) ? { sansFamille: true } : (opt || {});
+  const sansFamille = !!o.sansFamille;
   let p = 0;
+
+  /* Deja joue ce soir. Le sauvetage fait exception, et c'est
+     delibere : quand la piste se vide, le titre qui a marche il y a
+     une heure est justement le bon. */
+  if (!o.rejeu && M.titres && M.titres.size) {
+    const r = M.titres.get(t.id);
+    /* La penalite s'estompe comme les autres. Un morceau passe il y a
+       vingt minutes ne doit pas revenir ; le meme, joue a 21 h, peut
+       reparaitre a 3 h du matin devant une salle a moitie renouvelee.
+       Sans cette pente, une petite selection a theme se vidait
+       d'elle-meme au fil de la nuit. */
+    if (r != null) p -= r <= 40 ? 58 : r <= 120 ? 46 : 34;
+  }
 
   /* Meme artiste. Deux fois de suite est une faute ; trois titres
      plus loin, c'est encore trop tot ; au-dela de douze, on oublie. */
@@ -165,6 +219,7 @@ function penaliteVariete(t, M) {
      mais parce qu'il occupe TOUTE la place : au-dela d'un tiers des
      vingt-quatre derniers, chaque point de plus coute. */
   let part = 0;
+  if (sansFamille) return p;
   for (const [f] of genres.famillesDe(t)) {
     const n = M.familles.get(f) || 0;
     if (n / M.n > part) part = n / M.n;
@@ -213,6 +268,10 @@ function suggest(cur, library, opt) {
   const dna = opt.dna || {};
   const arc = opt.arc || 'up';
   const mode = opt.mode || 'crowd';
+  /* La bulle : un morceau d'ancrage fige, auquel tout est compare.
+     Absente, rien ne change d'un iota — c'est un mode, pas un
+     nouveau comportement par defaut. */
+  const B = opt.bulle || null;
   const banned = opt.banned || new Set();
   const trends = opt.trends || new Map();
   const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
@@ -262,10 +321,30 @@ function suggest(cur, library, opt) {
      ------------------------------------------------------------ */
   const P = opt.poids || {};
   const m = (k) => { const v = P[k]; return (typeof v === 'number' && isFinite(v)) ? Math.max(0.5, Math.min(1.8, v)) : 1; };
-  const wH = 0.27 * m('h'), wT = 0.24 * m('tp'), wE = 0.15 * m('en'), wI = 0.14 * m('ti');
-  const wCrowd = (mode === 'crowd' ? 0.26 : 0.06) * m('cr');
-  const wTrend = (mode === 'trend' ? 0.18 : 0.04) * m('td');
-  const W = wH + wT + wE + wI + wCrowd + wTrend;
+  const wH = 0.27 * m('h'), wT = 0.24 * m('tp');
+  /* ------------------------------------------------------------
+     Ce que la bulle deplace, et ce qu'elle ne touche pas.
+
+     Elle ne baisse ni l'harmonie ni le tempo : un enchainement
+     dans le bon style mais injouable reste injouable, et le mode
+     bulle ne doit jamais devenir une excuse pour proposer un
+     morceau qu'on ne peut pas caler.
+
+     Elle prend en revanche la place de l'ADN de soiree. Les deux
+     repondent a la meme question — « ce morceau va-t-il avec le
+     contexte ? » — mais la bulle repond avec un morceau reel a la
+     place d'une moyenne, et deux reponses concurrentes a la meme
+     question s'annulent. On coupe donc l'ADN a presque rien.
+
+     L'energie baisse aussi : une soiree a theme se tient sur un
+     plateau, pas sur une pente. La courbe est forcee a « tenir »
+     par l'appelant ; ce coefficient evite qu'elle pese encore.
+     ------------------------------------------------------------ */
+  const wE = 0.15 * m('en') * (B ? 0.55 : 1), wI = 0.14 * m('ti');
+  const wBulle = B ? 0.34 : 0;
+  const wCrowd = (B ? 0.05 : mode === 'crowd' ? 0.26 : 0.06) * m('cr');
+  const wTrend = (B ? 0.03 : mode === 'trend' ? 0.18 : 0.04) * m('td');
+  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
@@ -381,7 +460,12 @@ function suggest(cur, library, opt) {
       const ti = (curMesure && t.mesure) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
       const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
-      let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend) / W;
+      /* note() rend aussi la reponse a « dans la bulle ? » : la
+         calculer une seconde fois refaisait le rapprochement de
+         familles et la lecture d'annee pour chaque candidat. */
+      const nb = B ? bulle.note(t, B) : null;   /* note ET appartenance, en un calcul */
+      let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
+                   + (nb ? nb.note * wBulle : 0)) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
@@ -412,10 +496,19 @@ function suggest(cur, library, opt) {
          nuit et personne ne s'en plaint ; un DJ de club ne le fait
          jamais. L'echelle de la penalite est donc apprise, elle
          aussi. */
-      const va = pin ? 0 : penaliteVariete(t, M) * (typeof P.variete === 'number' ? Math.max(0.25, Math.min(1.6, P.variete)) : 1);
+      const va = pin ? 0 : penaliteVariete(t, M, { sansFamille: !!B }) * (typeof P.variete === 'number' ? Math.max(0.25, Math.min(1.6, P.variete)) : 1);
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
+               bulle: nb ? nb.note : null,
+               /* La cloture epinglee traverse le crible et la porte de la
+                  bulle — c'est un choix delibere du DJ. Mais elle ne
+                  doit pas se faire passer pour ce qu'elle n'est pas :
+                  un reggaeton de 2022 en cloture d'une soiree annees 80
+                  s'affiche CLOTURE ET HORS BULLE. */
+               dansBulle: B ? nb.dedans : true,
+               epinglee: !!pin,
+               rejoue: !pin && !!(M.titres && M.titres.has(t.id)),
                transition: transitionOf(cur, t, tp, h) };
     })
     .sort((a, b) => b.total - a.total);
@@ -434,9 +527,110 @@ function suggest(cur, library, opt) {
      dessous, on melange — sinon l'application ne proposerait rien
      pendant la premiere demi-heure d'analyse, ce qui serait pire.
      ------------------------------------------------------------ */
-  const mesures = candidats.filter(c => c.track.mesure);
-  const retenus = mesures.length >= limit * 2 ? mesures : candidats;
-  return retenus.slice(0, limit);
+  /* ------------------------------------------------------------
+     La porte de la bulle, appliquee APRES la notation.
+
+     On aurait pu ecarter les morceaux hors bulle des le crible, et
+     c'aurait ete plus rapide. Mais alors une bulle trop etroite —
+     un genre rare, une annee peu representee — rendrait une liste
+     vide, et « rien ne se cale » est la reponse que cette session
+     entiere a passe a faire disparaitre. On ferme donc la porte
+     tant qu'il y a de quoi remplir la liste, et on l'ouvre plutot
+     que de ne rien proposer : les morceaux hors bulle sortent
+     alors etiquetes comme tels, au DJ de trancher.
+     ------------------------------------------------------------ */
+  /* ------------------------------------------------------------
+     Ordonner un groupe, sans jamais en perdre un morceau.
+
+     Ces deux preferences — l'epoque connue, l'analyse faite —
+     etaient appliquees a la liste ENTIERE, apres le tri par
+     appartenance a la bulle. Elles le defaisaient donc : sur
+     quatre titres du theme pas encore analyses et vingt titres
+     hors theme analyses, demander cinq propositions rendait cinq
+     titres hors theme, quand en demander trois en rendait trois
+     dans le theme. Le meme defaut que la porte etait censee
+     corriger, revenu par une autre porte — et il frappait pendant
+     la premiere heure, quand l'analyse de fond n'a encore rien
+     mesure.
+
+     Les preferences s'appliquent donc DANS chaque groupe, et
+     mettent en tete plutot que d'ecarter.
+     ------------------------------------------------------------ */
+  const ordonner = (groupe) => {
+    let out = groupe;
+    /* ------------------------------------------------------------
+       Une soiree annees 80 jouee a moitie par des morceaux sans
+       annee n'est pas une soiree annees 80.
+
+       Mesure sur 22 000 titres dont deux tiers dates : la premiere
+       version laissait 62 des 120 titres joues sans annee du tout.
+       Ils ne sont pourtant pas fautifs — leur tag manque, c'est
+       tout — et l'axe des epoques leur coutait moins que ce qu'un
+       tempo parfait leur rapportait. Tant qu'il y a de quoi remplir
+       la liste avec des morceaux dates, eux passent devant.
+       ------------------------------------------------------------ */
+    if (B && B.avecAnnees) {
+      const dates = [], sans = [];
+      for (const c of out) (bulle.anneeDe(c.track) != null ? dates : sans).push(c);
+      if (dates.length >= limit) out = dates.concat(sans);
+    }
+    /* Et le mesure passe devant l'inconnu, quand il y en a assez :
+       baisser la note d'un morceau jamais ecoute ne suffit pas, ils
+       sont des milliers sur une bibliotheque a peine importee et
+       finissent par remplir la liste a force de nombre. Le seuil est
+       le double de la liste, pas son exact compte : il faut de quoi
+       choisir, pas seulement de quoi remplir. */
+    const mes = [], autres = [];
+    for (const c of out) (c.track.mesure ? mes : autres).push(c);
+    return mes.length >= limit * 2 ? mes.concat(autres) : out;
+  };
+
+  let vivier = candidats;
+  if (B) {
+    /* ------------------------------------------------------------
+       La porte trie, elle ne jette pas.
+
+       Premiere version : « si les morceaux dans la bulle ne
+       remplissent pas la liste, on prend la liste normale ». Elle
+       jetait donc les morceaux DANS la bulle. Avec quatre titres
+       dans le theme et une licence qui en ouvre cinq, le DJ
+       recevait cinq propositions hors sujet — alors qu'a trois, il
+       en recevait trois, toutes bonnes. Le client qui paie le plus
+       recevait le pire resultat, et le mode avait l'air de
+       s'eteindre tout seul.
+
+       On met donc ce qui est dans la bulle DEVANT, et on complete
+       avec le reste. La liste reste pleine, et ce qui deborde du
+       theme est marque comme tel.
+       ------------------------------------------------------------ */
+    const dans = [], dehors = [], revus = [];
+    for (const c of candidats) {
+      /* ------------------------------------------------------------
+         Un morceau deja passe ce soir ne remplit pas la bulle.
+
+         Mesure, et c'est la mesure qui a tranche : une soiree a
+         theme de 120 enchainements sur 22 000 titres ne tenait plus
+         que 24 morceaux distincts. La porte classait par
+         appartenance avant de regarder la note, si bien qu'un titre
+         du theme deja joue passait devant un titre neuf hors theme —
+         et la nuit tournait en boucle sur une poignee de morceaux.
+         Rejouer cinq fois le meme titre gache une soiree bien plus
+         surement qu'un ecart de style.
+
+         L'ordre est donc : dans la bulle et pas encore joue, puis
+         hors bulle et pas encore joue, puis le reste. Chaque groupe
+         reste classe par note.
+         ------------------------------------------------------------ */
+      if (c.rejoue) revus.push(c);
+      else if (c.dansBulle || c.epinglee) dans.push(c);
+      else dehors.push(c);
+    }
+    vivier = dans.length >= limit ? ordonner(dans)
+                                  : ordonner(dans).concat(ordonner(dehors), ordonner(revus));
+  } else {
+    vivier = ordonner(candidats);
+  }
+  return vivier.slice(0, limit);
 }
 
 
@@ -557,6 +751,10 @@ function rescue(cur, library, opt) {
      moitie — sauver la piste passe avant la variete. */
   const M = memoireDe(opt.recent);
   const dnaPret = genres.dnaEtendu(dna);
+  /* Le sauvetage reste dans la bulle. Une soiree annees 80 dont la
+     piste se vide veut un tube des annees 80, pas un tube. Comme
+     ailleurs, la porte s'ouvre plutot que de ne rien rendre. */
+  const B = opt.bulle || null;
 
   const out = [];
   for (const t of library) {
@@ -608,11 +806,14 @@ function rescue(cur, library, opt) {
     const impact = (mesuree ? e * 7 : (t.pop == null ? 40 : t.pop) * 0.62)
                  + (t.vocal ? 14 : 0) + quick * 0.3;
 
+    const nb = B ? bulle.note(t, B) : null;
     const total = Math.round(
       tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
-    ) + (wanted.has(t.id) ? 12 : 0) + Math.round(penaliteVariete(t, M) * 0.5);
+    ) + (wanted.has(t.id) ? 12 : 0) + Math.round(penaliteVariete(t, M, { sansFamille: !!B, rejeu: true }) * 0.5)
+      + (nb ? Math.round((nb.note - 50) * 0.24) : 0);
     out.push({
       track: t, total: Math.max(4, Math.min(99, total)),
+      bulle: nb ? nb.note : null, dansBulle: nb ? nb.dedans : true,
       tempo: tp, h: h, fam: Math.round(fam), energy: e,
       introBars: introBars, client: wanted.has(t.id),
       why: wanted.has(t.id) ? 'Demande par le client'
@@ -623,7 +824,19 @@ function rescue(cur, library, opt) {
       transition: transitionOf(cur, t, tp, h)
     });
   }
-  return out.sort((a, b) => b.total - a.total).slice(0, limit);
+  const classes = out.sort((a, b) => b.total - a.total);
+  if (B) {
+    /* Meme regle que dans suggest() : ce qui est dans la bulle passe
+       devant, le reste complete. Un sauvetage qui rendrait trois
+       titres hors theme alors qu'il en existait deux dans le theme
+       serait le pire moment pour perdre la soiree. */
+    const dans = [], dehors = [];
+    for (const c of classes) (c.dansBulle ? dans : dehors).push(c);
+    return (dans.length >= limit ? dans : dans.concat(dehors)).slice(0, limit);
+    /* Pas de troisieme groupe ici : le sauvetage a le droit de
+       rejouer le titre qui a rempli la piste il y a une heure. */
+  }
+  return classes.slice(0, limit);
 }
 
 /* ============================================================
@@ -856,4 +1069,4 @@ function search(text, library, limit, threshold) {
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
-                   mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, formesDe };
+                   mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle, formesDe };

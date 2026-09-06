@@ -78,6 +78,11 @@ function parseDatabase(file) {
       bpm: parseFloat(String(t.tbpm || '0').replace(',', '.')) || 0,
       key: toCamelot(t.tkey) || null,
       duration: parseLen(t.tlen),
+      /* Serato la stocke depuis toujours, sous « ttyr ». Elle n'etait
+         pas relue : un DJ Serato perdait l'axe des epoques — donc le
+         mode bulle — sur toute sa bibliotheque. finalize() se charge
+         de refuser les valeurs aberrantes. */
+      year: t.ttyr || null,
       pop: 40
     });
   }
@@ -107,7 +112,8 @@ function buildTestDatabase(tracks) {
       chunk('tgen', encodeText(t.genre || '')),
       chunk('tbpm', encodeText(String(t.bpm))),
       chunk('tkey', encodeText(t.key || '')),
-      chunk('tlen', encodeText(t.len || '05:20'))
+      chunk('tlen', encodeText(t.len || '05:20')),
+      chunk('ttyr', encodeText(t.year ? String(t.year) : ''))
     ]);
     parts.push(chunk('otrk', fields));
   }

@@ -189,9 +189,32 @@ class Gout {
          mesure nulle part. */
       const popJoue = joue.pop == null ? 40 : joue.pop;
       const popMed = mediane(props.map(p => p.track.pop == null ? 40 : p.track.pop));
-      this.d.emaPop = (1 - a) * this.d.emaPop + a * clamp((popJoue - popMed) / 100, -1, 1);
+      /* ------------------------------------------------------------
+         Ce qu'une soiree a theme n'a pas le droit d'enseigner.
+
+         L'apprentissage compare le morceau joue a la MEDIANE de ce
+         qu'on proposait. En mode bulle, cette liste est
+         volontairement retrecie a un genre et a une decennie, et
+         l'ADN de soiree y est ecrase de 0,26 a 0,05. Comparer a
+         cette mediane-la, c'est apprendre les consequences de nos
+         propres reglages et non les gouts du DJ — et ces poids sont
+         ensuite appliques a TOUTES ses autres soirees, mariages
+         compris, parce que gout.json survit a la nuit.
+         Trois heures de soiree annees 80 biaisaient durablement le
+         reste de son annee.
+
+         Les six axes se lisent tous contre cette mediane : on les
+         suspend donc tous, ainsi que la notoriete et la pente
+         d'energie. Restent mesures l'ecart de tempo qu'il ose et la
+         repetition d'artiste, qui se lisent sur ce qu'il joue
+         reellement et non sur ce qu'on lui proposait.
+         ------------------------------------------------------------ */
+      const enBulle = !!o.bulle;
+      if (!enBulle)
+        this.d.emaPop = (1 - a) * this.d.emaPop + a * clamp((popJoue - popMed) / 100, -1, 1);
 
       for (const c of CRITERES) {
+        if (enBulle) continue;
         if (c === 'td' && rang < 0) continue;
         if (c === 'cr' && !o.dna && rang < 0) continue;
         /* Mesure absente : on n'apprend rien de cet axe cette fois-ci.
@@ -224,11 +247,29 @@ class Gout {
       this.d.repetitionArtiste = (1 - 0.06) * this.d.repetitionArtiste + 0.06 * revient;
     }
 
-    /* --- 4. sa pente d'energie habituelle --- */
-    if (cur.energy != null && joue.energy != null)
+    /* --- 4. sa pente d'energie habituelle ---
+       Sauf en bulle : la courbe y est tenue de force, pour rester
+       dans le style. Apprendre « ce DJ tient toujours le niveau »
+       d'un bloc annees 80 fausserait toutes ses autres soirees —
+       on n'apprend pas d'une pente qu'on a imposee soi-meme. */
+    if (!o.bulle && cur.energy != null && joue.energy != null)
       this.d.sautEnergie = (1 - 0.07) * this.d.sautEnergie + 0.07 * clamp(joue.energy - cur.energy, -4, 4);
 
-    this.d.n++;
+    /* ------------------------------------------------------------
+       Une observation qu'on n'exploite pas ne doit pas compter.
+
+       En bulle, aucun des six axes n'est appris : la liste qu'on
+       comparait au morceau joue est celle que NOUS avons retrecie.
+       Incrementer quand meme le compteur faisait monter la force de
+       l'apprentissage — qui pondere ce qui a ete appris — sur des
+       nuits qui n'ont rien enseigne. Une longue soiree a theme
+       portait donc a pleine puissance des poids appris ailleurs,
+       et le resume affiche au DJ s'en trouvait credibilise a tort.
+
+       L'ecart de tempo et la repetition d'artiste, eux, continuent
+       d'etre mesures juste en dessous : ils se lisent sur ce qu'il
+       joue reellement, pas sur ce qu'on lui proposait. */
+    if (!o.bulle) this.d.n++;
     if (rang === 0) { this.d.pris++; this.d.prisPremier++; }
     else if (rang > 0) this.d.pris++;
     else this.d.ignore++;

@@ -72,6 +72,10 @@ function parseRekordboxXML(xmlPath) {
       bpm: num(attrs.AverageBpm),
       key: toCamelot(attrs.Tonality),
       duration: num(attrs.TotalTime),
+      /* L'annee etait dans l'export depuis toujours, on ne la lisait
+         pas. C'est elle qui permet a une soiree annees 80 de rester
+         dans les annees 80 — voir bulle.js. */
+      year: anneeTag(attrs.Year),
       pop: Math.min(100, 30 + num(attrs.PlayCount) * 6 + num(attrs.Rating) / 51 * 20)
     });
   }
@@ -188,6 +192,18 @@ function ecrireScanCache(file, e) {
   }
 }
 
+/* Les tags d'annee, tels qu'on les trouve vraiment : « 1983 »,
+   « 1983-05-01 », « 2019-04-03T00:00:00Z », « 0 », et parfois une
+   chaine vide. On prend les quatre premiers chiffres, et on refuse
+   ce qui n'est pas une annee plausible plutot que d'inventer. */
+function anneeTag(v) {
+  if (v == null) return null;
+  const m = String(v).match(/\d{4}/);
+  if (!m) return null;
+  const n = parseInt(m[0], 10);
+  return (n >= 1900 && n <= 2100) ? n : null;
+}
+
 function empreinte(p) {
   try { const s = fs.statSync(p); return [s.size, Math.round(s.mtimeMs)]; }
   catch (e) { return null; }
@@ -228,6 +244,7 @@ async function scanFolder(dir, onProgress, opt) {
     bpm: num(t.tbpm || t.bpm || 0),
     key: toCamelot(t.initial_key || t.tkey || t.key),
     duration: dur || 0,
+    year: anneeTag(t.date || t.year || t.originalyear || t.tyer || t.tdrc),
     pop: 40
   });
 
@@ -246,8 +263,16 @@ async function scanFolder(dir, onProgress, opt) {
 
       /* Deja lu, et le fichier n'a pas bouge : rien a faire. */
       if (c && emp && c[0] === emp[0] && c[1] === emp[1]) {
+        /* La neuvieme case — l'annee — est ajoutee EN BOUT, et son
+           absence vaut null. Un cache ecrit par la version
+           precedente reste donc valide : sans ca, ajouter un champ
+           relancait vingt-deux mille lectures ffprobe, soit les
+           deux heures que ce cache existe pour eviter. Les fichiers
+           relus au fil des modifications gagneront leur annee ;
+           les autres s'en passent. */
         out[i] = { path: f, title: c[2], artist: c[3], genre: c[4],
-                   bpm: c[5], key: c[6] || null, duration: c[7], pop: 40 };
+                   bpm: c[5], key: c[6] || null, duration: c[7],
+                   year: c[8] == null ? null : c[8], pop: 40 };
         caches++;
       } else {
         let info = {};
@@ -256,7 +281,7 @@ async function scanFolder(dir, onProgress, opt) {
         out[i] = r;
         neufs++;
         if (emp) {
-          cache[cle] = [emp[0], emp[1], r.title, r.artist, r.genre, r.bpm, r.key, r.duration];
+          cache[cle] = [emp[0], emp[1], r.title, r.artist, r.genre, r.bpm, r.key, r.duration, r.year];
           depuisSauvegarde++;
         }
       }
@@ -479,6 +504,7 @@ function finalize(tracks) {
       t.tags = String(t.genre || '')
         .toLowerCase().split(/[\/,;|]+/).map(s => s.trim()).filter(Boolean);
       t.out = t.duration > 300 ? 64 : t.duration > 180 ? 32 : 16;
+      t.year = anneeTag(t.year);
       if (t.energy == null) t.energy = 5;
       if (!t.timbre) t.timbre = [5, 5, 5];
       return t;

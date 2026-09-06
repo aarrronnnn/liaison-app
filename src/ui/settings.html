@@ -386,6 +386,24 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
     </div>
   </div>
   <div class="row"><button id="saveCtx">Enregistrer le contexte</button></div>
+
+  <!-- Le mode bulle ne se regle pas ici : il se declenche en cabine,
+       sur le morceau qui tourne. Mais personne ne devine un bouton
+       qu'on ne lui a pas presente, et c'est la page qu'on lit avant
+       la premiere soiree. -->
+  <p class="tips" style="margin-top:14px;border-top:1px solid var(--wire);padding-top:12px">
+    <b>Soiree a theme : le bouton BULLE.</b> Le contexte ci-dessus dit
+    ce que la salle aime en general. Pour une soiree a theme — annees 80,
+    100 % variete, un bloc latino — ce n'est pas assez : Liaison cherche
+    a construire une courbe, et une courbe finit par sortir du theme.
+    Appuie sur <b>Bulle</b> dans le widget pendant un morceau : ce
+    morceau-la devient la reference, et tout ce qu'on te propose ensuite
+    reste dans son style et son epoque. La reference ne bouge pas toute
+    seule — <b>Recentrer</b> quand tu changes de bloc, <b>Sortir</b>
+    quand tu reprends la soiree normale.
+    L'epoque se lit dans l'annee de tes morceaux : si ta bibliotheque
+    n'en porte pas, la bulle te le dit et se tient au style seul.
+  </p>
 </div>
 
 <div class="card" id="clientCard">

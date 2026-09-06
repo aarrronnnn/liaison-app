@@ -157,7 +157,12 @@ function musicFolders() {
 /* ---------- Traktor collection.nml ---------- */
 const TRAKTOR_KEY = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B',
                      '5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A'];
-const attr = (s, name) => { const m = s.match(new RegExp(name + '="([^"]*)"')); return m ? m[1] : ''; };
+/* Le nom est ancre sur un debut de mot : sans le « \b », demander
+   « Year » attrapait aussi « ReleaseYear » ou « OrigYear » ailleurs
+   dans le meme bloc, et l'annee lue n'etait pas celle qu'on croyait.
+   Aucun format ne collisionnait avant l'ajout de « Year », qui est
+   le nom le plus court de la liste. */
+const attr = (s, name) => { const m = s.match(new RegExp('\\b' + name + '="([^"]*)"')); return m ? m[1] : ''; };
 const unesc = s => String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 
 function parseTraktor(file) {
@@ -180,10 +185,29 @@ function parseTraktor(file) {
       bpm: Math.round(bpm * 10) / 10,
       key: TRAKTOR_KEY[Number(kv)] || lib.toCamelot(unesc(attr(e, 'KEY'))) || null,
       duration: parseFloat(attr(e, 'PLAYTIME')) || 0,
+      year: annee(attr(e, 'RELEASE_DATE')) || annee(attr(e, 'YEAR')),
       pop: 40 + Math.min(40, (parseInt(attr(e, 'PLAYCOUNT'), 10) || 0) * 5)
     });
   }
   return out;
+}
+
+/* ------------------------------------------------------------
+   L'annee, telle que chaque logiciel l'ecrit.
+
+   Elle sert au mode bulle : c'est elle qui permet a une soiree
+   annees 80 de rester dans les annees 80. Traktor ecrit une date
+   complete (« 1983/2/1 »), VirtualDJ une annee seche, iTunes un
+   entier, rekordbox un attribut Year — et tous ecrivent parfois
+   « 0 » ou rien du tout. On prend les quatre premiers chiffres
+   plausibles, et on refuse le reste plutot que d'inventer.
+   ------------------------------------------------------------ */
+function annee(v) {
+  if (v == null) return null;
+  const m = String(v).match(/\d{4}/);
+  if (!m) return null;
+  const n = parseInt(m[0], 10);
+  return (n >= 1900 && n <= 2100) ? n : null;
 }
 
 /* ---------- VirtualDJ database.xml ---------- */
@@ -206,6 +230,7 @@ function parseVirtualDJ(file) {
       bpm: Math.round(bpm * 10) / 10,
       key: lib.toCamelot(unesc(attr(e, 'Key'))),
       duration: parseFloat(attr(e, 'SongLength')) || 0,
+      year: annee(attr(e, 'Year')),
       pop: 40
     });
   }
@@ -357,6 +382,10 @@ function parseITunes(file) {
       /* garde pour retrouver ce morceau dans les playlists du plist,
          qui ne referencent que des identifiants */
       itId: val('Track ID') || null,
+      /* iTunes ecrit l'annee en <integer> : la lecture existait deja,
+         on ne la demandait pas. C'est la source des DJ qui rangent
+         leur musique dans iTunes puis importent dans rekordbox. */
+      year: annee(val('Year')),
       /* iTunes est la seule source qui porte vraiment cette etiquette */
       explicit: val('Explicit') === 'true' ? 1 : 0,
       title: name || path.basename(p, path.extname(p)),
@@ -391,6 +420,18 @@ function merge(lists) {
       if (!prev.bpm && t.bpm) prev.bpm = t.bpm;
       if (!prev.key && t.key) prev.key = t.key;
       if (!prev.genre && t.genre) prev.genre = t.genre;
+      /* L'annee etait la seule etiquette que la fusion oubliait. Sur
+         un DJ qui a Serato ET un dossier de musique, Serato passe en
+         premier et n'en porte pas : l'annee lue dans les tags du
+         dossier etait jetee, et le mode bulle perdait l'epoque pour
+         toute une bibliotheque. */
+      /* On repasse par la verification plutot que de tester la
+         verite de la valeur : une annee aberrante venue d'une source
+         — rekordbox ecrit parfois « 83 » — est truthy, bloquait la
+         bonne annee d'une autre source, et se faisait effacer plus
+         tard par finalize(). L'ordre des sources changeait alors le
+         resultat. */
+      if (!annee(prev.year) && annee(t.year)) prev.year = annee(t.year);
       /* les identifiants servent a rattacher les crates : un morceau vu
          par deux sources doit garder les deux etiquettes */
       if (prev.rbId == null && t.rbId != null) prev.rbId = t.rbId;
