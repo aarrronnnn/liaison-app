@@ -848,6 +848,28 @@ function chemins() {
   return indexChemins;
 }
 
+/* ============================================================
+   Qui a le droit d'ouvrir le reseau Pro DJ Link.
+
+   Reponse : pas nous, des que rekordbox tourne. Un DJ avec deux
+   CDJ-2000 en RJ45 a vu son bouton LINK mourir parce que Liaison
+   tenait le port UDP 50002 — voir l'en-tete de sources/prolink.js.
+   Liaison ecoute ; rekordbox pilote les platines. En cas de
+   conflit, c'est toujours l'instrument qui gagne.
+
+   On lit la liste des applications reellement en cours, pas un
+   reglage : le DJ n'a rien a configurer, et le cas se resout tout
+   seul dans les deux sens.
+   ============================================================ */
+function reseauDeckLibre() {
+  try {
+    for (const a of watcher.current()) {
+      if (a && a.id === 'rekordbox') return false;
+    }
+  } catch (e) { /* dans le doute, on cede */ return false; }
+  return true;
+}
+
 function startRekordboxFichiers() {
   stopRekordboxFichiers();
   /* On demarre AUSSI sous Windows, ou le module se contente
@@ -1646,11 +1668,16 @@ function wireWatcher() {
     if (config.autoWidget && widget) { widget.show(); widget.setAlwaysOnTop(true, 'screen-saver'); }
     const kind = app_.nowSource;
     config.source = kind; saveConfig();
-    const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
+    const opts = kind === 'prolink'
+      ? { announce: config.prolinkAnnounce, autorise: reseauDeckLibre }
+      : config.sourceOpts;
     now.start(kind, opts);
     /* rekordbox : on ecoute le reseau ET les fichiers ouverts.
        Sous Windows la seconde source n'existe pas — elle le dit
        elle-meme, ce qui vaut mieux qu'un widget muet. */
+    /* Avec rekordbox, les deux marchent ensemble : le reseau quand il
+       est libre, les fichiers ouverts sinon. C'est ce qui permet de
+       rendre le port sans laisser le widget muet. */
     if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
     if (config.autoLibrary && !library.length) await autoImport(app_.librarySource);
     refreshTray();
@@ -1674,8 +1701,13 @@ function wireWatcher() {
     if (config.autoWidget && widget) { widget.show(); widget.setAlwaysOnTop(true, 'screen-saver'); }
     const kind = app_.nowSource;
     config.source = kind; saveConfig();
-    const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
+    const opts = kind === 'prolink'
+      ? { announce: config.prolinkAnnounce, autorise: reseauDeckLibre }
+      : config.sourceOpts;
     try { now.start(kind, opts); } catch (e) { noterPanne('reprise de source ' + kind, e); }
+    /* Avec rekordbox, les deux marchent ensemble : le reseau quand il
+       est libre, les fichiers ouverts sinon. C'est ce qui permet de
+       rendre le port sans laisser le widget muet. */
     if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
     refreshTray();
   }
@@ -2071,7 +2103,9 @@ try {
       try {
         if (activeApp) {
           const kind = activeApp.nowSource;
-          const opts = kind === 'prolink' ? { announce: config.prolinkAnnounce } : config.sourceOpts;
+          const opts = kind === 'prolink'
+      ? { announce: config.prolinkAnnounce, autorise: reseauDeckLibre }
+      : config.sourceOpts;
           now.stop();
           stopRekordboxFichiers();
           now.start(kind, opts);

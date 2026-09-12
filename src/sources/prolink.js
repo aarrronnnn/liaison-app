@@ -82,47 +82,185 @@ function keepAlivePacket(deviceNumber, name) {
   return b;
 }
 
+/* ============================================================
+   LA REGLE, ET POURQUOI ELLE EXISTE.
+
+   Rapport de cabine : deux CDJ-2000 relies en RJ45. Le DJ lance
+   rekordbox, et son bouton LINK ne repond plus — impossible de
+   connecter ses platines. Il ferme Liaison, tout remarche.
+
+   La cause est ici. Pro DJ Link tient sur trois ports UDP, et
+   celui-ci en prend un : le 50002. Sous macOS, un port UDP ne se
+   partage qu'entre applications qui le demandent TOUTES
+   explicitement. rekordbox, lui, le veut pour lui seul. Liaison
+   arrivant en premier, rekordbox echoue a l'ouvrir, et son LINK
+   meurt en silence.
+
+   Ce n'est pas un defaut de reglage, c'est une faute de conception
+   de ma part : une application qui ecoute passivement n'a aucun
+   droit de bloquer l'instrument du DJ.
+
+   La regle est donc absolue :
+
+     Liaison ne tient JAMAIS un port dont le materiel du DJ a
+     besoin. En cas de doute, Liaison lache.
+
+   Concretement : si rekordbox tourne, on ne se lie pas du tout —
+   on passe par la lecture des fichiers ouverts, qui ne demande
+   rien au reseau. Si rekordbox demarre pendant qu'on ecoute, on
+   libere le port dans la seconde. Un DJ ne doit jamais avoir a
+   fermer Liaison pour que ses platines fonctionnent.
+   ============================================================ */
+
+/** Ouvre un socket UDP en partageant le port autant que le systeme l'accepte. */
+function ouvrirPartage() {
+  /* reusePort (SO_REUSEPORT) existe depuis Node 22 : quand les deux
+     applications le demandent, elles cohabitent vraiment. On le tente,
+     et on retombe sur reuseAddr seul si la version ne le connait pas. */
+  try { return dgram.createSocket({ type: 'udp4', reuseAddr: true, reusePort: true }); }
+  catch (e) { return dgram.createSocket({ type: 'udp4', reuseAddr: true }); }
+}
+
+const CONSEIL_CEDE = {
+  cle: 'prolink-cede', quand: 'deck',
+  titre: 'Liaison a laisse le reseau a rekordbox',
+  texte: 'rekordbox a besoin du reseau Pro DJ Link pour parler a tes platines. ' +
+         'Liaison lui laisse la place et lit tes decks autrement : ton bouton LINK ' +
+         'reste disponible.',
+  marche: [
+    'Tu n\'as rien a faire : la detection continue par les fichiers',
+    'Ferme rekordbox si tu joues uniquement sur cles USB, Liaison reprendra le reseau'
+  ]
+};
+
 /**
- * @param opts { announce:boolean, deviceNumber:number, debug:boolean }
+ * @param opts { announce:boolean, deviceNumber:number, autorise:function }
+ *   autorise() — rendue par l'appelant : false tant qu'une autre
+ *   application a besoin du reseau Pro DJ Link. Absente, on considere
+ *   que la voie est libre.
  * @param cb   { onLoad(state), onStatus(s), onRaw(state) }
  */
 function start(opts, cb) {
   opts = opts || {};
-  const sock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
+  const autorise = typeof opts.autorise === 'function' ? opts.autorise : () => true;
   const seen = new Map();          // deck -> dernier trackId
+  const vusSurLeReseau = new Set();// numeros de peripheriques reels
   let packets = 0;
   let announceTimer = null;
   let annSock = null;
+  let sock = null;
+  let cede = false;                // on a lache le port, volontairement
+  let arrete = false;
 
-  sock.on('error', e => cb.onStatus({ ok: false, msg: 'Pro DJ Link : ' + e.code + ' (port ' + PORT_STATUS + ' occupe ?)' }));
-
-  sock.on('message', msg => {
+  function surMessage(msg) {
     const st = parseStatus(msg);
+    if (msg.length > 0x25 && isProlink(msg) && msg[10] === TYPE_KEEPALIVE) {
+      /* On note les numeros deja pris : s'annoncer sur le numero d'un
+         vrai lecteur brouillerait tout le reseau de la cabine. */
+      vusSurLeReseau.add(msg[0x24]);
+    }
     if (!st) return;
     packets++;
     if (cb.onRaw) cb.onRaw(st);
+    vusSurLeReseau.add(st.device);
     const prev = seen.get(st.device);
     if (st.trackId && st.trackId !== prev) {
       seen.set(st.device, st.trackId);
       cb.onLoad(st);
     }
-  });
+  }
 
-  sock.bind(PORT_STATUS, () => {
-    try { sock.setBroadcast(true); } catch (e) {}
-    cb.onStatus({ ok: true, msg: 'Pro DJ Link : ecoute sur ' + PORT_STATUS });
-  });
-
-  if (opts.announce) {
-    annSock = dgram.createSocket({ type: 'udp4', reuseAddr: true });
-    annSock.bind(PORT_ANNOUNCE, () => {
-      try { annSock.setBroadcast(true); } catch (e) {}
-      const pkt = keepAlivePacket(opts.deviceNumber || 4, 'Liaison');
-      announceTimer = setInterval(() => {
-        try { annSock.send(pkt, 0, pkt.length, PORT_ANNOUNCE, '255.255.255.255'); } catch (e) {}
-      }, 1500);
+  function lier() {
+    if (arrete || sock) return;
+    if (!autorise()) { cede = true; return; }
+    cede = false;
+    sock = ouvrirPartage();
+    sock.on('message', surMessage);
+    sock.on('error', e => {
+      /* ------------------------------------------------------------
+         Le port est deja pris. On ne reessaie pas en boucle et on ne
+         s'accroche surtout pas : quelqu'un d'autre en a besoin.
+         ------------------------------------------------------------ */
+      liberer();
+      cede = true;
+      cb.onStatus({
+        ok: false,
+        msg: 'Pro DJ Link : le port ' + PORT_STATUS + ' est deja utilise (' + e.code + ')',
+        conseil: CONSEIL_CEDE
+      });
     });
-    annSock.on('error', () => {});
+    try {
+      sock.bind({ port: PORT_STATUS, exclusive: false }, () => {
+        try { sock.setBroadcast(true); } catch (e) {}
+        cb.onStatus({ ok: true, msg: 'Pro DJ Link : ecoute sur ' + PORT_STATUS });
+      });
+    } catch (e) {
+      liberer(); cede = true;
+      cb.onStatus({ ok: false, msg: 'Pro DJ Link indisponible', conseil: CONSEIL_CEDE });
+    }
+    demarrerAnnonce();
+  }
+
+  /** Rend les ports, tout de suite, sans rien casser d'autre. */
+  function liberer() {
+    if (announceTimer) { clearInterval(announceTimer); announceTimer = null; }
+    if (annSock) { try { annSock.close(); } catch (e) {} annSock = null; }
+    if (sock) { try { sock.close(); } catch (e) {} sock = null; }
+  }
+
+  function demarrerAnnonce() {
+    if (!opts.announce || annSock || !autorise()) return;
+    /* Un numero libre, jamais celui d'un vrai lecteur. Les lecteurs
+       occupent 1 a 4, les tables de mixage 33 : on se place au-dessus
+       et on verifie quand meme. */
+    let num = opts.deviceNumber || 0;
+    if (!num || vusSurLeReseau.has(num)) {
+      num = 7;
+      while (num < 16 && vusSurLeReseau.has(num)) num++;
+    }
+    annSock = ouvrirPartage();
+    annSock.on('error', () => { try { annSock.close(); } catch (e) {} annSock = null; });
+    try {
+      annSock.bind({ port: PORT_ANNOUNCE, exclusive: false }, () => {
+        try { annSock.setBroadcast(true); } catch (e) {}
+        const pkt = keepAlivePacket(num, 'Liaison');
+        announceTimer = setInterval(() => {
+          if (!autorise()) { liberer(); cede = true; return; }
+          try { annSock.send(pkt, 0, pkt.length, PORT_ANNOUNCE, '255.255.255.255'); } catch (e) {}
+        }, 1500);
+      });
+    } catch (e) { annSock = null; }
+  }
+
+  /* ------------------------------------------------------------
+     La surveillance, deux fois par seconde.
+
+     rekordbox peut demarrer a tout moment — typiquement quand le DJ
+     branche ses platines, c'est-a-dire au pire moment. On verifie
+     donc en continu, et on lache sans attendre qu'on nous le
+     demande. Reprendre, a l'inverse, ne se fait que lorsque la voie
+     est reellement libre.
+     ------------------------------------------------------------ */
+  const garde = setInterval(() => {
+    if (arrete) return;
+    const libre = autorise();
+    if (!libre && sock) {
+      liberer();
+      cede = true;
+      cb.onStatus({ ok: true, msg: 'Pro DJ Link : place laissee a rekordbox', conseil: CONSEIL_CEDE });
+    } else if (libre && !sock && cede) {
+      lier();
+      if (sock) cb.onStatus({ ok: true, msg: 'Pro DJ Link : reseau repris' });
+    }
+  }, 500);
+
+  lier();
+  if (cede) {
+    cb.onStatus({
+      ok: true,
+      msg: 'Pro DJ Link : rekordbox tient le reseau, Liaison n\'y touche pas',
+      conseil: CONSEIL_CEDE
+    });
   }
 
   /* ------------------------------------------------------------
@@ -141,7 +279,7 @@ function start(opts, cb) {
      lettres), vaut mieux qu'un voyant rouge sans consigne.
      ------------------------------------------------------------ */
   const health = setInterval(() => {
-    if (packets) return;
+    if (packets || cede) return;
     cb.onStatus({
       ok: false,
       msg: 'Pro DJ Link silencieux — aucun materiel sur le reseau',
@@ -162,12 +300,15 @@ function start(opts, cb) {
 
   return {
     stop() {
+      arrete = true;
       clearInterval(health);
-      if (announceTimer) clearInterval(announceTimer);
-      try { sock.close(); } catch (e) {}
-      if (annSock) try { annSock.close(); } catch (e) {}
+      clearInterval(garde);
+      liberer();
     },
-    stats: () => ({ packets, decks: Array.from(seen.entries()) })
+    /* Rendre la main tout de suite, sur demande de l'application. */
+    liberer() { liberer(); cede = true; },
+    lie: () => !!sock,
+    stats: () => ({ packets, cede: cede, lie: !!sock, decks: Array.from(seen.entries()) })
   };
 }
 
