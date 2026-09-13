@@ -6,6 +6,8 @@
 
 const genres = require('./genres');
 const bulle = require('./bulle');
+const epoque = require('./epoque');
+const affinites = require('./affinites');
 
 const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
 
@@ -344,11 +346,36 @@ function suggest(cur, library, opt) {
   const wBulle = B ? 0.34 : 0;
   const wCrowd = (B ? 0.05 : mode === 'crowd' ? 0.26 : 0.06) * m('cr');
   const wTrend = (B ? 0.03 : mode === 'trend' ? 0.18 : 0.04) * m('td');
-  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle;
+  /* ------------------------------------------------------------
+     Deux axes ajoutes apres le retour des DJs.
+
+     « Ca propose des trucs qui ne sont plus a la mode » : le moteur
+     ignorait les epoques. Un titre de 2012 valait un titre de la
+     semaine derniere. Voir epoque.js — ce qui vieillit n'est pas
+     l'annee seule, c'est l'annee CROISEE avec la famille de genre :
+     la big room se date en cinq ans, la motown jamais.
+
+     « Les sons matchent, mais pas assez » : le moteur savait juger
+     si deux morceaux sont COMPATIBLES, jamais si un DJ les enchaine
+     reellement. Voir affinites.js, qui relit ses propres soirees.
+
+     Les deux poids s'apprennent comme les six autres : un DJ de
+     mariage verra sa fraicheur tomber — les classiques sont le but —
+     la ou un DJ de club la verra monter. En bulle, la fraicheur
+     compte moins : une soiree annees 80 assume son epoque.
+     ------------------------------------------------------------ */
+  const wFr = 0.10 * m('fr') * (B ? 0.4 : 1);
+  const wAf = 0.12 * m('af');
+  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
   const M = memoireDe(opt.recent);
+  /* La memoire des enchainements de CE DJ, construite une fois par
+     appel et non par morceau. Absente, l'axe rend 50 partout et ne
+     classe donc personne — le comportement d'avant, exactement. */
+  const AFF = opt.affinites || null;
+  const annee = opt.annee || new Date().getFullYear();
   /* Un titre du client qu'on n'a toujours pas joue prend du poids
      a mesure que la soiree avance : a 14 points fixes, la moitie
      des titres voulus n'etaient jamais sortis en cinq heures. */
@@ -464,8 +491,10 @@ function suggest(cur, library, opt) {
          calculer une seconde fois refaisait le rapprochement de
          familles et la lecture d'annee pour chaque candidat. */
       const nb = B ? bulle.note(t, B) : null;   /* note ET appartenance, en un calcul */
+      const fr = epoque.fraicheur(t, annee);
+      const af = AFF ? affinites.score(cur, t, AFF) : 50;
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
-                   + (nb ? nb.note * wBulle : 0)) / W;
+                   + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
@@ -500,6 +529,9 @@ function suggest(cur, library, opt) {
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
+               fraicheur: fr, affinite: af,
+               pourquoi: AFF ? affinites.explication(cur, t, AFF) : null,
+               age: epoque.raison(t, annee),
                bulle: nb ? nb.note : null,
                /* La cloture epinglee traverse le crible et la porte de la
                   bulle — c'est un choix delibere du DJ. Mais elle ne
@@ -1069,4 +1101,5 @@ function search(text, library, limit, threshold) {
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
-                   mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle, formesDe };
+                   mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
+                   epoque, affinites, formesDe };

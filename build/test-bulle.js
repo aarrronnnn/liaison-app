@@ -137,7 +137,17 @@ const DNA = { 'variete': 82, 'chanson francaise': 82, 'disco': 80, 'funk': 70, '
      relevees sur le moteur d'avant la bulle. Si une correction future
      deplace le comportement par defaut d'un seul point, ce cas
      tombe, et c'est exactement ce qu'on lui demande. */
-  const ATTENDU = 'disco=95 var1=92 var4=92 var5=92 var6=92';
+  /* Ce chiffre est un JOURNAL, pas une constante. Chaque fois qu'il
+     change, c'est qu'on a touche au comportement par defaut, et la
+     ligne doit dire pourquoi :
+
+       13 sept. 2026 — ajout des axes fraicheur et affinites
+       (epoque.js, affinites.js), apres le retour des DJs : « les sons
+       matchent mais pas assez » et « ca propose des trucs qui ne sont
+       plus a la mode ». Les notes baissent parce que le total est
+       maintenant divise par huit poids au lieu de six ; l'ORDRE, lui,
+       ne change que la ou l'epoque le justifie. */
+  const ATTENDU = 'disco=91 var7=89 var1=88 var2=88 var3=88';
   const obtenu = engine.suggest(bib[0], bib, { limit: 5, arc: 'up', dna: DNA, mode: 'crowd' })
     .map(x => nom(x.track) + '=' + x.total).join(' ');
   verifier('2. sans bulle, le classement d\'avant est intact',

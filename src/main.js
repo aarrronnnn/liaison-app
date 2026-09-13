@@ -694,6 +694,22 @@ function etatBulle() {
   };
 }
 
+/* ------------------------------------------------------------
+   Les enchainements que CE DJ fait reellement.
+
+   Relire tout l'historique a chaque changement de morceau serait
+   absurde : il ne bouge qu'a la fin d'une soiree. On le construit
+   donc une fois, et on le refait quand un set se ferme.
+   ------------------------------------------------------------ */
+let affinitesCache = null;
+function lesAffinites() {
+  if (affinitesCache) return affinitesCache;
+  try { affinitesCache = engine.affinites.construire(setlog ? setlog.sets : []); }
+  catch (e) { affinitesCache = null; }
+  return affinitesCache;
+}
+function oublierAffinites() { affinitesCache = null; }
+
 function computeSuggestions(limit) {
   if (!current) return [];
   const f = feat();
@@ -735,6 +751,7 @@ function computeSuggestions(limit) {
 
   const bruts = engine.suggest(current, vivier, {
     dna: currentDNA(), arc: arc, mode: mode, bulle: bulleActive,
+    affinites: lesAffinites(),
     poids: g.poids, marge: g.marge, variete: g.variete,
     banned: bannedSet(), wanted: clientSet.wanted,
     trends: trends, limit: n,
@@ -773,6 +790,8 @@ function computeSuggestions(limit) {
          trouve de mieux quand la bulle ne remplit pas la liste. On le
          dit plutot que de le cacher — ou de ne rien proposer. */
       bulle: r.bulle, horsBulle: bulleActive ? !r.dansBulle : false,
+      /* de quoi dire au DJ POURQUOI, plutot que de lui donner un chiffre */
+      pourquoi: r.pourquoi || null, age: r.age || null,
       /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
       deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };
@@ -800,7 +819,8 @@ function setCurrent(track, how) {
         recents: setlog && setlog.current ? setlog.current.played : [],
         dna: currentDNA(),
         arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc,
-        bulle: !!bulleActive
+        bulle: !!bulleActive,
+        affinites: lesAffinites()
       });
     }
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
@@ -1242,7 +1262,12 @@ ipcMain.handle('session:start', async (e, opts) => {
      ce soir » : le filtre anti-repetition et le badge « tu l'as passe
      il y a vingt minutes » oubliaient la premiere heure. */
   if (!setlog) setlog = new SetLog(SETS());
-  if (!setlog.current) setlog.open(config.sessionName, config.pack);
+  if (!setlog.current) {
+    setlog.open(config.sessionName, config.pack);
+    /* La soiree qui vient de se terminer entre dans la memoire des
+       enchainements : elle comptera des ce soir. */
+    oublierAffinites();
+  }
   /* Et on repart d'une file de demandes vide : l'objet guests vit tant
      que l'app tourne — lancee au login, elle reste dans la barre de
      menus — donc les demandes du samedi et les quotas par telephone du

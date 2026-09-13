@@ -64,7 +64,11 @@ const fs = require('fs');
 const ecrire = require('./ecrire');
 const engine = require('./engine');
 
-const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td'];
+/* 'fr' (fraicheur) et 'af' (affinite) ont rejoint les six d'origine :
+   un DJ de mariage fera tomber la fraicheur, un DJ de club la fera
+   monter, et c'est exactement ce qu'on veut apprendre plutot que
+   de le decider a leur place. */
+const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td', 'fr', 'af'];
 const MINI = 12;          /* en dessous, on observe sans rien changer */
 const PLEIN = 40;         /* au-dela, l'apprentissage vaut a plein */
 const AMPLITUDE = 2.2;    /* de l'ecart moyen au multiplicateur */
@@ -167,7 +171,9 @@ class Gout {
               ? engine.energyScore(cur.energy, joue.energy, o.arc || 'hold') : null,
         ti: (cur.analyzed && joue.analyzed)
               ? engine.timbreScore(cur.timbre, joue.timbre) : null,
-        cr: 0, td: 0
+        cr: 0, td: 0,
+        fr: engine.epoque.fraicheur(joue, o.annee),
+        af: o.affinites ? engine.affinites.score(cur, joue, o.affinites) : null
       };
       /* la salle et la tendance ne se recalculent pas sans le pack
          ni les classements : on ne les apprend que si le morceau
@@ -222,7 +228,8 @@ class Gout {
         if (valeurs[c] == null) continue;
         const med = mediane(props.map(p => (
           c === 'h' ? p.h : c === 'tp' ? p.tempo.s : c === 'en' ? p.energyScore :
-          c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd : p.trend)));
+          c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd :
+          c === 'fr' ? p.fraicheur : c === 'af' ? p.affinite : p.trend)));
         const z = clamp((valeurs[c] - med) / 100, -1, 1);
         this.d.ema[c] = (1 - a) * this.d.ema[c] + a * z;
       }
