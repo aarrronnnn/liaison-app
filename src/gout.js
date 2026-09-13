@@ -68,7 +68,7 @@ const engine = require('./engine');
    un DJ de mariage fera tomber la fraicheur, un DJ de club la fera
    monter, et c'est exactement ce qu'on veut apprendre plutot que
    de le decider a leur place. */
-const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td', 'fr', 'af'];
+const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td', 'fr', 'af', 'pl'];
 const MINI = 12;          /* en dessous, on observe sans rien changer */
 const PLEIN = 40;         /* au-dela, l'apprentissage vaut a plein */
 const AMPLITUDE = 2.2;    /* de l'ecart moyen au multiplicateur */
@@ -79,7 +79,22 @@ const mediane = a => { if (!a.length) return 0; const b = a.slice().sort((x, y) 
 function vide() {
   return {
     v: 1, n: 0, pris: 0, prisPremier: 0, ignore: 0,
-    ema: { h: 0, tp: 0, en: 0, ti: 0, cr: 0, td: 0 },
+    /* ------------------------------------------------------------
+       Les axes appris se declarent a UN endroit.
+
+       Cette ligne etait ecrite a la main : { h, tp, en, ti, cr, td }.
+       En ajoutant 'fr' et 'af' a CRITERES j'ai oublie de les ajouter
+       ici, et le defaut ne s'est vu nulle part — parce qu'il ne
+       plante pas. this.d.ema.fr valait undefined, la moyenne
+       glissante devenait NaN des le premier enchainement, et
+       engine.m() rendait 1 pour toute valeur non finie. Les trois
+       nouveaux axes avaient donc l'air de fonctionner alors qu'ils
+       n'apprenaient RIEN, silencieusement, pour toujours.
+
+       La liste est donc derivee de CRITERES : ajouter un axe ne peut
+       plus oublier de l'initialiser.
+       ------------------------------------------------------------ */
+    ema: CRITERES.reduce((o, c) => (o[c] = 0, o), {}),
     /* la notoriete se mesure a part : ce n'est pas un multiplicateur
        d'un poids existant, c'est un axe a elle, du tube au fond de
        crate */
@@ -104,7 +119,20 @@ class Gout {
     if (!this.fichier) return;
     try {
       const j = JSON.parse(fs.readFileSync(this.fichier, 'utf8'));
-      if (j && j.v === 1 && j.ema) this.d = Object.assign(vide(), j, { ema: Object.assign(vide().ema, j.ema) });
+      if (j && j.v === 1 && j.ema) {
+        /* Un gout.json ecrit par une version qui avait le defaut
+           ci-dessus contient « "fr": null ». Object.assign l'aurait
+           repris tel quel et le NaN aurait survecu a la correction :
+           on ne garde que les nombres finis. */
+        const e = vide().ema;
+        for (const c of CRITERES) {
+          const v = j.ema[c];
+          if (typeof v === 'number' && isFinite(v)) e[c] = v;
+        }
+        this.d = Object.assign(vide(), j, { ema: e });
+        for (const k of ['emaPop', 'ecartTempo', 'repetitionArtiste', 'sautEnergie'])
+          if (!(typeof this.d[k] === 'number' && isFinite(this.d[k]))) this.d[k] = 0;
+      }
     } catch (e) { /* premier lancement, ou fichier abime : on repart de zero */ }
   }
 
@@ -146,7 +174,7 @@ class Gout {
 
     /* --- 1. ce que le DJ a privilegie, critere par critere --- */
     if (props.length >= 3) {
-      const tp = engine.tempoScore(cur.bpm, joue.bpm);
+      const tp = engine.tempoScore(cur.bpm, joue.bpm, engine.doubleAdmis(cur, joue));
       const valeurs = {
         h:  engine.harmScore(cur.key, joue.key),
         tp: tp.s,
@@ -173,7 +201,12 @@ class Gout {
               ? engine.timbreScore(cur.timbre, joue.timbre) : null,
         cr: 0, td: 0,
         fr: engine.epoque.fraicheur(joue, o.annee),
-        af: o.affinites ? engine.affinites.score(cur, joue, o.affinites) : null
+        af: o.affinites ? engine.affinites.score(cur, joue, o.affinites) : null,
+        /* Le plancher s'apprend comme le reste : un DJ de bar
+           enchaine des morceaux calmes toute la soiree et n'a aucune
+           raison d'etre tire vers la piste. Le poids tombera de
+           lui-meme. */
+        pl: engine.plancher.continuite(cur, joue, o.arc || 'hold')
       };
       /* la salle et la tendance ne se recalculent pas sans le pack
          ni les classements : on ne les apprend que si le morceau
@@ -229,7 +262,8 @@ class Gout {
         const med = mediane(props.map(p => (
           c === 'h' ? p.h : c === 'tp' ? p.tempo.s : c === 'en' ? p.energyScore :
           c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd :
-          c === 'fr' ? p.fraicheur : c === 'af' ? p.affinite : p.trend)));
+          c === 'fr' ? p.fraicheur : c === 'af' ? p.affinite :
+          c === 'pl' ? p.plancher : p.trend)));
         const z = clamp((valeurs[c] - med) / 100, -1, 1);
         this.d.ema[c] = (1 - a) * this.d.ema[c] + a * z;
       }
@@ -240,7 +274,7 @@ class Gout {
        division rendait NaN, qui contaminait ensuite la moyenne pour
        toute la duree du fichier de gout. */
     if (cur.bpm > 0 && joue.bpm > 0) {
-      const tp2 = engine.tempoScore(cur.bpm, joue.bpm);
+      const tp2 = engine.tempoScore(cur.bpm, joue.bpm, engine.doubleAdmis(cur, joue));
       const ecart = Math.abs(tp2.delta) / cur.bpm;
       this.d.ecartTempo = (1 - 0.08) * this.d.ecartTempo + 0.08 * clamp(ecart, 0, 0.3);
     }
@@ -295,7 +329,7 @@ class Gout {
     if (!f) return { poids: {}, marge: undefined, variete: undefined, appris: false, force: 0 };
     const poids = {};
     for (const c of CRITERES)
-      poids[c] = clamp(1 + AMPLITUDE * this.d.ema[c] * f, 0.55, 1.7);
+      poids[c] = clamp(1 + AMPLITUDE * (this.d.ema[c] || 0) * f, 0.55, 1.7);
     /* de -1 (il creuse) a +1 (il joue les tubes) */
     poids.pop = clamp(this.d.emaPop * 2.6 * f, -1, 1);
     /* le crible suit l'ecart observe, avec de la marge au-dessus :

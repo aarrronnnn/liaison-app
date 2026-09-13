@@ -112,13 +112,80 @@ function keepAlivePacket(deviceNumber, name) {
    fermer Liaison pour que ses platines fonctionnent.
    ============================================================ */
 
-/** Ouvre un socket UDP en partageant le port autant que le systeme l'accepte. */
-function ouvrirPartage() {
-  /* reusePort (SO_REUSEPORT) existe depuis Node 22 : quand les deux
-     applications le demandent, elles cohabitent vraiment. On le tente,
-     et on retombe sur reuseAddr seul si la version ne le connait pas. */
-  try { return dgram.createSocket({ type: 'udp4', reuseAddr: true, reusePort: true }); }
-  catch (e) { return dgram.createSocket({ type: 'udp4', reuseAddr: true }); }
+/* ------------------------------------------------------------
+   Les options de partage ne sont pas les memes d'un systeme a
+   l'autre — et c'est ce qui a tue Pro DJ Link sur Mac.
+
+   J'avais ecrit « reuseAddr ET reusePort », en pensant qu'en
+   demander deux valait mieux qu'un. Sur Linux, c'est vrai : les
+   deux drapeaux cohabitent et les essais passaient. Sur macOS et
+   les BSD, libuv REFUSE la combinaison et le bind echoue. Comme le
+   gestionnaire d'erreur traitait tout echec comme « quelqu'un
+   d'autre tient le port », Liaison cedait aussitot et n'ecoutait
+   JAMAIS le reseau Pro DJ Link — sur la plateforme principale de
+   l'app, et sans le moindre message.
+
+   L'essai ne l'avait pas vu parce qu'il tournait sur Linux. C'est
+   la deuxieme fois dans ce fichier qu'un defaut se cache entre
+   l'etabli et la cabine.
+
+   On essaie donc les options une par une, de la plus partageuse a
+   la moins, et on ne cede QUE sur EADDRINUSE — la seule erreur qui
+   signifie reellement « quelqu'un d'autre en a besoin ».
+
+     1. reusePort seul  — le vrai partage : rekordbox et Liaison
+        ecoutent ensemble, personne n'est bloque.
+     2. reuseAddr seul  — ne partage pas vraiment : Liaison occupe
+        le port. On l'accepte quand meme parce que la garde, plus
+        bas, rend le port des que rekordbox apparait. C'est un
+        repli, pas un choix.
+
+   Jamais de socket sans option : ce serait exactement le blocage
+   que ce fichier existe pour corriger.
+   ------------------------------------------------------------ */
+const PARTAGES = [
+  { cle: 'reusePort', opt: { reusePort: true },  vraiPartage: true },
+  { cle: 'reuseAddr', opt: { reuseAddr: true },  vraiPartage: false }
+];
+
+/**
+ * Ouvre et lie un socket UDP sur un port, en descendant l'echelle
+ * des options de partage jusqu'a ce que le systeme en accepte une.
+ *
+ * @param {number} port
+ * @param {function} pret   (socket, mode) — le bind a reussi
+ * @param {function} echec  (code)         — plus rien a essayer
+ */
+function lierPartage(port, pret, echec) {
+  let i = 0, dernier = 'EAUCUN';
+  const essayer = () => {
+    if (i >= PARTAGES.length) return echec(dernier);
+    const choix = PARTAGES[i++];
+    let s;
+    try { s = dgram.createSocket(Object.assign({ type: 'udp4' }, choix.opt)); }
+    catch (e) { dernier = e.code || 'EOPTION'; return essayer(); }
+    let regle = false;
+    const rate = (e) => {
+      if (regle) return;
+      regle = true;
+      dernier = (e && e.code) || 'EBIND';
+      try { s.close(); } catch (x) {}
+      /* Le port est vraiment pris : descendre d'un cran n'y changera
+         rien, et s'acharner est precisement ce qu'on s'interdit. */
+      if (dernier === 'EADDRINUSE') return echec(dernier);
+      essayer();
+    };
+    s.once('error', rate);
+    try {
+      s.bind({ port: port, exclusive: false }, () => {
+        if (regle) return;
+        regle = true;
+        s.removeListener('error', rate);
+        pret(s, choix);
+      });
+    } catch (e) { rate(e); }
+  };
+  essayer();
 }
 
 const CONSEIL_CEDE = {
@@ -151,6 +218,8 @@ function start(opts, cb) {
   let sock = null;
   let cede = false;                // on a lache le port, volontairement
   let arrete = false;
+  let enCours = false;             // une tentative de liaison est en vol
+  let partage = null;              // l'option que le systeme a acceptee
 
   function surMessage(msg) {
     const st = parseStatus(msg);
@@ -171,34 +240,38 @@ function start(opts, cb) {
   }
 
   function lier() {
-    if (arrete || sock) return;
+    if (arrete || sock || enCours) return;
     if (!autorise()) { cede = true; return; }
     cede = false;
-    sock = ouvrirPartage();
-    sock.on('message', surMessage);
-    sock.on('error', e => {
-      /* ------------------------------------------------------------
-         Le port est deja pris. On ne reessaie pas en boucle et on ne
-         s'accroche surtout pas : quelqu'un d'autre en a besoin.
-         ------------------------------------------------------------ */
-      liberer();
-      cede = true;
-      cb.onStatus({
-        ok: false,
-        msg: 'Pro DJ Link : le port ' + PORT_STATUS + ' est deja utilise (' + e.code + ')',
-        conseil: CONSEIL_CEDE
-      });
-    });
-    try {
-      sock.bind({ port: PORT_STATUS, exclusive: false }, () => {
+    enCours = true;
+    lierPartage(PORT_STATUS,
+      (s, choix) => {
+        enCours = false;
+        /* Entre le debut de la tentative et maintenant, rekordbox a pu
+           demarrer, ou le DJ a pu fermer l'app. On verifie avant de
+           garder le port : le bind est asynchrone, la cabine ne l'est
+           pas. */
+        if (arrete || !autorise()) { try { s.close(); } catch (e) {} cede = true; return; }
+        sock = s;
+        partage = choix.cle;
+        sock.on('message', surMessage);
+        sock.on('error', () => { liberer(); cede = true;
+          cb.onStatus({ ok: false, msg: 'Pro DJ Link interrompu', conseil: CONSEIL_CEDE }); });
         try { sock.setBroadcast(true); } catch (e) {}
-        cb.onStatus({ ok: true, msg: 'Pro DJ Link : ecoute sur ' + PORT_STATUS });
+        cb.onStatus({ ok: true,
+          msg: 'Pro DJ Link : ecoute sur ' + PORT_STATUS + ' (' + choix.cle + ')' });
+        demarrerAnnonce();
+      },
+      (code) => {
+        enCours = false;
+        liberer();
+        cede = true;
+        cb.onStatus({
+          ok: false,
+          msg: 'Pro DJ Link : le port ' + PORT_STATUS + ' n\'a pas pu etre ouvert (' + code + ')',
+          conseil: CONSEIL_CEDE
+        });
       });
-    } catch (e) {
-      liberer(); cede = true;
-      cb.onStatus({ ok: false, msg: 'Pro DJ Link indisponible', conseil: CONSEIL_CEDE });
-    }
-    demarrerAnnonce();
   }
 
   /** Rend les ports, tout de suite, sans rien casser d'autre. */
@@ -218,30 +291,53 @@ function start(opts, cb) {
       num = 7;
       while (num < 16 && vusSurLeReseau.has(num)) num++;
     }
-    annSock = ouvrirPartage();
-    annSock.on('error', () => { try { annSock.close(); } catch (e) {} annSock = null; });
-    try {
-      annSock.bind({ port: PORT_ANNOUNCE, exclusive: false }, () => {
+    lierPartage(PORT_ANNOUNCE,
+      (s) => {
+        if (arrete || !autorise() || !sock) { try { s.close(); } catch (e) {} return; }
+        annSock = s;
+        annSock.on('error', () => { try { annSock.close(); } catch (e) {} annSock = null; });
         try { annSock.setBroadcast(true); } catch (e) {}
         const pkt = keepAlivePacket(num, 'Liaison');
         announceTimer = setInterval(() => {
           if (!autorise()) { liberer(); cede = true; return; }
           try { annSock.send(pkt, 0, pkt.length, PORT_ANNOUNCE, '255.255.255.255'); } catch (e) {}
         }, 1500);
+      },
+      () => {
+        /* S'annoncer est un confort — on demande aux platines de
+           parler plus souvent. Ne pas y arriver n'empeche pas
+           d'ecouter : on continue sans rien dire au DJ. */
+        annSock = null;
       });
-    } catch (e) { annSock = null; }
   }
 
   /* ------------------------------------------------------------
-     La surveillance, deux fois par seconde.
+     La surveillance.
 
      rekordbox peut demarrer a tout moment — typiquement quand le DJ
      branche ses platines, c'est-a-dire au pire moment. On verifie
      donc en continu, et on lache sans attendre qu'on nous le
      demande. Reprendre, a l'inverse, ne se fait que lorsque la voie
      est reellement libre.
+
+     Le rythme depend de ce que le systeme nous a accorde, et cette
+     distinction vient d'une mesure faite sur un vrai Mac :
+
+       reusePort  — le partage est reel, les deux applications
+                    ecoutent ensemble. La garde est un confort ;
+                    deux fois par seconde suffisent largement.
+       reuseAddr  — nous OCCUPONS le port. macOS ne connait pas
+                    SO_REUSEPORT en UDP (ENOTSUP, verifie), donc
+                    c'est le mode de TOUS les Mac. La garde n'est
+                    alors plus un confort : elle est la seule chose
+                    qui empeche de bloquer le bouton LINK du DJ.
+                    On serre a quatre fois par seconde pour reduire
+                    la fenetre entre le lancement de rekordbox et
+                    le moment ou il ouvre ses ports.
      ------------------------------------------------------------ */
-  const garde = setInterval(() => {
+  const RYTHME_PARTAGE = 500, RYTHME_OCCUPE = 250;
+  let rythme = RYTHME_PARTAGE;
+  const battre = () => {
     if (arrete) return;
     const libre = autorise();
     if (!libre && sock) {
@@ -252,9 +348,24 @@ function start(opts, cb) {
       lier();
       if (sock) cb.onStatus({ ok: true, msg: 'Pro DJ Link : reseau repris' });
     }
-  }, 500);
+    regler();
+  };
+
+  /* Le rythme suit le mode obtenu, qui n'est connu qu'apres le bind —
+     et qui peut changer en cours de soiree si on relie le port. */
+  let garde = null;
+  function regler() {
+    const veut = (sock && partage === 'reuseAddr') ? RYTHME_OCCUPE : RYTHME_PARTAGE;
+    if (garde && veut === rythme) return;
+    rythme = veut;
+    if (garde) clearInterval(garde);
+    garde = setInterval(battre, rythme);
+    if (garde.unref) garde.unref();
+  }
+  regler();
 
   lier();
+  regler();
   if (cede) {
     cb.onStatus({
       ok: true,
@@ -308,8 +419,9 @@ function start(opts, cb) {
     /* Rendre la main tout de suite, sur demande de l'application. */
     liberer() { liberer(); cede = true; },
     lie: () => !!sock,
-    stats: () => ({ packets, cede: cede, lie: !!sock, decks: Array.from(seen.entries()) })
+    stats: () => ({ packets, cede: cede, lie: !!sock, partage: partage,
+                    decks: Array.from(seen.entries()) })
   };
 }
 
-module.exports = { start, parseStatus, isProlink, keepAlivePacket, MAGIC };
+module.exports = { start, parseStatus, isProlink, keepAlivePacket, MAGIC, PARTAGES, lierPartage };

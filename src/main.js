@@ -792,6 +792,11 @@ function computeSuggestions(limit) {
       bulle: r.bulle, horsBulle: bulleActive ? !r.dansBulle : false,
       /* de quoi dire au DJ POURQUOI, plutot que de lui donner un chiffre */
       pourquoi: r.pourquoi || null, age: r.age || null,
+      /* Le plancher : « ce morceau relance la piste ». On ne remonte
+         que le sens positif — ceux qui la cassent ne sont plus
+         proposes du tout, dire « casse la piste » sur une ligne qu'on
+         affiche quand meme serait un aveu, pas une aide. */
+      relance: r.plancherDit === 'relance',
       /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
       deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
     };

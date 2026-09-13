@@ -7,7 +7,34 @@
    defaut qu'on vient de corriger : une hauteur ecrite en dur qui
    coupait le bouton « Commencer ». */
 const path = require('path');
-const { chromium } = require('/home/claude/.npm-global/lib/node_modules/playwright');
+
+/* ------------------------------------------------------------
+   Ce require pointait un chemin ABSOLU de la machine sur laquelle
+   cet essai a ete ecrit :
+
+     require('/home/claude/.npm-global/lib/node_modules/playwright')
+
+   Il marchait donc a un seul endroit au monde, et faisait tomber
+   « npm run verifier » — l'unique commande de verification du
+   projet — sur toutes les autres machines, y compris celle sur
+   laquelle l'app est construite et publiee. Onze suites vertes
+   annulees par la douzieme, pour un chemin.
+
+   On resout donc playwright normalement, et son absence n'est pas
+   un echec : c'est un outil de confort, pas une dependance de
+   l'app. On le dit et on passe, comme test-prolink.js le fait
+   quand le port n'est pas disponible.
+   ------------------------------------------------------------ */
+let chromium = null;
+try { chromium = require('playwright').chromium; }
+catch (e) {
+  try { chromium = require('playwright-core').chromium; } catch (e2) {}
+}
+if (!chromium) {
+  console.log('licence : playwright absent — rendu de la fenetre non verifie.');
+  console.log('  (facultatif : npm install --no-save playwright && npx playwright install chromium)');
+  process.exit(0);
+}
 
 const FICHIER = 'file://' + path.join(__dirname, '..', 'src', 'ui', 'licence.html');
 
@@ -31,7 +58,22 @@ const CAS = [
 ];
 
 (async () => {
-  const b = await chromium.launch();
+  /* Playwright peut etre installe sans que son navigateur le soit —
+     ce sont deux telechargements distincts. Meme regle que plus
+     haut : un outil de confort absent ne fait pas echouer la
+     verification de l'app. */
+  let b;
+  for (const essai of [undefined, process.env.CHROMIUM, '/opt/pw-browsers/chromium',
+                       '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome']) {
+    if (essai !== undefined && !essai) continue;
+    try { b = await chromium.launch(essai ? { executablePath: essai } : undefined); break; }
+    catch (e) { /* on essaie le suivant */ }
+  }
+  if (!b) {
+    console.log('licence : navigateur de test absent — rendu non verifie.');
+    console.log('  (facultatif : npx playwright install chromium)');
+    process.exit(0);
+  }
   let ko = 0;
   for (const c of CAS) {
     const p = await b.newPage({ viewport: { width: 460, height: 900 } });

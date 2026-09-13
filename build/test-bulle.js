@@ -146,8 +146,16 @@ const DNA = { 'variete': 82, 'chanson francaise': 82, 'disco': 80, 'funk': 70, '
        matchent mais pas assez » et « ca propose des trucs qui ne sont
        plus a la mode ». Les notes baissent parce que le total est
        maintenant divise par huit poids au lieu de six ; l'ORDRE, lui,
-       ne change que la ou l'epoque le justifie. */
-  const ATTENDU = 'disco=91 var7=89 var1=88 var2=88 var3=88';
+       ne change que la ou l'epoque le justifie.
+
+       13 sept. 2026 (soir) — ajout de l'axe plancher (plancher.js) et
+       fermeture du rapport de double tempo hors des familles ou il a
+       un sens, apres « apres Les Sardines il me propose Charles
+       Aznavour ». Neuvieme poids : les notes remontent d'un point la
+       ou les candidats tiennent la piste, et var4 remonte devant var2
+       et var3 parce qu'il la tient mieux qu'eux. Le disco reste
+       premier : c'est ce que ce temoin garde. */
+  const ATTENDU = 'disco=91 var1=89 var4=89 var7=89 var2=88';
   const obtenu = engine.suggest(bib[0], bib, { limit: 5, arc: 'up', dna: DNA, mode: 'crowd' })
     .map(x => nom(x.track) + '=' + x.total).join(' ');
   verifier('2. sans bulle, le classement d\'avant est intact',

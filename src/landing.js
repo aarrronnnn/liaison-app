@@ -21,7 +21,7 @@
    Sinon il sort au milieu du set et il n'y a plus de fin.
    ============================================================ */
 
-const { keyOf, mmss, tempoScore } = require('./engine');
+const { keyOf, mmss, tempoScore, doubleAdmis } = require('./engine');
 
 const MIN = 60;
 
@@ -179,7 +179,11 @@ function clotureMaintenant(p, cur, library, opt) {
   /* encore mixable ? six pour cent, c'est ce qu'un DJ cale au pitch
      sans que ca s'entende */
   if (cur && cur.bpm > 0 && reservee.bpm > 0) {
-    const tp = tempoScore(cur.bpm, reservee.bpm);
+    /* Le meme garde-fou que dans le moteur : sans lui, une cloture a
+       65 BPM derriere un morceau a 130 s'annoncait « encore mixable,
+       ecart 0 % » grace au rapport x2, et le DJ decouvrait la verite
+       au moment de la lancer. */
+    const tp = tempoScore(cur.bpm, reservee.bpm, doubleAdmis(cur, reservee));
     const ecart = Math.abs(tp.delta) / cur.bpm * 100;
     if (ecart <= 6) return { track: reservee, remplacee: false, ecart: ecart };
   } else {
@@ -189,12 +193,12 @@ function clotureMaintenant(p, cur, library, opt) {
   /* sinon : la meilleure cloture parmi ce qui se cale maintenant */
   const atteignables = (library || []).filter(t => {
     if (!(t.bpm > 0) || !cur || !(cur.bpm > 0)) return false;
-    const tp = tempoScore(cur.bpm, t.bpm);
+    const tp = tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
     return Math.abs(tp.delta) / cur.bpm * 100 <= 6;
   });
   const remplacante = closer(atteignables, opt);
   if (!remplacante) return { track: reservee, remplacee: false, ecart: 99, faute: true };
-  const tp = tempoScore(cur.bpm, remplacante.bpm);
+  const tp = tempoScore(cur.bpm, remplacante.bpm, doubleAdmis(cur, remplacante));
   return {
     track: { id: remplacante.id, title: remplacante.title, artist: remplacante.artist,
              bpm: remplacante.bpm, key: remplacante.key, energy: remplacante.energy,

@@ -137,6 +137,84 @@ function rekordboxOuvre() {
   }
 
   /* ============================================================
+     3quinquies. LE DEFAUT macOS.
+
+     La premiere version demandait reuseAddr ET reusePort dans le
+     meme socket. Sur Linux les deux drapeaux cohabitent et tout
+     passait ; sur macOS et les BSD, libuv refuse la combinaison, le
+     bind echoue, et le gestionnaire d'erreur prenait cet echec pour
+     « quelqu'un d'autre tient le port ». Resultat : Pro DJ Link ne
+     fonctionnait PAS sur Mac, sans le moindre message — et l'essai
+     ne pouvait pas le voir, parce qu'il tourne sur Linux.
+
+     On ne peut pas simuler macOS ici. On peut en revanche figer la
+     regle qui a manque : aucune combinaison des deux drapeaux dans
+     un meme socket. Ce cas-la se lit sur n'importe quel systeme.
+     ============================================================ */
+  {
+    const echelle = prolink.PARTAGES || [];
+    verifier('3quinquies. une option de partage a la fois, jamais deux',
+             echelle.length > 0 && echelle.every(c => !(c.opt.reuseAddr && c.opt.reusePort)),
+             echelle.map(c => c.cle).join(' puis '));
+    verifier('3sexies. et le vrai partage est essaye en premier',
+             echelle[0] && echelle[0].vraiPartage === true,
+             echelle[0] ? echelle[0].cle : 'aucune');
+    /* Chaque option doit reellement fonctionner sur CE systeme, ou
+       l'echelle ne sert a rien. On les essaie une par une. */
+    for (const c of echelle) {
+      const s = await new Promise(r => {
+        const x = require('dgram').createSocket(Object.assign({ type: 'udp4' }, c.opt));
+        x.once('error', e => r({ ok: false, code: e.code }));
+        try { x.bind({ port: PORT, exclusive: false }, () => r({ ok: true, fermer: () => { try { x.close(); } catch (y) {} } })); }
+        catch (e) { r({ ok: false, code: e.code }); }
+      });
+      console.log('    · %s sur ce systeme : %s', c.cle.padEnd(10),
+                  s.ok ? 'accepte' : 'REFUSE (' + s.code + ')');
+      if (s.ok) s.fermer();
+      await dors(60);
+    }
+  }
+
+  /* ============================================================
+     3septies. LE CAS MAC, rejoue ici.
+
+     Mesure sur un vrai Mac : reusePort est REFUSE (ENOTSUP). macOS
+     ne connait pas SO_REUSEPORT pour l'UDP, donc tous les Mac
+     tombent sur reuseAddr — c'est-a-dire que Liaison OCCUPE le
+     port au lieu de le partager. La garde n'est plus un confort :
+     c'est la seule chose qui empeche de bloquer le bouton LINK.
+
+     On rejoue donc ce mode ici, en retirant reusePort de l'echelle,
+     et on verifie que le filet tient : Liaison ecoute, et lache
+     assez vite pour que rekordbox n'echoue pas a son lancement.
+     ============================================================ */
+  {
+    const vraie = prolink.PARTAGES.slice();
+    prolink.PARTAGES.length = 0;
+    for (const c of vraie) if (c.cle !== 'reusePort') prolink.PARTAGES.push(c);
+    try {
+      let ouvert = true;
+      const p = prolink.start({ autorise: () => ouvert }, { onLoad() {}, onStatus() {} });
+      await dors(200);
+      verifier('3septies. en mode Mac (reuseAddr), Liaison ecoute quand meme',
+               p.lie() === true, 'partage = ' + p.stats().partage);
+      ouvert = false;                       /* le DJ lance rekordbox */
+      await dors(400);                      /* la garde serree : 4 fois par seconde */
+      verifier('3octies. et il lache en moins d\'une demi-seconde',
+               p.lie() === false, 'lie = ' + p.lie());
+      const rb = await rekordboxOuvre();
+      verifier('3nonies. le bouton LINK reste donc disponible',
+               rb.ok === true, rb.ok ? 'ouvert' : 'BLOQUE (' + rb.code + ')');
+      if (rb.ok) rb.fermer();
+      p.stop();
+      await dors(60);
+    } finally {
+      prolink.PARTAGES.length = 0;
+      for (const c of vraie) prolink.PARTAGES.push(c);
+    }
+  }
+
+  /* ============================================================
      4. Apres stop(), plus rien n'est tenu.
      ============================================================ */
   {

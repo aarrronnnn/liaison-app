@@ -651,7 +651,7 @@ function renderSug(list) {
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? (r.cloture?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="mm">${r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? (r.cloture?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}${r.relance ? ' · <span class="up">RELANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>

@@ -70,7 +70,10 @@ function enchainements(joues) {
     const a = joues[i - 1], b = joues[i];
     if (!(a.bpm > 0) || !(b.bpm > 0)) continue;
     const h = engine.harmScore(a.key, b.key);
-    const tp = engine.tempoScore(a.bpm, b.bpm);
+    /* Meme regle que le moteur, sinon le bilan contredirait la
+       cabine : un 65 derriere un 130 s'y affichait « tempo parfait »
+       alors que le widget vient d'apprendre a ne plus le proposer. */
+    const tp = engine.tempoScore(a.bpm, b.bpm, engine.doubleAdmis(a, b));
     /* Harmonie et tempo seulement : ce sont les deux seules choses
        qu'on peut affirmer sans connaitre l'intention. */
     const note = Math.round(h * 0.55 + tp.s * 0.45);

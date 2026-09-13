@@ -8,6 +8,7 @@ const genres = require('./genres');
 const bulle = require('./bulle');
 const epoque = require('./epoque');
 const affinites = require('./affinites');
+const plancher = require('./plancher');
 
 const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
 
@@ -25,9 +26,55 @@ function harmScore(a, b) {
   return Math.max(18, 60 - d * 8);
 }
 
-function tempoScore(a, b) {
+/* ------------------------------------------------------------
+   Le piege du double tempo.
+
+   « Apres Les Sardines, il me propose Charles Aznavour. »
+
+   Les Sardines tournent a 130. La Boheme a 65. Le moteur essayait
+   les rapports 1, 2 et 0,5 — et 65 x 2 = 130, exactement. Il
+   rendait donc 100 sur 100, la note parfaite, a l'enchainement le
+   plus violent de la soiree.
+
+   Ce rapport n'est pas une erreur : en house, en drum and bass, en
+   hip hop, compter le double ou la moitie est la maniere normale
+   d'entendre le morceau, et un 87 derriere un 174 se cale vraiment.
+   Mais un slow de 65 n'est pas une fete de 130 comptee autrement :
+   c'est un slow.
+
+   Le rapport reste donc ouvert la ou il veut dire quelque chose, et
+   se ferme ailleurs. Quand la famille est inconnue, on laisse
+   ouvert : on ne punit jamais un tag manquant (c'est exactement ce
+   defaut qui vidait deja les listes ailleurs dans ce fichier).
+   ------------------------------------------------------------ */
+const FAM_DOUBLE = new Set([
+  'house', 'tech house', 'techno', 'trance', 'edm', 'drum and bass',
+  'garage', 'french touch', 'afro', 'dancehall', 'reggaeton', 'drill',
+  'hip hop', 'rap fr', 'rnb', 'zouk', 'ambient', 'disco'
+]);
+
+/** La famille dominante reconnue d'un morceau, ou null. */
+function famDominante(t) {
+  let f = null, sur = 0;
+  for (const [nom, s] of genres.famillesDe(t)) if (s > sur) { sur = s; f = nom; }
+  return f;
+}
+
+/**
+ * Le rapport double / moitie a-t-il un sens entre ces deux morceaux ?
+ * Inconnu = oui : on ne ferme jamais une porte sur un tag absent.
+ */
+function doubleAdmis(a, b) {
+  const fa = famDominante(a), fb = famDominante(b);
+  if (fa && !FAM_DOUBLE.has(fa)) return false;
+  if (fb && !FAM_DOUBLE.has(fb)) return false;
+  return true;
+}
+
+function tempoScore(a, b, doubleOk) {
+  const rapports = doubleOk === false ? [1] : [1, 2, 0.5];
   let best = Infinity, ratio = 1;
-  for (const r of [1, 2, 0.5]) {
+  for (const r of rapports) {
     const d = Math.abs(b * r - a);
     if (d < best) { best = d; ratio = r; }
   }
@@ -256,10 +303,14 @@ const MARGE_CRIBLE = 0.12;
    ce qu'ils font et on ouvre le crible d'autant — sans descendre
    sous 6 % (on couperait des enchainements evidents) ni depasser
    22 % (au-dela ce n'est plus un mix, c'est une coupure). */
-function passeLeCrible(bpmRef, bpm, marge) {
+function passeLeCrible(bpmRef, bpm, marge, doubleOk) {
   if (!(bpm > 0)) return false;
   const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.06, Math.min(0.22, marge)) : MARGE_CRIBLE;
-  for (const r of [1, 2, 0.5]) {
+  /* Le crible suit la meme regle que la note : s'il laissait passer
+     un rapport que tempoScore refuse ensuite, le candidat sortirait
+     avec une note de tempo catastrophique au lieu de ne pas sortir. */
+  const rapports = doubleOk === false ? [1] : [1, 2, 0.5];
+  for (const r of rapports) {
     if (Math.abs(bpm * r - bpmRef) / bpmRef <= M) return true;
   }
   return false;
@@ -366,7 +417,18 @@ function suggest(cur, library, opt) {
      ------------------------------------------------------------ */
   const wFr = 0.10 * m('fr') * (B ? 0.4 : 1);
   const wAf = 0.12 * m('af');
-  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf;
+  /* ------------------------------------------------------------
+     Le plancher : ce que le morceau FAIT a la salle.
+
+     Le dernier axe, et le plus lourd des trois ajoutes, parce que
+     c'est le seul qui reponde a « ca ne matche pas dans la vraie
+     vie ». L'harmonie, le tempo et le genre pouvaient etre parfaits
+     tous les trois et la piste se vider quand meme. Voir
+     plancher.js. Il compte AUSSI en bulle : une soiree a theme n'est
+     pas une excuse pour vider la salle.
+     ------------------------------------------------------------ */
+  const wPl = 0.17 * m('pl');
+  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
@@ -424,7 +486,8 @@ function suggest(cur, library, opt) {
          volent la place de personne : ils comblent un vide.
          ------------------------------------------------------------ */
       (t.bpm > 0
-        ? (sansTempo || t.id === epingle || passeLeCrible(cur.bpm, t.bpm, opt.marge))
+        ? (sansTempo || t.id === epingle ||
+           passeLeCrible(cur.bpm, t.bpm, opt.marge, doubleAdmis(cur, t)))
         : accepterSansTempo))
     .map(t => {
       /* ------------------------------------------------------------
@@ -448,7 +511,7 @@ function suggest(cur, library, opt) {
          ------------------------------------------------------------ */
       t.mesure = !!t.analyzed;
       const h = harmScore(cur.key, t.key);
-      const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm);
+      const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
       /* ------------------------------------------------------------
          « Inconnu » n'est pas « parfait ».
 
@@ -493,8 +556,9 @@ function suggest(cur, library, opt) {
       const nb = B ? bulle.note(t, B) : null;   /* note ET appartenance, en un calcul */
       const fr = epoque.fraicheur(t, annee);
       const af = AFF ? affinites.score(cur, t, AFF) : 50;
+      const pl = plancher.continuite(cur, t, arc);
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
-                   + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf) / W;
+                   + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf + pl * wPl) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
@@ -529,7 +593,8 @@ function suggest(cur, library, opt) {
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
-               fraicheur: fr, affinite: af,
+               fraicheur: fr, affinite: af, plancher: pl,
+               plancherDit: plancher.raison(cur, t, arc),
                pourquoi: AFF ? affinites.explication(cur, t, AFF) : null,
                age: epoque.raison(t, annee),
                bulle: nb ? nb.note : null,
@@ -588,6 +653,24 @@ function suggest(cur, library, opt) {
      Les preferences s'appliquent donc DANS chaque groupe, et
      mettent en tete plutot que d'ecarter.
      ------------------------------------------------------------ */
+  /* ------------------------------------------------------------
+     Le seuil du morceau qui casse la piste.
+
+     Mesure faite sur le cas reel : derriere un disco a 128, un slow
+     RnB a 64 BPM passait encore troisieme. Son tempo valait 100 sur
+     100 — 64 x 2 = 128, la famille RnB autorise le demi-tempo, et
+     c'est legitime pour un morceau en trap a 70 — mais son plancher
+     valait 4. La porte de genre ne pouvait pas trancher : dans la
+     meme famille, un slow et un titre en demi-tempo portent la meme
+     etiquette. Seul le signal les separe.
+
+     On ne le JETTE pas, fidelement au reste de ce fichier : sur une
+     petite bibliotheque, une proposition tiede vaut mieux qu'une
+     liste vide. On le met derriere tout le reste, et il ne ressort
+     que s'il n'y a plus rien d'autre.
+     ------------------------------------------------------------ */
+  const CASSE = 12;
+
   const ordonner = (groupe) => {
     let out = groupe;
     /* ------------------------------------------------------------
@@ -614,7 +697,13 @@ function suggest(cur, library, opt) {
        choisir, pas seulement de quoi remplir. */
     const mes = [], autres = [];
     for (const c of out) (c.track.mesure ? mes : autres).push(c);
-    return mes.length >= limit * 2 ? mes.concat(autres) : out;
+    out = mes.length >= limit * 2 ? mes.concat(autres) : out;
+    /* Et par-dessus tout le reste : ce qui vide la salle passe en
+       dernier, quelles que soient ses autres qualites. C'est la
+       preference la plus forte du moteur, donc la derniere appliquee. */
+    const tiennent = [], cassent = [];
+    for (const c of out) ((c.plancher != null && c.plancher < CASSE) ? cassent : tiennent).push(c);
+    return cassent.length ? tiennent.concat(cassent) : out;
   };
 
   let vivier = candidats;
@@ -797,8 +886,19 @@ function rescue(cur, library, opt) {
     if (t.id === cur.id || banned.has(keyOf(t))) continue;
     if (!(t.bpm > 0) && !sansTempo) continue;
     const tp = sansTempo ? { s: 50, pct: null, ratio: 1, delta: 0, muet: true }
-                         : tempoScore(cur.bpm, t.bpm);
+                         : tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
     if (!sansTempo && tp.s < 52) continue;       /* injouable maintenant : on passe */
+    /* ------------------------------------------------------------
+       Le sauvetage ne fait jamais retomber la salle.
+
+       C'est le seul endroit de l'application ou la regle est
+       absolue : on appuie sur SOS quand la piste se vide. Proposer
+       un morceau qui la vide davantage n'est pas une suggestion
+       moins bonne que les autres, c'est l'inverse du bouton. Un
+       candidat qui casse le plancher est donc ecarte, pas penalise.
+       ------------------------------------------------------------ */
+    const pl = plancher.continuite(cur, t, 'up');
+    if (pl < 30) continue;
 
     const h = harmScore(cur.key, t.key);
 
@@ -824,7 +924,26 @@ function rescue(cur, library, opt) {
        ------------------------------------------------------------ */
     const mesuree = !!t.analyzed;   /* finalize() pose une energie sur tout : seul analyzed fait foi */
     const e = t.energy == null ? 5 : t.energy;
-    if (mesuree && e < 5.4) continue;            /* mesure basse : on l'ecarte */
+    /* ------------------------------------------------------------
+       « Assez fort » est relatif a la salle, pas a une constante.
+
+       Cette ligne disait « energie sous 5,4 sur 10 : ecarte », en
+       absolu. Mesure faite sur une bibliotheque de bar — ambient,
+       jazz, bossa, RnB, deep house, energies 2 a 6 — le sauvetage
+       rendait une liste VIDE 25 fois sur 30. Le DJ de bar appuie sur
+       SOS et Liaison lui repond « rien de mixable » alors qu'il a
+       mille cinq cents morceaux qui conviennent.
+
+       Le defaut est anterieur a cette version ; il ne se voyait pas
+       parce que les essais partaient tous de bibliotheques de club.
+       Ce que le bouton veut dire, c'est « donne-moi plus fort que ce
+       qui tourne » — et depuis plancher.js, on sait le calculer. Un
+       candidat qui RELEVE le plancher reste donc candidat, meme si
+       son energie absolue est basse : dans un bar, 5 sur 10 derriere
+       un 3 sur 10, c'est exactement le sauvetage.
+       ------------------------------------------------------------ */
+    const releve = pl >= 88;                                  /* egal ou plus fort */
+    if (mesuree && e < 5.4 && !releve) continue;
     if (!mesuree && (t.pop == null ? 40 : t.pop) < 30) continue;
     /* pas encore analyse : c'est la notoriete qui tient lieu d'impact */
 
@@ -840,13 +959,13 @@ function rescue(cur, library, opt) {
 
     const nb = B ? bulle.note(t, B) : null;
     const total = Math.round(
-      tp.s * 0.28 + h * 0.14 + fam * 0.34 + Math.min(100, impact) * 0.24
+      tp.s * 0.24 + h * 0.12 + fam * 0.31 + Math.min(100, impact) * 0.21 + pl * 0.12
     ) + (wanted.has(t.id) ? 12 : 0) + Math.round(penaliteVariete(t, M, { sansFamille: !!B, rejeu: true }) * 0.5)
       + (nb ? Math.round((nb.note - 50) * 0.24) : 0);
     out.push({
       track: t, total: Math.max(4, Math.min(99, total)),
       bulle: nb ? nb.note : null, dansBulle: nb ? nb.dedans : true,
-      tempo: tp, h: h, fam: Math.round(fam), energy: e,
+      tempo: tp, h: h, fam: Math.round(fam), energy: e, plancher: pl,
       introBars: introBars, client: wanted.has(t.id),
       why: wanted.has(t.id) ? 'Demande par le client'
         : (introBars != null && introBars <= 4
@@ -1100,6 +1219,7 @@ function search(text, library, limit, threshold) {
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
+                   doubleAdmis, plancher,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
                    epoque, affinites, formesDe };

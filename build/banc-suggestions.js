@@ -106,7 +106,7 @@ function mesurer(sets, vivier, opts, titre) {
     }
   }
   const pc = x => ((100 * x / Math.max(1, n)).toFixed(1) + ' %').padStart(7);
-  console.log('  ' + titre.padEnd(30) +
+  console.log('  ' + titre.padEnd(34) +
               'top 1 ' + pc(top1) + '   top 3 ' + pc(top3) + '   top 5 ' + pc(top5) +
               '   rang moyen ' + (trouves ? (rangs / trouves).toFixed(2) : '—') +
               '   (' + n + ' transitions)');
@@ -119,7 +119,52 @@ if (chemin) {
   sets = charger(chemin);
   if (!Array.isArray(sets)) { console.error('Ce fichier ne ressemble pas a un historique Liaison.'); process.exit(1); }
   vivier = vivierDepuis(sets);
-  console.log('historique reel : %d soirees, %d morceaux distincts\n', sets.length, vivier.length);
+  /* ------------------------------------------------------------
+     « 4 soirees, 0 morceaux distincts. »
+
+     C'est ce que ce banc a repondu la premiere fois qu'on l'a
+     lance sur un vrai historique, et ca ne dit RIEN : le fichier
+     est-il vide, mal lu, ou les soirees n'ont-elles jamais
+     enregistre de morceau ? Un outil de mesure qui rend zero sans
+     dire pourquoi envoie chercher une panne qui n'existe peut-etre
+     pas. On compte donc a chaque etape.
+     ------------------------------------------------------------ */
+  let entrees = 0, avecId = 0, avecTempo = 0, vides = 0;
+  for (const s of sets) {
+    const p = Array.isArray(s && s.played) ? s.played : null;
+    if (!p || !p.length) { vides++; continue; }
+    for (const x of p) {
+      entrees++;
+      if (x && x.id != null) avecId++;
+      if (x && x.bpm > 0) avecTempo++;
+    }
+  }
+  console.log('historique reel : %d soirees, %d morceaux distincts', sets.length, vivier.length);
+  console.log('  soirees sans aucun morceau enregistre : %d sur %d', vides, sets.length);
+  console.log('  morceaux joues au total : %d  (avec identifiant : %d, avec tempo : %d)',
+              entrees, avecId, avecTempo);
+  if (!vivier.length) {
+    console.log('');
+    if (entrees === 0) {
+      console.log('Aucun morceau n\'a ete enregistre dans ces soirees.');
+      console.log('Liaison n\'inscrit un titre que lorsqu\'il DETECTE un changement de');
+      console.log('morceau sur un deck. Une soiree ouverte puis refermee sans que');
+      console.log('l\'application ait vu tourner de musique reste vide — c\'est normal,');
+      console.log('et c\'est sans doute ce qui s\'est passe ici.');
+      console.log('');
+      console.log('Pour remplir le banc : lance Liaison, joue une vingtaine de titres');
+      console.log('d\'affilee dans ton logiciel, puis relance cette commande.');
+    } else if (avecId === 0) {
+      console.log('Les morceaux sont bien la, mais aucun ne porte d\'identifiant :');
+      console.log('cet historique vient d\'une version anterieure de Liaison et ne');
+      console.log('peut pas etre rejoue.');
+    }
+    console.log('');
+    console.log('En attendant, le jeu d\'essai donne une mesure comparable :');
+    console.log('    node build/banc-suggestions.js');
+    process.exit(0);
+  }
+  console.log('');
 } else {
   const j = jeuDEssai();
   sets = j.sets; vivier = vivierDepuis(j.sets);
@@ -132,8 +177,11 @@ console.log('memoire des enchainements : ' + AFF.n + ' transitions' +
             (AFF.assez ? '' : ' — trop peu, l\'axe se tait') + '\n');
 
 console.log('MESURE');
-const avant = mesurer(sets, vivier, { poids: { fr: 0.5, af: 0.5 } }, 'moteur seul');
-const apres = mesurer(sets, vivier, { affinites: AFF }, 'avec fraicheur + affinites');
+/* « Avant » n'est pas un autre moteur : c'est le meme, avec les
+   nouveaux axes ramenes a leur poids minimum. On compare donc bien
+   l'apport des axes, pas deux codes differents. */
+const avant = mesurer(sets, vivier, { poids: { fr: 0.5, af: 0.5, pl: 0.5 } }, 'moteur seul');
+const apres = mesurer(sets, vivier, { affinites: AFF }, 'fraicheur + affinites + plancher');
 
 const d = (apres.top5 - avant.top5) / Math.max(1, avant.top5) * 100;
 console.log('\necart sur le top 5 : ' + (d >= 0 ? '+' : '') + d.toFixed(1) + ' %');
