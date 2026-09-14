@@ -68,7 +68,7 @@ const engine = require('./engine');
    un DJ de mariage fera tomber la fraicheur, un DJ de club la fera
    monter, et c'est exactement ce qu'on veut apprendre plutot que
    de le decider a leur place. */
-const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td', 'fr', 'af', 'pl'];
+const CRITERES = ['h', 'tp', 'en', 'ti', 'cr', 'td', 'fr', 'af', 'pl', 'pa'];
 const MINI = 12;          /* en dessous, on observe sans rien changer */
 const PLEIN = 40;         /* au-dela, l'apprentissage vaut a plein */
 const AMPLITUDE = 2.2;    /* de l'ecart moyen au multiplicateur */
@@ -206,7 +206,12 @@ class Gout {
            enchaine des morceaux calmes toute la soiree et n'a aucune
            raison d'etre tire vers la piste. Le poids tombera de
            lui-meme. */
-        pl: engine.plancher.continuite(cur, joue, o.arc || 'hold')
+        pl: engine.plancher.continuite(cur, joue, o.arc || 'hold'),
+        /* Un DJ qui saute volontairement d'un genre a l'autre fera
+           tomber ce poids ; un DJ qui tient un fil le fera monter.
+           C'est exactement ce qu'on veut apprendre plutot que de le
+           decider a sa place. */
+        pa: engine.parente.score(cur, joue)
       };
       /* la salle et la tendance ne se recalculent pas sans le pack
          ni les classements : on ne les apprend que si le morceau
@@ -263,7 +268,7 @@ class Gout {
           c === 'h' ? p.h : c === 'tp' ? p.tempo.s : c === 'en' ? p.energyScore :
           c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd :
           c === 'fr' ? p.fraicheur : c === 'af' ? p.affinite :
-          c === 'pl' ? p.plancher : p.trend)));
+          c === 'pl' ? p.plancher : c === 'pa' ? p.parente : p.trend)));
         const z = clamp((valeurs[c] - med) / 100, -1, 1);
         this.d.ema[c] = (1 - a) * this.d.ema[c] + a * z;
       }

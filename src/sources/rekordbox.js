@@ -58,10 +58,54 @@ function run(cmd, args, cb) {
 }
 
 /** Les processus rekordbox en cours. */
+/* ------------------------------------------------------------
+   « pgrep -f » lit la LIGNE DE COMMANDE entiere, pas le nom du
+   programme. N'importe quel processus dont la commande contient
+   le mot passe donc pour rekordbox : un terminal ouvert dans un
+   dossier qui porte ce nom, un script qui le mentionne. Pris sur
+   le fait en ecrivant la sonde : le shell qui ecrivait le fichier
+   contenait le mot, et la sonde a annonce « rekordbox detecte »
+   sur une machine qui ne l'a jamais eu.
+
+   Les consequences restaient petites — lsof sur un mauvais
+   numero ne rend aucun fichier audio — mais quatre numeros au
+   maximum sont interroges, et un intrus peut prendre la place du
+   vrai. On verifie donc le NOM du programme, pas sa commande.
+   ------------------------------------------------------------ */
+const EST_REKORDBOX = /rekordbox/i;
+
 function pids(cb) {
   run('pgrep', ['-i', '-f', 'rekordbox'], out => {
     const l = out.split('\n').map(s => s.trim()).filter(s => /^\d+$/.test(s));
-    cb(l.slice(0, 4));
+    if (!l.length) return cb([]);
+    /* Un seul « ps » pour tous les candidats, et on ne garde que
+       ceux dont le programme s'appelle vraiment ainsi. */
+    run('ps', ['-o', 'pid=,comm=', '-p', l.join(',')], sortie => {
+      const vrais = [];
+      let lues = 0;
+      for (const ligne of sortie.split('\n')) {
+        const m = ligne.trim().match(/^(\d+)\s+(.*)$/);
+        if (!m) continue;
+        lues++;
+        if (EST_REKORDBOX.test(m[2])) vrais.push(m[1]);
+      }
+      /* ------------------------------------------------------------
+         « ps a echoue » n'est pas « aucun vrai rekordbox ».
+
+         Premiere version de ce correctif : « si le tri ne rend
+         rien, on garde la liste d'avant ». Le tri ne rendait
+         justement rien quand il faisait son travail, donc
+         l'imposteur revenait par la porte de derriere — et
+         l'essai l'a attrape tout de suite.
+
+         C'est la meme confusion que listProcesses() de watcher.js
+         evite explicitement : un relevé rate n'est pas un relevé
+         vide. On se fie donc au tri des qu'il a lu AU MOINS UNE
+         ligne, et on ne retombe sur la liste brute que si « ps »
+         n'a rien rendu du tout.
+         ------------------------------------------------------------ */
+      cb((lues ? vrais : l).slice(0, 4));
+    });
   });
 }
 
@@ -281,4 +325,4 @@ function start(opts, cb) {
   return { stop() { if (timer) clearInterval(timer); timer = null; } };
 }
 
-module.exports = { start, dispo, fichiersAudio, pids };
+module.exports = { start, dispo, fichiersAudio, pids, EST_REKORDBOX };

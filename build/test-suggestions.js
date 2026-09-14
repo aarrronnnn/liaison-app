@@ -229,6 +229,128 @@ const nom = t => (t.path || '').replace('/m/', '').replace('.mp3', '');
            seul.length === 1, seul.length + ' proposition');
 }
 
+/* ============================================================
+   7. LA TONALITE ABSENTE.
+
+   « Il y a beaucoup de ? dans la description des sons. »
+
+   Sur une bibliotheque de mariage, la plupart des titres n'ont
+   pas de tag de tonalite : rekordbox ne l'ecrit que sur ce qu'il
+   a analyse. harmScore rendait alors 50 — et l'harmonie pese
+   27 %, le plus lourd des axes. C'est le meme piege que pour
+   l'energie et le timbre, corrige il y a deux versions et reste
+   grand ouvert sur le poids le plus lourd.
+   ============================================================ */
+{
+  const cur = { path: '/m/cur.mp3', artist: 'Cur', title: 'Cur', bpm: 120, key: '8A',
+                duration: 210, genre: 'Disco', pop: 70, analyse: true, energy: 8,
+                timbre: [0.5, 0.7, 0.5] };
+  const clone = (nom, key) => Object.assign({}, cur, { path: '/m/' + nom + '.mp3',
+                                artist: nom, title: nom, key: key });
+  const bib = viaBibliotheque([cur, clone('accorde', '8A'),
+                               clone('sans-tonalite', null), clone('mal-accorde', '2B')]);
+  const out = engine.suggest(bib[0], bib.slice(1), { limit: 3, arc: 'up' });
+  const rang = out.map(r => r.track.artist);
+  verifier('7. le morceau accorde passe devant celui sans tonalite',
+           rang.indexOf('accorde') < rang.indexOf('sans-tonalite'), rang.join(' | '));
+  verifier('7bis. mais le non tague reste devant le MAL accorde',
+           rang.indexOf('sans-tonalite') < rang.indexOf('mal-accorde'),
+           'notes harmoniques : ' + out.map(r => Math.round(r.h)).join(', '));
+
+  /* ---------- le temoin ----------
+     Avec l'ancienne regle, « inconnu » valait 50 et le morceau non
+     tague passait donc devant le mal accorde ET tenait tete a
+     l'accorde sur 27 % du total. */
+  console.log('  temoin — ancienne regle : tonalite absente notee %d ; regle actuelle : %d',
+              50, Math.round(out.find(r => r.track.artist === 'sans-tonalite').h));
+
+  /* ---------- et quand c'est le morceau EN COURS qui n'en a pas ----------
+     L'axe ne classe plus personne. Le laisser peser un quart du
+     total tassait toutes les notes autour de 60 : le DJ lisait
+     « 83, 82, 81, 81 » sans pouvoir distinguer quoi que ce soit. */
+  const muet = Object.assign({}, cur, { key: null, path: '/m/muet.mp3' });
+  /* Les candidats different par le TEMPO, pas par la tonalite :
+     on veut voir si les axes restants se departagent encore une
+     fois l'harmonie retiree du calcul. */
+  const parTempo = (nom, bpm, key) => Object.assign({}, cur,
+    { path: '/m/' + nom + '.mp3', artist: nom, title: nom, bpm: bpm, key: key });
+  const b2 = viaBibliotheque([muet,
+    parTempo('cale', 120, '8A'), parTempo('un-peu-loin', 126, '2B'),
+    parTempo('loin', 131, null), parTempo('tres-loin', 134, '9A')]);
+  const sansTon = engine.suggest(b2[0], b2.slice(1), { limit: 4, arc: 'up' });
+  verifier('7ter. sans tonalite en cours, l\'axe ne compte plus',
+           sansTon.every(r => r.h === 50), 'toutes a 50');
+  const ecart = sansTon[0].total - sansTon[sansTon.length - 1].total;
+  verifier('7quater. et les axes restants se departagent vraiment',
+           ecart >= 8 && sansTon[0].track.artist === 'cale',
+           'de ' + sansTon[0].total + ' a ' + sansTon[sansTon.length - 1].total +
+           ' (' + ecart + ' points) — ' + sansTon.map(r => r.track.artist).join(' | '));
+}
+
+/* ============================================================
+   8. CE QU'ON AFFICHE SOUS CHAQUE PROPOSITION.
+
+   « Il y a beaucoup de ? dans la description des sons, avec des
+     infos qui sont fausses. »
+
+   Deux defauts distincts, tous deux visibles sur la capture.
+   ============================================================ */
+{
+  /* --- le nom d'artiste, tel que les tags l'ecrivent --- */
+  const nomDe = (a) => lib.finalize([{ path: '/m/n' + Math.random() + '.mp3',
+    title: 'x', artist: a, bpm: 120, duration: 200 }])[0].artist;
+  const noms = [
+    ['Bon Entendeur;Mouloudji', 'Bon Entendeur, Mouloudji'],
+    ['Daft Punk / Pharrell',    'Daft Punk, Pharrell'],
+    ['Simon | Garfunkel',       'Simon, Garfunkel'],
+    /* et surtout : ce qu'il ne faut PAS couper. La premiere version
+       de ce nettoyage rendait « AC, DC ». */
+    ['AC/DC',                   'AC/DC'],
+    ['Above & Beyond',          'Above & Beyond'],
+    ['Jay-Z',                   'Jay-Z'],
+    ['AC/DC / Queen',           'AC/DC, Queen']
+  ];
+  for (const [brut, attendu] of noms)
+    verifier('8. « ' + brut + ' »', nomDe(brut) === attendu, nomDe(brut));
+
+  /* --- le plan de mix, quand on ignore la tonalite ---
+     Les quatre techniques utiles dependent de l'harmonie, et
+     harmScore rend 50 des qu'une tonalite manque : aucune ne
+     pouvait se declencher, tout tombait dans le meme cas par
+     defaut. Trois propositions, trois fois « Fondu filtre — 24
+     temps », annonce avec l'assurance d'une mesure qui n'a pas eu
+     lieu. */
+  const sansCle = (nom, bpm) => ({ path: '/m/' + nom + '.mp3', artist: nom, title: nom,
+    bpm: bpm, key: null, duration: 210, genre: 'Ragga', pop: 60,
+    analyse: true, energy: 6, timbre: [0.4, 0.5, 0.4] });
+  const b = viaBibliotheque([sansCle('cur', 98), sansCle('cale', 98),
+                             sansCle('proche', 100), sansCle('loin', 106)]);
+  const out = engine.suggest(b[0], b.slice(1), { limit: 3, arc: 'up' });
+  const plans = out.map(r => r.transition.n);
+  verifier('8bis. sans tonalite, les plans ne sont plus tous identiques',
+           new Set(plans).size > 1, plans.join(' | '));
+  verifier('8ter. et aucun ne prescrit une technique harmonique',
+           plans.every(n => !/Blend|Bass swap|drop/i.test(n)), plans.join(' | '));
+  verifier('8quater. Liaison dit qu\'il ignore la tonalite',
+           out.every(r => /tonalite inconnue/i.test(r.transition.d)),
+           out[0].transition.d.slice(0, 52) + '…');
+
+  /* ---------- le temoin ----------
+     Avec l'ancienne regle, les trois tombaient dans le meme cas. */
+  const ancien = (h, delta) => {
+    if (h >= 93 && Math.abs(delta) < 1) return 'Blend long — 32 temps';
+    if (h >= 72 && h < 93) return 'Bass swap — 16 temps';
+    if (Math.abs(delta) > 2.2) return 'Echo out + pitch ride';
+    return 'Fondu filtre — 24 temps';
+  };
+  const avant = [0, 2, 8].map(d => ancien(50, d));
+  console.log('  temoin — ancienne regle, tonalites inconnues : %s', avant.join(' | '));
+  if (new Set(avant).size > 2) {
+    echecs++;
+    console.error('  RATE le temoin ne reproduit pas le defaut : ce cas ne prouve rien.');
+  }
+}
+
 if (echecs) {
   console.error('\n' + echecs + ' cas de suggestion en echec.');
   process.exit(1);

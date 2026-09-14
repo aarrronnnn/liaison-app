@@ -180,8 +180,8 @@ console.log('MESURE');
 /* « Avant » n'est pas un autre moteur : c'est le meme, avec les
    nouveaux axes ramenes a leur poids minimum. On compare donc bien
    l'apport des axes, pas deux codes differents. */
-const avant = mesurer(sets, vivier, { poids: { fr: 0.5, af: 0.5, pl: 0.5 } }, 'moteur seul');
-const apres = mesurer(sets, vivier, { affinites: AFF }, 'fraicheur + affinites + plancher');
+const avant = mesurer(sets, vivier, { poids: { fr: 0.5, af: 0.5, pl: 0.5, pa: 0.5 } }, 'moteur seul');
+const apres = mesurer(sets, vivier, { affinites: AFF }, 'les quatre axes ajoutes');
 
 const d = (apres.top5 - avant.top5) / Math.max(1, avant.top5) * 100;
 console.log('\necart sur le top 5 : ' + (d >= 0 ? '+' : '') + d.toFixed(1) + ' %');

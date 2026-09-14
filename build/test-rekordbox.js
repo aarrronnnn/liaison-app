@@ -113,8 +113,45 @@ if (bloque !== 'A.mp3') {
   console.error('  RATE le temoin ne reproduit plus le defaut : ce test ne prouve rien.');
 }
 
-if (echecs) {
-  console.error('\n' + echecs + ' cas en echec.');
-  process.exit(1);
+/* ============================================================
+   Le faux rekordbox.
+
+   pids() appelait « pgrep -i -f rekordbox », qui lit la LIGNE DE
+   COMMANDE entiere et non le nom du programme. N'importe quel
+   processus dont la commande contient le mot passait donc pour
+   rekordbox — pris sur le fait le 14 septembre 2026 : le shell
+   qui ecrivait la sonde contenait le mot, et la sonde a annonce
+   « rekordbox detecte » sur une machine qui ne l'a jamais eu.
+
+   On lance donc un vrai processus imposteur et on verifie que
+   Liaison ne s'y laisse pas prendre.
+   ============================================================ */
+if (process.platform !== 'win32') {
+  const { spawn } = require('child_process');
+  const rb = require('../src/sources/rekordbox.js');
+  const fin = () => {
+    if (echecs) { console.error('\n' + echecs + ' cas en echec.'); process.exit(1); }
+    console.log('\nrekordbox : le morceau affiche est celui qui vient d\'etre charge.');
+    process.exit(0);
+  };
+  /* Un « sleep » dont la ligne de commande contient le mot : c'est
+     exactement ce qui a trompe la sonde. */
+  let faux = null;
+  try {
+    faux = spawn('/bin/sh', ['-c', 'sleep 6 # rekordbox'], { stdio: 'ignore' });
+  } catch (e) { /* pas de shell : on saute ce cas */ }
+  if (!faux) return fin();
+  setTimeout(() => {
+    rb.pids(list => {
+      const pris = list.indexOf(String(faux.pid)) >= 0;
+      verifier('un imposteur ne passe pas pour rekordbox', pris, false);
+      verifier('et le nom du programme reste le critere',
+               rb.EST_REKORDBOX.test('rekordbox') && !rb.EST_REKORDBOX.test('sh'), true);
+      try { faux.kill(); } catch (e) {}
+      fin();
+    });
+  }, 400);
+} else {
+  if (echecs) { console.error('\n' + echecs + ' cas en echec.'); process.exit(1); }
+  console.log('\nrekordbox : le morceau affiche est celui qui vient d\'etre charge.');
 }
-console.log('\nrekordbox : le morceau affiche est celui qui vient d\'etre charge.');

@@ -9,6 +9,7 @@ const bulle = require('./bulle');
 const epoque = require('./epoque');
 const affinites = require('./affinites');
 const plancher = require('./plancher');
+const parente = require('./parente');
 
 const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
 
@@ -139,6 +140,37 @@ function crowdScore(track, dna, dnaPret) {
 function transitionOf(cur, nx, tp, h) {
   if (tp.ratio !== 1)
     return { n: 'Bascule tempo x' + (tp.ratio === 2 ? '2' : '0,5'), d: 'Double ou moitie tempo — la grille rythmique reste alignee.' };
+  /* ------------------------------------------------------------
+     Ne pas prescrire une technique harmonique sans tonalite.
+
+     « Il y a beaucoup de ? dans la description des sons, avec des
+     infos qui sont fausses. » Capture d'ecran a l'appui : trois
+     propositions, trois fois « Fondu filtre — 24 temps », et un
+     « ? » a la place de la tonalite.
+
+     Ce n'etait pas un hasard. Les quatre branches utiles ci-dessous
+     dependent toutes de l'harmonie, et harmScore rend 50 des qu'une
+     tonalite manque. Aucune ne pouvait donc se declencher : tout
+     tombait dans le cas par defaut, identique pour tout le monde.
+     Liaison annoncait « 24 temps » avec l'assurance d'une mesure,
+     sur un calcul qui n'avait pas eu lieu.
+
+     Sur une bibliotheque de mariage, rekordbox n'ecrit la tonalite
+     que sur ce qu'il a analyse : c'est donc le cas NORMAL, pas le
+     cas rare. Il merite sa propre reponse — un conseil vrai, et
+     l'aveu de ce qu'on ne sait pas.
+     ------------------------------------------------------------ */
+  if (!cur.key || !nx.key) {
+    const ecart = Math.abs(tp.delta);
+    if (ecart > 2.2)
+      return { n: 'Echo out + pitch ride',
+               d: 'Ecart de tempo reel, et tonalite inconnue : sortir en echo et rattraper au pitch.' };
+    if (ecart < 1)
+      return { n: 'Fondu au tempo',
+               d: 'Les tempos se calent. Tonalite inconnue des deux cotes : ecoute au casque avant de lancer, ou fais analyser tes titres dans ton logiciel.' };
+    return { n: 'Fondu filtre',
+             d: 'Tonalite inconnue : fondu passe-haut pour liberer les basses, sans superposer les melodies.' };
+  }
   if (h >= 93 && Math.abs(tp.delta) < 1 && (nx.out || 32) >= 32)
     return { n: 'Blend long — 32 temps', d: 'Tonalites compatibles et intro longue : superposition franche sur deux phrases.' };
   if (h >= 89 && nx.energy - cur.energy >= 2)
@@ -357,6 +389,34 @@ function suggest(cur, library, opt) {
      classe personne. */
   const TEMPO_MUET = { s: 50, pct: null, ratio: 1, delta: 0, muet: true };
   /* ------------------------------------------------------------
+     La tonalite absente — le meme piege que l'energie et le timbre,
+     resté ouvert sur le plus gros poids du moteur.
+
+     « Il y a beaucoup de ? dans la description des sons. » Sur une
+     bibliotheque de mariage, la plupart des titres n'ont pas de
+     tag de tonalite : rekordbox ne l'ecrit que sur ce qu'il a
+     analyse. Or harmScore rendait 50 des qu'une tonalite manquait.
+
+     Deux consequences, toutes deux mesurees :
+
+       — l'harmonie pese 27 %, le plus lourd des axes. Un morceau
+         sans tag encaissait donc 27 % de points gratuits, pendant
+         qu'un morceau reellement analyse mais moins bien accorde
+         tombait a 18. L'inconnu battait le connu — exactement le
+         defaut corrige il y a deux versions pour l'energie et le
+         timbre, laisse intact ici.
+
+       — quand c'est le morceau EN COURS qui n'a pas de tonalite,
+         l'axe rend 50 pour TOUT LE MONDE. Il ne classe plus
+         personne, mais il continue de peser un quart du total :
+         toutes les notes se tassent autour de 60 et le DJ voit
+         « 83, 82, 81, 81 » sans pouvoir distinguer quoi que ce
+         soit. On retire donc l'axe du calcul au lieu de le laisser
+         ecraser l'echelle.
+     ------------------------------------------------------------ */
+  const sansTonalite = !cur.key;
+  const H_INCONNU = 42;
+  /* ------------------------------------------------------------
      Les poids, et pourquoi ils ne sont plus fixes.
 
      Ces six coefficients disaient ce qu'un bon enchainement est :
@@ -374,7 +434,7 @@ function suggest(cur, library, opt) {
      ------------------------------------------------------------ */
   const P = opt.poids || {};
   const m = (k) => { const v = P[k]; return (typeof v === 'number' && isFinite(v)) ? Math.max(0.5, Math.min(1.8, v)) : 1; };
-  const wH = 0.27 * m('h'), wT = 0.24 * m('tp');
+  const wH = sansTonalite ? 0 : 0.27 * m('h'), wT = 0.24 * m('tp');
   /* ------------------------------------------------------------
      Ce que la bulle deplace, et ce qu'elle ne touche pas.
 
@@ -415,7 +475,41 @@ function suggest(cur, library, opt) {
      la ou un DJ de club la verra monter. En bulle, la fraicheur
      compte moins : une soiree annees 80 assume son epoque.
      ------------------------------------------------------------ */
-  const wFr = 0.10 * m('fr') * (B ? 0.4 : 1);
+  /* ------------------------------------------------------------
+     La fraicheur pese 0,14 et non 0,10 depuis le 14 sept. 2026.
+
+     Les deux axes ajoutes apres coup — la fraicheur et la parente —
+     n'avaient jamais ete peses l'un contre l'autre, faute d'un cas
+     ou ils se contredisent. Le premier est arrive : derriere un EDM,
+     un autre EDM de 2012 (meme famille, quatorze ans de retard)
+     battait une tech house de 2025 (famille voisine, actuelle).
+
+     Or « ca propose des trucs qui ne sont plus a la mode » est le
+     retour qui a fait naitre l'axe des epoques, et jouer de la big
+     room de 2012 en 2026 s'entend dans la salle. Passer d'un EDM a
+     une tech house, non : ce sont deux pieces de la meme maison.
+
+     La parente est donc la pour empecher le saut d'un MONDE a
+     l'autre — le ragga suivi d'une chanson — pas pour departager
+     deux voisins. Quand elle n'a que ca a dire, la fraicheur
+     tranche.
+     ------------------------------------------------------------ */
+  /* ------------------------------------------------------------
+     La fraicheur pese 0,14 et non 0,10 depuis le 14 sept. 2026.
+
+     La courbe de parente.js reglait l'essentiel du conflit entre
+     les deux axes ajoutes apres coup — un voisin ne perd presque
+     rien, seul l'etranger tombe. Il restait un ex aequo : derriere
+     un EDM de 2024, un EDM de 2012 parfaitement accorde et cale
+     faisait jeu egal avec une tech house de 2025.
+
+     Jeu egal n'est pas une reponse. Jouer de la big room de 2012
+     en 2026 s'entend dans la salle ; passer d'un EDM a une tech
+     house, non. Les deux axes n'avaient jamais ete peses l'un
+     contre l'autre faute d'un cas ou ils se contredisent : c'est
+     fait, et c'est la fraicheur qui tranche.
+     ------------------------------------------------------------ */
+  const wFr = 0.14 * m('fr') * (B ? 0.4 : 1);
   const wAf = 0.12 * m('af');
   /* ------------------------------------------------------------
      Le plancher : ce que le morceau FAIT a la salle.
@@ -428,7 +522,22 @@ function suggest(cur, library, opt) {
      pas une excuse pour vider la salle.
      ------------------------------------------------------------ */
   const wPl = 0.17 * m('pl');
-  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl;
+  /* ------------------------------------------------------------
+     La parente de style, apres le retour du 14 septembre 2026 :
+     « quand je mixe Informer, qui est un son un peu reggae, ca me
+     donne L'amour, l'amour, l'amour, qui n'a rien a voir ».
+
+     Neuf axes notaient ce morceau, et aucun ne regardait s'il
+     appartenait au meme monde que ce qui tournait. Voir
+     parente.js. Le poids est lourd — c'est le premier critere
+     d'une oreille — et il s'apprend comme les autres : un DJ qui
+     saute volontairement d'un genre a l'autre le verra tomber.
+
+     En bulle, il s'efface presque : wBulle fait deja ce travail,
+     et en mieux, puisqu'il compare a un ancrage fige.
+     ------------------------------------------------------------ */
+  const wPa = 0.22 * m('pa') * (B ? 0.3 : 1);
+  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
@@ -510,7 +619,7 @@ function suggest(cur, library, opt) {
          correction marchait sur l'etabli et pas en cabine.
          ------------------------------------------------------------ */
       t.mesure = !!t.analyzed;
-      const h = harmScore(cur.key, t.key);
+      const h = sansTonalite ? 50 : (t.key ? harmScore(cur.key, t.key) : H_INCONNU);
       const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
       /* ------------------------------------------------------------
          « Inconnu » n'est pas « parfait ».
@@ -557,8 +666,10 @@ function suggest(cur, library, opt) {
       const fr = epoque.fraicheur(t, annee);
       const af = AFF ? affinites.score(cur, t, AFF) : 50;
       const pl = plancher.continuite(cur, t, arc);
+      const pa = parente.score(cur, t);
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
-                   + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf + pl * wPl) / W;
+                   + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf + pl * wPl
+                   + pa * wPa) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
@@ -593,8 +704,9 @@ function suggest(cur, library, opt) {
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
-               fraicheur: fr, affinite: af, plancher: pl,
+               fraicheur: fr, affinite: af, plancher: pl, parente: pa,
                plancherDit: plancher.raison(cur, t, arc),
+               parenteDit: parente.raison(cur, t),
                pourquoi: AFF ? affinites.explication(cur, t, AFF) : null,
                age: epoque.raison(t, annee),
                bulle: nb ? nb.note : null,
@@ -1219,7 +1331,7 @@ function search(text, library, limit, threshold) {
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
-                   doubleAdmis, plancher,
+                   doubleAdmis, plancher, parente,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
                    epoque, affinites, formesDe };

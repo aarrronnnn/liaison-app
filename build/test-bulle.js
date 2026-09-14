@@ -154,8 +154,24 @@ const DNA = { 'variete': 82, 'chanson francaise': 82, 'disco': 80, 'funk': 70, '
        Aznavour ». Neuvieme poids : les notes remontent d'un point la
        ou les candidats tiennent la piste, et var4 remonte devant var2
        et var3 parce qu'il la tient mieux qu'eux. Le disco reste
-       premier : c'est ce que ce temoin garde. */
-  const ATTENDU = 'disco=91 var1=89 var4=89 var7=89 var2=88';
+       premier : c'est ce que ce temoin garde.
+
+       14 sept. 2026 — ajout de l'axe de parente (parente.js) et
+       retrait de l'harmonie du calcul quand le morceau en cours
+       n'a pas de tonalite. Le disco QUITTE le haut du classement :
+       derriere une chanson francaise de 2003, une variete francaise
+       est desormais preferee a un disco de 1976, et c'est
+       precisement la correction demandee. Le temoin du haut de ce
+       fichier continue de verifier que le disco reste PROPOSE sans
+       la bulle — il sort en position 3 au lieu de 1.
+
+       Les cinq varietes se retrouvent ex aequo a 90 : elles sont
+       volontairement presque identiques dans ce jeu d'essai (meme
+       tonalite, meme energie, meme timbre, 123 a 125 BPM). L'axe
+       de parente leur donne 100 a toutes, ce qui rapproche les
+       totaux au point que l'arrondi les confond. C'est honnete :
+       ces morceaux SE VALENT. */
+  const ATTENDU = 'var1=90 var2=90 var3=90 var4=90 var5=90';
   const obtenu = engine.suggest(bib[0], bib, { limit: 5, arc: 'up', dna: DNA, mode: 'crowd' })
     .map(x => nom(x.track) + '=' + x.total).join(' ');
   verifier('2. sans bulle, le classement d\'avant est intact',

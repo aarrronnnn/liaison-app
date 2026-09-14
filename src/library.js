@@ -503,6 +503,29 @@ function finalize(tracks) {
       t.id = id;
       t.tags = String(t.genre || '')
         .toLowerCase().split(/[\/,;|]+/).map(s => s.trim()).filter(Boolean);
+      /* ------------------------------------------------------------
+         « Bon Entendeur;Mouloudji », tel qu'il s'affichait en cabine.
+
+         Les tags ID3 separent les artistes multiples par un
+         point-virgule, une barre oblique ou un « / » — et rekordbox
+         recopie la chaine telle quelle. Liaison l'affichait telle
+         quelle aussi. Ce n'est pas faux, c'est illisible : en
+         cabine, a 2 h du matin, on lit un nom, pas une syntaxe.
+         ------------------------------------------------------------ */
+      if (t.artist) {
+        /* ------------------------------------------------------------
+           La barre oblique SEULE ne separe rien : AC/DC.
+
+           Premiere version de ce nettoyage : couper sur « ; », « / »
+           et « | ». Elle a rendu « AC, DC » des le premier essai.
+           Le point-virgule et la barre verticale sont sans ambiguite ;
+           la barre oblique ne separe que si elle est entouree
+           d'espaces (« Daft Punk / Pharrell »), jamais collee.
+           ------------------------------------------------------------ */
+        const a = String(t.artist).split(/\s*[;|]\s*|\s+\/\s+/)
+          .map(x => x.trim()).filter(Boolean);
+        if (a.length > 1) t.artist = a.join(', ');
+      }
       t.out = t.duration > 300 ? 64 : t.duration > 180 ? 32 : 16;
       t.year = anneeTag(t.year);
       if (t.energy == null) t.energy = 5;
