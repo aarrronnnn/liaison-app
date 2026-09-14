@@ -534,4 +534,4 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache };
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, ffprobePath };

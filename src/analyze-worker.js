@@ -25,6 +25,7 @@ parentPort.on('message', async job => {
       id: job.id, ok: true,
       patch: {
         energy: r.energy,
+        energyBrut: r.energyBrut,
         timbre: r.timbre,
         vocal: r.vocalish >= 5 ? 1 : 0,
         /* Ce que Liaison mesure lui-meme, garde a part de ce que dit
@@ -34,7 +35,10 @@ parentPort.on('message', async job => {
         mBpm: r.bpm || 0,
         mBpmConf: r.bpmConfidence || 0,
         mKey: r.key || null,
-        mKeyConf: r.keyConfidence || 0
+        mKeyConf: r.keyConfidence || 0,
+        /* la marge sur la seconde tonalite : une tonalite gagnee d'un
+           cheveu ne doit pas contredire le tag du DJ */
+        mKeyMarge: r.keyMargin || 0
       }
     });
   } catch (e) {

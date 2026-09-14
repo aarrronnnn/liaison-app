@@ -229,6 +229,60 @@ const SOS = [
              /Rien ne se cale/.test(sansCause) && /<li>/.test(sansCause));
   }
 
+  /* ============================================================
+     8. L'EN-TETE : ce qu'on sait, ce qu'on ne sait pas encore.
+
+     « Pourquoi il dit Daddy Cool 0 BPM, ca te semble normal ? »
+     Non. « Number(null).toFixed(1) » rendait « 0.0 » : un tempo
+     ABSENT s'affichait comme un tempo mesure a zero, sur la ligne
+     la plus lue du widget. Et « Analyse de la structure… » restait
+     affiche a vie, y compris sur un morceau analyse depuis
+     longtemps.
+     ============================================================ */
+  {
+    const etat = async (now) => p.evaluate((n) => {
+      renderNow(n);
+      return {
+        bpm: document.getElementById('refB').textContent,
+        key: document.getElementById('refK').textContent,
+        energie: document.getElementById('refE').textContent,
+        ref: document.getElementById('refLbl').textContent,
+        ruban: document.getElementById('striplbl').textContent,
+        rubanCache: document.getElementById('striplbl').hidden
+      };
+    }, now);
+
+    const brut = { id: 1, title: 'Daddy Cool', artist: 'Boney M.', key: null, bpm: null,
+                   energy: 5, how: 'auto', mesure: false, structure: null };
+    const a = await etat(brut);
+    verifier('8. un tempo absent ne s\'affiche plus « 0,0 »',
+             a.bpm !== '0,0' && a.bpm !== '0.0', 'affiche « ' + a.bpm + ' »');
+    verifier('8bis. il dit que la mesure arrive', a.bpm === '…' && a.energie === '…',
+             'tempo « ' + a.bpm + ' », energie « ' + a.energie + ' »');
+    verifier('8ter. et le ruban annonce l\'analyse en cours',
+             /Analyse de la structure/.test(a.ruban));
+
+    /* Deux secondes plus tard : Liaison a mesure. */
+    const mesure = Object.assign({}, brut, { bpm: 125.4, key: '8A', energy: 8, mesure: true,
+      tempoDeduit: true,
+      structure: { ok: true, duration: 300, readyAt: 8, outPoint: 280, introBars: 16,
+                   outroBars: 32, breaks: [] } });
+    const b = await etat(mesure);
+    verifier('8quater. le tempo mesure apparait', b.bpm === '125,4', 'affiche « ' + b.bpm + ' »');
+    verifier('8quinquies. et Liaison dit que la mesure vient de lui',
+             /mesure par Liaison/.test(b.ref), b.ref);
+    verifier('8sexies. le ruban cesse d\'annoncer une analyse',
+             !/Analyse de la structure/.test(b.ruban), b.ruban.slice(0, 40));
+
+    /* Et le cas ou l'analyse a tourne sans rien trouver. */
+    const rien = Object.assign({}, brut, { bpm: 128, mesure: true, structure: { ok: false } });
+    const c = await etat(rien);
+    verifier('8septies. structure analysee sans resultat : on le dit',
+             /Pas de structure nette/.test(c.ruban), c.ruban.slice(0, 44));
+    verifier('8octies. et une tonalite introuvable devient « — », pas « … »',
+             c.key === '—', 'affiche « ' + c.key + ' »');
+  }
+
   /* ---------- 7. la cabine etroite ---------- */
   {
     await p.setViewportSize({ width: 320, height: 620 });

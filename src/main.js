@@ -11,6 +11,7 @@ const { NowPlaying } = require('./sources');
 const { GuestServer, SetLog, qrPNG, shareLinks } = require('./session');
 const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
+const exterieur = require('./exterieur');
 const { AppWatcher } = require('./watcher');
 const { StructurePool, StructureCache } = require('./structure');
 const { AnalysisService } = require('./analysis');
@@ -348,8 +349,10 @@ function startAnalysis() {
      file. Les fils continuent de tourner sans interruption. */
   if (analyse) {
     const r = analyse.charger(library);
+    reinscrireHors();
     analyse.demarrer();
     prioriserAnalyse();
+    if (current) envoyerNow();
     send('analysis', { phase: 'analyse', done: 0, total: r.aFaire, restants: r.aFaire,
                        caches: r.caches, demarrage: true });
     return;
@@ -363,15 +366,56 @@ function startAnalysis() {
        classement. On ne recalcule pas a chaque resultat — trois
        par seconde feraient clignoter la liste — mais toutes les
        quatre secondes, et seulement si quelque chose tourne. */
-    onTrack: () => scheduleResuggest()
+    onTrack: (t) => {
+      /* ------------------------------------------------------------
+         L'app doit PARLER quand elle n'y arrive pas.
+
+         « Aucune reaction de l'app et aucun message. » Quand
+         l'analyse echouait, Liaison posait energie 5 partout et se
+         taisait. On verifie donc regulierement sa sante, et on
+         remonte la panne au widget avec la vraie erreur.
+         ------------------------------------------------------------ */
+      try {
+        const p = analyse && analyse.panne();
+        if (p && p.cle !== dernierePanne) {
+          dernierePanne = p.cle;
+          send('conseils', [{ cle: p.cle, quand: 'biblio',
+            titre: p.quoi, texte: p.pourquoi, marche: p.quoiFaire,
+            repli: 'Sans analyse, Liaison n\'a ni tempo ni energie : ses propositions ' +
+                   'perdent leurs deux criteres les plus lourds.' }]);
+          send('toast', { texte: p.quoi, rouge: true });
+        }
+      } catch (e) { /* signaler ne doit jamais empecher de jouer */ }
+      /* Le morceau qui tourne vient d'etre mesure : son tempo, sa
+         tonalite et son energie viennent d'apparaitre. L'en-tete
+         les montre, il doit donc repartir tout de suite — sans
+         attendre le regroupement des quatre secondes. */
+      if (t && current && t.id === current.id) { envoyerNow(); prioriserAnalyse(); }
+      scheduleResuggest();
+    }
   });
   const r = analyse.charger(library);
+  reinscrireHors();
   send('analysis', { phase: 'analyse', done: 0, total: r.aFaire, restants: r.aFaire,
                      caches: r.caches, demarrage: true });
+  /* Liaison a change sa facon de mesurer : le cache a ete jete, tout
+     est a reecouter. On le DIT, sinon le DJ voit une analyse repartir
+     de zero sans raison et croit a une panne. */
+  if (r.mesurePerimee) {
+    send('conseils', [{ cle: 'mesure-refaite', quand: 'biblio',
+      titre: 'Liaison reecoute ta bibliotheque',
+      texte: 'Cette version mesure l\'energie, la densite, le tempo et la tonalite ' +
+             'autrement — et beaucoup mieux. Les anciens resultats ne sont plus ' +
+             'comparables, ils ont donc ete jetes plutot que melanges aux nouveaux.',
+      marche: ['Rien a faire : ca tourne en fond',
+               'Le morceau que tu lances passe devant tout le monde, il est pret en quelques secondes'],
+      repli: 'Une grosse bibliotheque demande quelques heures pour etre entierement reecoutee.' }]);
+  }
   analyse.demarrer();
   prioriserAnalyse();
 }
 
+let dernierePanne = null;
 let resugTimer = null;
 function scheduleResuggest() {
   if (resugTimer || !current) return;
@@ -396,7 +440,33 @@ function prioriserAnalyse() {
       .slice(0, 100)
       .map(x => x.id);
     analyse.prioriser(proches, 1);
+    return;
   }
+  /* ------------------------------------------------------------
+     Et quand le morceau en cours n'a PAS de tempo ?
+
+     Cette fonction ne priorisait alors plus rien du tout : elle
+     sortait apres avoir demande le morceau en cours, et laissait
+     l'analyse avaler quarante mille titres dans l'ordre d'arrivee.
+     Or c'est exactement le cas ou le DJ a le plus besoin d'aide —
+     sans tempo nulle part, le moteur est aveugle et propose au
+     hasard, ce qu'Aaron a vu sur « Daddy Cool ».
+
+     On prend donc les cent premiers du vivier reellement filtre :
+     ce sont ceux que le moteur peut proposer maintenant.
+     ------------------------------------------------------------ */
+  if (!current) return;
+  try {
+    const tam = currentFilter();
+    const vivier = tam.tracks.tracks;
+    const ids = [];
+    for (const t of vivier) {
+      if (t.id === current.id || t.analyzed || t.offline) continue;
+      ids.push(t.id);
+      if (ids.length >= 100) break;
+    }
+    if (ids.length) analyse.prioriser(ids, 1);
+  } catch (e) { /* prioriser ne doit jamais empecher de jouer */ }
 }
 
 /* Les listes deja faites par le DJ. On les relit apres chaque import :
@@ -467,7 +537,12 @@ function scheduleStructRefresh() {
   if (structTimer) return;
   structTimer = setTimeout(() => {
     structTimer = null;
-    if (current) send('suggestions', computeSuggestions(config.suggestCount));
+    if (!current) return;
+    /* L'en-tete d'abord : c'est lui qui porte le ruban de structure
+       et l'etiquette « Analyse de la structure… » qui doit
+       disparaitre. */
+    envoyerNow();
+    send('suggestions', computeSuggestions(config.suggestCount));
   }, 350);
 }
 
@@ -802,6 +877,41 @@ function raisonDuVide(cur, vivier, tam) {
 
 function computeSuggestions(limit) {
   if (!current) return [];
+
+  /* ------------------------------------------------------------
+     NE PAS PROPOSER N'IMPORTE QUOI PENDANT DEUX SECONDES.
+
+     « Regarde les propositions de merde avec Daddy Cool ! »
+
+     Capture a l'appui : « BPM 0.0, ENERGIE 5 ». Le morceau n'avait
+     ni tag de tempo ni analyse terminee. Sans tempo, l'axe le plus
+     lourd du moteur se tait — d'ou les « ±0,0 % » sur chaque ligne
+     — et le classement se fait sur ce qui reste. Le resultat n'est
+     pas une mauvaise suggestion : c'est un tirage.
+
+     Or ce morceau est prioritaire dans la file : il sera mesure
+     dans les secondes qui suivent. Proposer un tirage en attendant
+     ne rend service a personne et abime la confiance pour toute la
+     soiree. On attend, on le DIT, et la liste arrive d'elle-meme
+     des que la mesure tombe — envoyerNow() et scheduleResuggest()
+     s'en chargent.
+
+     On n'attend que si la mesure va reellement venir : sans fil
+     d'analyse, ou sur un fichier injoignable, on preferera
+     toujours une liste imparfaite a un ecran vide.
+     ------------------------------------------------------------ */
+  if (!(current.bpm > 0) && !current.analyzed &&
+      analyse && analyse.enAttente(current.id)) {
+    send('conseils', [{
+      cle: 'vide', quand: 'vide',
+      titre: 'Liaison mesure ce morceau',
+      texte: 'Il n\'a pas de tempo enregistre. Liaison l\'ecoute pour le trouver lui-meme — ' +
+             'quelques secondes, et les propositions arrivent.',
+      marche: ['Rien a faire, ca se met a jour tout seul'],
+      repli: 'Sans tempo, les propositions seraient tirees au hasard : mieux vaut attendre.'
+    }]);
+    return [];
+  }
   const f = feat();
   /* Le nombre de suggestions est celui que la licence ouvre — 3 en
      essai, 5 en Resident, 7 en Collectif. Il etait plafonne a 3 pour
@@ -902,6 +1012,106 @@ function computeSuggestions(limit) {
   });
 }
 
+/* ============================================================
+   LES MORCEAUX HORS BIBLIOTHEQUE.
+
+   « J'ai des sons qui, quand je les passe, ne sont pas du tout
+     reconnus : rien ne s'affiche alors qu'ils tournent. »
+
+   Voir l'en-tete de src/exterieur.js pour les trois endroits qui
+   jetaient en silence. Ici, on les rattrape : le morceau est
+   fabrique a partir de ce qu'on a — un chemin de fichier dans le
+   meilleur des cas, un texte sinon —, il est mis devant dans la
+   file d'analyse, et il devient le morceau en cours comme
+   n'importe quel autre.
+
+   On les garde dans un registre, pour trois raisons : garder le
+   meme identifiant si le meme morceau revient, pouvoir les
+   reinscrire dans l'analyse apres une resynchronisation de
+   bibliotheque — charger() vide tout —, et ne pas refaire un
+   ffprobe a chaque passage.
+   ============================================================ */
+const horsBiblio = new Map();          /* cle -> morceau */
+let dernierHors = null;
+
+function idsPris() {
+  const s = new Set();
+  for (const t of library) s.add(t.id);
+  for (const t of horsBiblio.values()) s.add(t.id);
+  return s;
+}
+
+/** Reinscrit les morceaux hors bibliotheque apres un charger(). */
+function reinscrireHors() {
+  if (!analyse) return;
+  for (const t of horsBiblio.values()) {
+    if (t.path) { try { analyse.ajouter(t, t === current ? 2 : 1); } catch (e) {} }
+  }
+}
+
+/* Ce que le widget doit lire quand le morceau n'est pas dans la
+   bibliotheque : ce n'est ni une panne ni un vide, et la marche a
+   suivre depend de ce qu'on a pu recuperer. */
+function conseilHors(t) {
+  if (t && t.path) {
+    return { cle: 'hors-biblio-fichier', quand: 'deck',
+      titre: 'Ce morceau n\'est pas dans ta bibliotheque',
+      texte: 'Liaison l\'a bien detecte sur le deck et il analyse le fichier en ce moment : ' +
+             'tempo, tonalite et energie vont arriver, et les propositions avec. ' +
+             'Il ne pourra simplement jamais etre PROPOSE tant qu\'il n\'est pas importe.',
+      marche: ['Reglages > Bibliotheque > Resynchroniser pour l\'ajouter pour de bon',
+               'S\'il vit sur une cle USB, ajoute le dossier de la cle'],
+      repli: 'En attendant, les propositions se calculent quand meme a partir de lui.' };
+  }
+  return { cle: 'hors-biblio-texte', quand: 'deck',
+    titre: 'Morceau detecte, mais introuvable dans ta bibliotheque',
+    texte: 'Ton logiciel annonce un titre que Liaison n\'a pas su rapprocher d\'un morceau ' +
+           'connu, et il n\'annonce pas le chemin du fichier : impossible de l\'analyser. ' +
+           'Sans tempo ni tonalite, les propositions restent approximatives.',
+    marche: ['Verifie que le dossier de ce morceau est bien importe',
+             'Reglages > Bibliotheque > Resynchroniser',
+             'Ou clique la loupe et declare le morceau a la main'],
+    repli: 'Liaison continue de proposer sur ce qu\'il sait : genre, notoriete, moment de la soiree.' };
+}
+
+/**
+ * Un fichier tourne, il n'est pas dans la bibliotheque : on le prend
+ * quand meme. @returns {Promise<object|null>}
+ */
+async function adopterFichier(chemin, how) {
+  const cle = libmod.cleChemin(chemin);
+  let t = horsBiblio.get(cle);
+  if (!t) {
+    t = await exterieur.depuisFichier(chemin, idsPris());
+    if (!t) return null;
+    horsBiblio.set(cle, t);
+  }
+  /* La bibliotheque a pu s'enrichir depuis : si le morceau y est
+     entre, c'est elle qui gagne et le doublon disparait. */
+  const vrai = chemins().get(cle);
+  if (vrai) { horsBiblio.delete(cle); return vrai; }
+  if (analyse) { try { analyse.ajouter(t, 2); } catch (e) {} }
+  if (!current || current.id !== t.id) {
+    setCurrent(t, how || 'rekordbox');
+    if (dernierHors !== t.id) { dernierHors = t.id; send('conseils', [conseilHors(t)]); }
+  }
+  return t;
+}
+
+/** Un texte tourne et ne se rapproche de rien : on l'affiche quand meme. */
+function adopterTexte(texte, how) {
+  const t = exterieur.depuisTexte(texte, idsPris());
+  if (!t) return null;
+  const cle = 'texte:' + String(texte).toLowerCase();
+  const deja = horsBiblio.get(cle);
+  if (deja) { if (!current || current.id !== deja.id) setCurrent(deja, how || 'detect'); return deja; }
+  horsBiblio.set(cle, t);
+  if (analyse) { try { analyse.ajouter(t, 2); } catch (e) {} }
+  setCurrent(t, how || 'detect');
+  if (dernierHors !== t.id) { dernierHors = t.id; send('conseils', [conseilHors(t)]); }
+  return t;
+}
+
 function setCurrent(track, how) {
   /* ------------------------------------------------------------
      Le seul moment ou Liaison apprend quelque chose.
@@ -930,22 +1140,70 @@ function setCurrent(track, how) {
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
 
   current = track;
+  commentIl = how || 'auto';
   ensureStructure(track);
   prioriserAnalyse();
   if (setlog) setlog.play(track, how || null);
+  envoyerNow();
+  send('suggestions', computeSuggestions(config.suggestCount));
+}
+
+/* ------------------------------------------------------------
+   L'EN-TETE, RENVOYE QUAND CE QU'IL DIT CHANGE.
+
+   « Pourquoi il dit Daddy Cool 0 BPM ? Pourquoi ANALYSE DE LA
+   STRUCTURE reste affiche tout le temps ? »
+
+   Les deux avaient la meme cause. L'en-tete — titre, tonalite,
+   tempo, energie, ruban de structure — n'etait envoye QU'UNE
+   FOIS, au moment ou le morceau est detecte. A cet instant precis,
+   rien n'est encore mesure : le tempo vaut zero, l'energie vaut 5
+   par defaut, la structure n'existe pas.
+
+   Deux secondes plus tard l'analyse a fini et l'objet en memoire
+   porte les vraies valeurs — le moteur les utilise — mais le
+   widget, lui, n'a jamais ete prevenu. Il affichait donc « BPM
+   0.0 » et « Analyse de la structure… » pour toujours, sur un
+   morceau parfaitement analyse.
+
+   On renvoie donc l'en-tete des que quelque chose qu'il montre a
+   change : fin de l'analyse du morceau en cours, ou arrivee de sa
+   structure.
+   ------------------------------------------------------------ */
+let commentIl = 'auto';
+function envoyerNow() {
   send('now', current ? {
     id: current.id, title: current.title, artist: current.artist, key: current.key,
-    bpm: current.bpm, energy: current.energy, how: how || 'auto',
+    bpm: current.bpm, energy: current.energy, how: commentIl,
+    /* ce qu'on sait encore : le DJ doit pouvoir distinguer « pas
+       encore mesure » de « mesure, et c'est ca » */
+    mesure: !!current.analyzed,
+    horsBiblio: !!current.horsBiblio, sansFichier: !!current.sansFichier,
+    tempoDeduit: !!current.bpmDeduit, tempoCorrige: !!current.bpmCorrige,
+    tonaliteDeduite: !!current.keyDeduite, tonaliteCorrigee: !!current.keyCorrigee,
     structure: structures.get(current.id) || null
   } : null);
-  send('suggestions', computeSuggestions(config.suggestCount));
 }
 
 /* ---------------- source now-playing ---------------- */
 now.on('text', text => {
   const m = engine.match(text, library);
-  if (m && (!current || m.track.id !== current.id)) setCurrent(m.track, 'detect');
-  send('raw', { text: text, matched: m ? m.track.title : null });
+  if (m) {
+    if (!current || m.track.id !== current.id) setCurrent(m.track, 'detect');
+    send('raw', { text: text, matched: m.track.title });
+    return;
+  }
+  /* ------------------------------------------------------------
+     Inconnu. Avant, la fonction s'arretait ici : le widget gardait
+     le morceau PRECEDENT a l'ecran pendant que le DJ en jouait un
+     autre — pire que rien, puisque les propositions portaient
+     alors sur un morceau fini depuis longtemps.
+
+     On affiche donc ce qui tourne vraiment, meme maigre, et on dit
+     pourquoi c'est maigre.
+     ------------------------------------------------------------ */
+  const t = adopterTexte(text, 'detect');
+  send('raw', { text: text, matched: null, horsBiblio: !!t });
 });
 /* ============================================================
    rekordbox sans materiel.
@@ -1001,7 +1259,29 @@ function startRekordboxFichiers() {
      rien dire : le DJ Windows n'avait donc ni detection ni
      explication — juste un widget muet. */
   rbWatch = rbFichiers.start({
-    resoudre: p => chemins().get(libmod.cleChemin(p)) || null
+    /* ------------------------------------------------------------
+       Un chemin que la bibliotheque ne connait pas n'est plus un
+       chemin perdu.
+
+       Cette fonction rendait null, et null ne declenchait rien. Or
+       c'est le cas le PLUS facile de tous : on a le fichier lui-meme,
+       sous les yeux, avec ses tags et de quoi l'analyser. On le
+       fabrique donc a la volee — voir adopterFichier().
+       ------------------------------------------------------------ */
+    resoudre: p => {
+      const t = chemins().get(libmod.cleChemin(p));
+      if (t) return t;
+      const cle = libmod.cleChemin(p);
+      const deja = horsBiblio.get(cle);
+      if (deja) return deja;
+      /* Pas encore lu : on lance la lecture des tags, et le morceau
+         sera la au prochain passage de la sonde, une seconde plus
+         tard. On ne fait jamais attendre la boucle de detection. */
+      if (Date.now() - dernierPaquetDeck >= 60000) {
+        adopterFichier(p, 'rekordbox').catch(() => {});
+      }
+      return null;
+    }
   }, {
     onLoad: x => {
       /* Pro DJ Link a parle il y a moins d'une minute : c'est lui
@@ -1026,11 +1306,48 @@ now.on('status', s => {
 });
 
 /* Pro DJ Link : un morceau vient d'etre charge sur un deck */
+let dernierIdInconnu = null;
 now.on('deck', st => {
   dernierPaquetDeck = Date.now();
   const t = library.find(x => x.rbId && x.rbId === st.trackId);
-  if (t) { if (!current || t.id !== current.id) setCurrent(t, 'deck ' + st.device); }
-  else send('raw', { text: 'Deck ' + st.device + ' — identifiant rekordbox ' + st.trackId, matched: null });
+  if (t) {
+    if (!current || t.id !== current.id) setCurrent(t, 'deck ' + st.device);
+    return;
+  }
+  send('raw', { text: 'Deck ' + st.device + ' - identifiant rekordbox ' + st.trackId, matched: null });
+  /* ------------------------------------------------------------
+     Pro DJ Link n'annonce JAMAIS le titre : il annonce un numero de
+     morceau dans la base rekordbox. Le titre se retrouve en croisant
+     ce numero avec un export rekordbox.xml.
+
+     Sans cet export, aucun morceau de la bibliotheque ne porte de
+     rbId : le croisement echoue sur TOUS les morceaux, a chaque
+     fois, et Liaison se taisait. Un DJ en cabine avec du vrai
+     materiel — donc le cas le plus professionnel de tous — voyait
+     un widget mort sans la moindre explication.
+     ------------------------------------------------------------ */
+  const avecId = library.filter(x => x.rbId).length;
+  const cle = avecId ? 'deck-id-inconnu' : 'deck-sans-xml';
+  if (dernierIdInconnu === cle) return;
+  dernierIdInconnu = cle;
+  send('conseils', [avecId
+    ? { cle: cle, quand: 'deck',
+        titre: 'Ce morceau n\'est pas dans l\'export rekordbox importe',
+        texte: 'Le materiel annonce bien le morceau charge, mais son numero n\'existe pas ' +
+               'dans le rekordbox.xml que Liaison a lu. L\'export date d\'avant l\'ajout ' +
+               'de ce morceau.',
+        marche: ['Dans rekordbox : Fichier > Exporter la collection au format xml',
+                 'Reglages > Bibliotheque > choisir ce fichier'],
+        repli: 'Les morceaux deja presents dans l\'export continuent d\'etre reconnus.' }
+    : { cle: cle, quand: 'deck',
+        titre: 'Il manque l\'export rekordbox pour nommer les morceaux',
+        texte: 'Le materiel Pioneer annonce un numero de morceau, jamais son titre. ' +
+               'Sans export rekordbox.xml, Liaison recoit bien le signal mais ne peut ' +
+               'le relier a aucun morceau : c\'est pour ca que rien ne s\'affiche.',
+        marche: ['Dans rekordbox : Fichier > Exporter la collection au format xml',
+                 'Reglages > Bibliotheque > choisir ce fichier',
+                 'Le widget se remplit des le morceau suivant'],
+        repli: 'Sans materiel, Liaison sait aussi lire les fichiers que rekordbox ouvre.' }]);
 });
 
 /* ---------------- IPC ---------------- */
@@ -1239,6 +1556,9 @@ ipcMain.handle('analysis:state', () => {
     fils: analyse ? analyse.workers.length : 0,
     sansFils: analyse ? !!analyse.sansFils : false,
     importing: importing,
+    /* La sante de l'analyse elle-meme : la fenetre de reglages doit
+       pouvoir la montrer sans attendre qu'un morceau tourne. */
+    panne: analyse ? analyse.panne() : null,
     /* Ce qui manque pour aller vite. Recalcule a chaque appel :
        le DJ peut exporter son XML pendant que le widget est
        ouvert, et le conseil doit alors disparaitre tout seul. */

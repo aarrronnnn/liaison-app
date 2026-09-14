@@ -1379,6 +1379,40 @@ function noteDe(q, t) {
  * @param {Array} library
  * @param {number} threshold  0.58 par defaut ; 0.5 pour les invites
  */
+/* ------------------------------------------------------------
+   « Queen - Dancing in the Street » ne doit pas devenir ABBA.
+
+   Mesure : sur une bibliotheque ou « Dancing in the Street »
+   n'existe pas, ce texte se rapprochait de « Dancing Queen »
+   d'ABBA avec 0,63 — au-dessus du seuil de 0,58. Le widget
+   affichait donc le mauvais morceau, et TOUTES les propositions
+   qui suivaient partaient d'une base fausse. C'est la pire des
+   deux erreurs possibles : ne rien reconnaitre se voit, reconnaitre
+   a tort ne se voit pas.
+
+   Les mots se recouvraient parce qu'ils sont les memes — « queen »,
+   « dancing » — mais l'ARTISTE annonce, lui, ne ressemblait a rien
+   de ce que porte le candidat. Quand le logiciel prend la peine
+   d'annoncer « artiste - titre », cette moitie-la est une
+   information, et on s'en sert.
+
+   Le garde-fou ne s'applique jamais aux rapprochements francs :
+   au-dessus de 0,85, le titre parle assez fort tout seul. C'est ce
+   qui laisse passer « Compilation Disco 1978 - Y.M.C.A. » (0,91),
+   ou la partie gauche n'est pas un artiste du tout.
+   ------------------------------------------------------------ */
+const FRANC = 0.85, ACCORD_MINI = 0.2;
+
+function accordArtiste(text, cible, note) {
+  if (note >= FRANC) return true;
+  const i = String(text).indexOf(' - ');
+  if (i <= 0) return true;                       /* aucun artiste annonce */
+  const annonce = normalize(text.slice(0, i));
+  const sien = normalize(cible && cible.artist);
+  if (!annonce || !sien) return true;            /* rien a comparer */
+  return Math.max(dice(annonce, sien), partDesMots(annonce, sien)) >= ACCORD_MINI;
+}
+
 function match(text, library, threshold) {
   threshold = threshold == null ? 0.58 : threshold;
   const q = normalize(text);
@@ -1388,7 +1422,9 @@ function match(text, library, threshold) {
     const sc = noteDe(q, library[i]);
     if (sc > bestScore) { bestScore = sc; best = library[i]; }
   }
-  return bestScore >= threshold ? { track: best, score: bestScore } : null;
+  if (bestScore < threshold) return null;
+  if (!accordArtiste(text, best, bestScore)) return null;
+  return { track: best, score: bestScore };
 }
 
 /** Les n meilleurs, pour proposer un choix plutot qu'imposer une reponse. */
@@ -1409,4 +1445,5 @@ module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, cro
                    doubleAdmis, plancher, parente,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
+                   accordArtiste, partDesMots,
                    epoque, affinites, formesDe };

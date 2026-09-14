@@ -488,11 +488,24 @@ function renderStrip(st, plan) {
      permanence, y compris quand aucun morceau ne tourne. On la
      replie — elle reapparait des que l'analyse a quelque chose a
      montrer. */
+  /* ------------------------------------------------------------
+     « Analyse de la structure » restait affiche tout le temps.
+
+     Deux causes. La premiere est dans main.js : l'en-tete n'etait
+     envoye qu'une fois, donc la structure arrivee apres coup
+     n'atteignait jamais le widget. La seconde est ici : une
+     structure RENDUE mais inexploitable — un morceau trop court,
+     un enregistrement live, un fichier illisible — retombait dans
+     le meme cas que « pas encore analysee ». Liaison annoncait
+     donc un travail en cours qui etait fini depuis longtemps.
+     ------------------------------------------------------------ */
   if (!st || !st.ok || !st.duration) {
     strip.innerHTML = '';
     strip.hidden = true;
     lab.hidden = !curNow;
-    lab.innerHTML = '<span>Analyse de la structure…</span><span></span>';
+    lab.innerHTML = st
+      ? '<span>Pas de structure nette sur ce morceau</span><span></span>'
+      : '<span>Analyse de la structure…</span><span></span>';
     return;
   }
   strip.hidden = false; lab.hidden = false;
@@ -518,10 +531,51 @@ function renderNow(n) {
     : (etatAn.library ? 'Lance un morceau' : 'En attente');
   $('#refT').textContent = n ? n.title : '—';
   $('#refA').textContent = n ? (n.artist || '') : '—';
-  $('#refK').textContent = n ? (n.key || '—') : '—';
-  $('#refB').textContent = n ? Number(n.bpm).toFixed(1).replace('.', ',') : '—';
-  $('#refE').textContent = n ? n.energy : '—';
-  if (n && n.structure) curStruct = n.structure;
+  /* ------------------------------------------------------------
+     « Pourquoi il dit Daddy Cool 0 BPM ? »
+
+     Parce que « Number(null).toFixed(1) » rend « 0.0 ». Un tempo
+     absent s'affichait donc comme un tempo MESURE a zero — une
+     valeur fausse presentee comme un fait, sur la ligne la plus
+     lue du widget.
+
+     Il y a trois etats, et ils ne se ressemblent pas :
+       — mesure, ou lu dans les tags  : le chiffre
+       — pas encore mesure            : « … », l'analyse arrive
+       — mesure, et rien trouve       : « — »
+     ------------------------------------------------------------ */
+  const chiffre = (v) => (v > 0 ? Number(v).toFixed(1).replace('.', ',') : null);
+  if (!n) {
+    $('#refK').textContent = '—';
+    $('#refB').textContent = '—';
+    $('#refE').textContent = '—';
+  } else {
+    /* Sans fichier, il n'y a rien a attendre : « … » promettrait une
+       mesure qui ne viendra jamais. */
+    const jamais = n.mesure || n.sansFichier;
+    $('#refK').textContent = n.key || (jamais ? '—' : '…');
+    $('#refB').textContent = chiffre(n.bpm) || (jamais ? '—' : '…');
+    $('#refE').textContent = n.mesure ? n.energy : (n.sansFichier ? '—' : '…');
+    /* Ce que Liaison a fait lui-meme, dit en clair : le DJ doit
+       savoir que ce tempo vient de NOUS et pas de son logiciel. */
+    const dit = [];
+    /* ------------------------------------------------------------
+       « Rien ne s'affiche alors qu'ils tournent. »
+
+       Maintenant ca s'affiche — et il faut le DIRE, sinon le DJ
+       croira que le morceau est dans sa bibliotheque alors qu'il
+       n'y est pas, et il s'etonnera de ne jamais le voir propose.
+       ------------------------------------------------------------ */
+    if (n.horsBiblio) dit.push(n.sansFichier ? 'hors bibliotheque' : 'hors bibliotheque, analyse en cours');
+    if (n.tempoDeduit) dit.push('tempo mesure par Liaison');
+    else if (n.tempoCorrige) dit.push('tempo corrige par Liaison');
+    if (n.tonaliteDeduite) dit.push('tonalite mesuree');
+    else if (n.tonaliteCorrigee) dit.push('tonalite corrigee');
+    $('#refLbl').textContent = dit.length
+      ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck') + ' · ' + dit.join(' · ')
+      : $('#refLbl').textContent;
+  }
+  if (n) curStruct = n.structure || null;
   if (!n) { curStruct = null; renderStrip(null); }
   else renderStrip(curStruct, lastSug[0] && lastSug[0].plan);
 }

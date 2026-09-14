@@ -50,16 +50,51 @@ const RELANCE_MS = 60000;      /* delai avant de reessayer un fichier absent */
    deplace aussi — c'est le prix d'une cle qu'on peut calculer
    sans lire le fichier.
    ------------------------------------------------------------ */
+/* ============================================================
+   LA VERSION DE LA MESURE.
+
+   A monter des que analyze.js change sa facon de mesurer.
+
+   Sans ce numero, une correction de l'analyse ne serait JAMAIS
+   visible chez un DJ qui utilise deja Liaison — et c'est le
+   defaut le plus sournois de tout le projet. La cle du cache est
+   « chemin + taille + date de modification » : corriger notre
+   calcul ne change aucun des trois. Les vingt-deux mille resultats
+   deja ranges — energie 5 pour tout le monde, densite calculee a
+   l'envers, ballades annoncees au double de leur tempo — seraient
+   relus tels quels a chaque demarrage, pour toujours. Le DJ
+   installerait la mise a jour et ne verrait strictement aucune
+   difference.
+
+   Quand le numero change, on repart de zero. C'est plusieurs
+   heures de calcul de fond sur une grosse bibliotheque — mais le
+   morceau qui tourne, lui, passe devant tout le monde et est
+   mesure en quelques secondes. main.js previent le DJ.
+
+     1 — jusqu'a 1.4.6
+     2 — energie et densite refaites, fenetre d'octave a 70 BPM,
+         chroma par pics : plus rien de comparable a la version 1
+   ============================================================ */
+const VERSION_MESURE = 2;
+
 class AnalysisCache {
   constructor(file) {
     this.file = file;
+    this.perimee = false;
     this.data = this._load();
     this.sale = false;
     this.timer = null;
   }
   _load() {
-    try { return JSON.parse(fs.readFileSync(this.file, 'utf8')) || {}; }
+    let j = null;
+    try { j = JSON.parse(fs.readFileSync(this.file, 'utf8')); }
     catch (e) { return {}; }
+    if (!j || typeof j !== 'object') return {};
+    if (j.__mesure === VERSION_MESURE && j.e) return j.e;
+    /* Un fichier d'une autre version de mesure, ou de l'ancien
+       format sans version : il a servi, il ne sert plus. */
+    if (Object.keys(j).length) this.perimee = true;
+    return {};
   }
   static stamp(p) {
     try { const s = fs.statSync(p); return s.size + ':' + Math.round(s.mtimeMs); }
@@ -89,7 +124,7 @@ class AnalysisCache {
     try {
       fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const tmp = this.file + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.data));
+      fs.writeFileSync(tmp, JSON.stringify({ __mesure: VERSION_MESURE, e: this.data }));
       fs.renameSync(tmp, this.file);
       this.sale = false;
     } catch (e) { /* on reessaiera au prochain lot */ }
@@ -107,6 +142,7 @@ class AnalysisCache {
    ------------------------------------------------------------ */
 const SUR_TEMPO = 0.55;
 const SUR_TONALITE = 0.72;
+const MARGE_TONALITE = 0.04;
 
 function desaccordTempo(a, b) {
   if (!(a > 0) || !(b > 0)) return false;
@@ -153,6 +189,25 @@ class AnalysisService {
     this.arrete = false;
     this.dernierRapport = 0;
     this.rapportTimer = null;
+    /* ------------------------------------------------------------
+       CE QUI RATE, COMPTE ET GARDE.
+
+       Quand analyze() echouait, le morceau recevait energie 5,
+       timbre [5,5,5], la marque « analyse », et le message
+       d'erreur partait a la poubelle. Sur une machine ou ffmpeg
+       ne demarre pas, TOUS les morceaux finissaient ainsi : le DJ
+       voyait « ENERGIE 5 » partout, aucun tempo, aucune tonalite,
+       et pas un mot d'explication. Il a fallu une capture d'ecran
+       et une engueulade pour le decouvrir.
+
+       On compte donc les echecs, on garde le dernier message, et
+       main.js le montre des qu'il y en a assez pour que ce ne soit
+       plus un accident.
+       ------------------------------------------------------------ */
+    this.rates = 0;
+    this.reussis = 0;
+    this.derniereErreur = null;
+    this.mesuresUtiles = 0;   /* analyses qui ont rendu un tempo */
   }
 
   /* ---- fils ---- */
@@ -236,7 +291,36 @@ class AnalysisService {
 
     this.total = this.file.size;
     this._rapport(true);
-    return { caches: caches, aFaire: this.total };
+    return { caches: caches, aFaire: this.total, mesurePerimee: !!this.cache.perimee };
+  }
+
+  /* ------------------------------------------------------------
+     Le morceau qui joue et qui n'est pas dans la bibliotheque.
+
+     charger() ne connait que la bibliotheque, et le service ne sait
+     analyser que ce qu'il connait. Un titre achete hier, pose sur
+     une cle USB ou range dans un dossier jamais importe n'avait donc
+     aucun moyen d'etre mesure — alors que rekordbox nous donnait son
+     chemin complet et que le fichier etait la, lisible, sous nos
+     yeux.
+
+     Il passe devant tout le monde : c'est celui que le DJ ecoute.
+     ------------------------------------------------------------ */
+  ajouter(t, force) {
+    if (!t || t.id == null) return false;
+    this.tracks.set(t.id, t);
+    if (!t.path) { t.analyzed = true; return false; }
+    const st = AnalysisCache.stamp(t.path);
+    if (st === null) { t.offline = true; return false; }
+    const c = this.cache.get(t.path, st);
+    if (c) { Object.assign(t, c); t.analyzed = true; this._rapport(); return true; }
+    const p = force == null ? 2 : force;
+    const e = this.file.get(t.id);
+    if (e) { if (p > e.priorite) e.priorite = p; }
+    else { this.file.set(t.id, { priorite: p, stamp: st }); this.total++; }
+    this._rapport();
+    this._pousser();
+    return true;
   }
 
   /**
@@ -338,6 +422,8 @@ class AnalysisService {
     if (t && msg.ok) {
       const patch = msg.patch;
       Object.assign(t, patch);
+      this.reussis++;
+      if (patch && patch.mBpm > 40) this.mesuresUtiles++;
 
       /* Ce que le logiciel de mix affirme prime toujours : sa
          tonalite a ete posee par le DJ ou par un analyseur dedie,
@@ -352,52 +438,99 @@ class AnalysisService {
          Signaler : quand les deux valeurs existent et divergent,
          on ne tranche pas — on marque, et la jauge de sante le
          montre au DJ, qui ira reanalyser dans SON logiciel. */
-      if (!t.key && patch.mKey && patch.mKeyConf >= 0.6) { t.key = patch.mKey; t.keyDeduite = true; }
-      if (!(t.bpm > 0) && patch.mBpm > 40) { t.bpm = Math.round(patch.mBpm * 10) / 10; t.bpmDeduit = true; }
+      /* ============================================================
+         NOTRE MESURE FAIT FOI.
 
-      /* ------------------------------------------------------------
-         QUAND LE TAG MENT.
+         « En meme temps que l'analyse de la bibliotheque, on fait
+           nous-memes l'analyse BPM, key, etc. On doit se fier qu'a
+           nous, comme un pro. »
 
-         Jusqu'ici l'analyse comblait les trous et se taisait sur les
-         desaccords : « on ne tranche pas, on marque, et le DJ ira
-         reanalyser dans SON logiciel ». C'etait poli et c'etait
-         faux. Un tempo errone n'est pas une coquille dans une fiche :
-         il fausse le crible, la note de tempo, le plan de mix et le
-         plancher. Toute la soiree, sur ce morceau. Et un DJ qui
-         importe une bibliotheque iTunes de quinze ans en a des
-         centaines.
+         Trois regles se sont succede ici, et il a fallu les trois
+         pour arriver a la bonne :
 
-         On tranche donc, mais seulement quand on est SUR. La
-         confiance vient d'estimateBPM : la hauteur du sommet du
-         peigne comparee au meilleur tempo concurrent qui n'est pas
-         une harmonique. Calibree sur de vrais fichiers :
+           1. « le tag prime toujours, on comble les trous »
+              Une bibliotheque iTunes de quinze ans passait donc ses
+              erreurs au moteur, en connaissance de cause.
 
-           battue nette (club, house, disco)   0,57 a 0,70
-           nappe sans pulsation                0,05
-           bruit parle, sans rythme            0,47   <- le pire cas
+           2. « on corrige quand le tag ment et qu'on est sur »
+              Mieux, mais toujours a deux vitesses : le meme morceau
+              etait traite differemment selon qu'un logiciel tiers
+              avait ecrit quelque chose ou non.
 
-         Le seuil est donc a 0,55 : au-dessus, aucun de nos faux
-         positifs ne passe, et toutes les vraies battues passent.
+           3. celle-ci : quand notre mesure est sure, c'est ELLE la
+              valeur. Le tag ne sert plus que de repli, quand on n'a
+              pas su mesurer.
 
-         Le double et la moitie ne sont pas des desaccords : un
-         morceau a 140 lu comme 70 se mixe exactement pareil. On ne
-         corrige que les vrais ecarts, on garde l'ancienne valeur, et
-         la jauge de sante la montre.
-         ------------------------------------------------------------ */
-      if (t.bpm > 0 && patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO &&
-          !t.bpmDeduit && desaccordTempo(t.bpm, patch.mBpm)) {
-        t.bpmTag = t.bpm;
+         Ce n'est pas de l'arrogance, c'est de la coherence : une
+         bibliotheque ou la moitie des tempos vient de rekordbox,
+         un quart d'iTunes et un quart de nous ne peut pas etre
+         comparee a elle-meme. Une seule regle de mesure pour tout
+         le monde, c'est ce que fait un analyseur professionnel.
+
+         On garde toujours l'ancienne valeur : le DJ doit pouvoir
+         voir ce que son logiciel disait, et nous contredire.
+         ============================================================ */
+      const surTempo = patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO;
+      /* La marge compte autant que la correlation. Deux tonalites
+         voisines obtiennent presque la meme note : quand elles sont
+         a egalite, on n'a pas mesure une tonalite, on a tire a pile
+         ou face — et ce n'est pas avec ca qu'on contredit le DJ. */
+      const surTonalite = patch.mKey && patch.mKeyConf >= SUR_TONALITE
+                          && (patch.mKeyMarge === undefined || patch.mKeyMarge >= MARGE_TONALITE);
+
+      if (surTempo) {
+        const avant = t.bpm;
+        const mesure = Math.round(patch.mBpm * 10) / 10;
+        /* ------------------------------------------------------------
+           L'OCTAVE DU DJ, PAS LA NOTRE.
+
+           Un morceau a 140 peut se compter a 70 : c'est le meme
+           rythme, et notre estimateur ramene d'ailleurs tout entre
+           70 et 190 pour cette raison. Mais si le logiciel du DJ
+           annonce 140, sa grille est calee sur 140, ses reperes
+           sont a 140, et il pense a 140. Lui afficher 70 parce que
+           notre peigne a resonne une octave plus bas serait juste
+           en theorie et insupportable en cabine.
+
+           Quand les deux valeurs decrivent le meme rythme mais pas
+           la meme octave, on garde la sienne. Quand c'est la meme
+           octave, on garde la notre : elle est plus precise au
+           dixieme pres.
+           ------------------------------------------------------------ */
+        const memeRythme = avant > 0 && !desaccordTempo(avant, mesure);
+        const memeOctave = memeRythme && Math.abs(mesure - avant) / avant < 0.06;
+        if (memeRythme && !memeOctave) {
+          t.bpmSource = 'tag';           /* son octave, confirmee par nous */
+        } else {
+          t.bpm = mesure;
+          t.bpmSource = 'liaison';
+          if (avant > 0 && !memeRythme) { t.bpmTag = avant; t.bpmCorrige = true; }
+          else if (!(avant > 0)) t.bpmDeduit = true;
+        }
+      } else if (!(t.bpm > 0) && patch.mBpm > 40) {
+        /* Pas sur de nous, mais le morceau n'a rien du tout :
+           une estimation vaut mieux qu'un vide, et on le dit. */
         t.bpm = Math.round(patch.mBpm * 10) / 10;
-        t.bpmCorrige = true;
+        t.bpmDeduit = true;
+        t.bpmSource = 'liaison-incertain';
+      } else if (t.bpm > 0) {
+        t.bpmSource = 'tag';
       }
-      /* La tonalite se mesure moins bien que le tempo : on exige
-         davantage avant de contredire un tag. */
-      if (t.key && patch.mKey && patch.mKeyConf >= SUR_TONALITE &&
-          !t.keyDeduite && desaccordTonalite(t.key, patch.mKey)) {
-        t.keyTag = t.key;
+
+      if (surTonalite) {
+        const avant = t.key;
         t.key = patch.mKey;
-        t.keyCorrigee = true;
+        t.keySource = 'liaison';
+        if (avant && desaccordTonalite(avant, t.key)) { t.keyTag = avant; t.keyCorrigee = true; }
+        else if (!avant) t.keyDeduite = true;
+      } else if (!t.key && patch.mKey && patch.mKeyConf >= 0.6) {
+        t.key = patch.mKey;
+        t.keyDeduite = true;
+        t.keySource = 'liaison-incertain';
+      } else if (t.key) {
+        t.keySource = 'tag';
       }
+
       t.analyzed = true;
       t.offline = false;
       if (e && e.stamp) this.cache.set(t.path, e.stamp, patch);
@@ -405,12 +538,14 @@ class AnalysisService {
     } else if (t) {
       /* un fichier illisible ne doit pas revenir toutes les
          minutes : on lui donne ses valeurs par defaut et on
-         l'oublie */
+         l'oublie — mais on ne l'oublie plus EN SILENCE. */
       if (t.energy == null) t.energy = 5;
       if (!t.timbre) t.timbre = [5, 5, 5];
       if (t.vocal == null) t.vocal = 0;
       t.analyzed = true;
       t.illisible = true;
+      this.rates++;
+      if (msg && msg.error) this.derniereErreur = String(msg.error).slice(0, 200);
     }
 
     this.file.delete(id);
@@ -449,17 +584,40 @@ class AnalysisService {
     if (this.rapportTimer) { clearTimeout(this.rapportTimer); this.rapportTimer = null; }
     this.dernierRapport = now;
 
+    /* ------------------------------------------------------------
+       UN COMPTEUR QUI NE REPART PAS DE ZERO.
+
+       « Des que je change de son, ANALYSE / 40 000 recommence. »
+
+       Il comptait « ce qu'on a fait DEPUIS LE DERNIER CHARGEMENT »
+       sur « ce qu'il restait a faire a ce moment-la ». Or charger()
+       remet le compteur a zero et reconstruit la file : la moindre
+       resynchronisation de bibliotheque — et il y en a a chaque
+       changement de crate — ramenait la barre a son point de
+       depart, sur un travail deja fait aux trois quarts. Le DJ
+       voyait une analyse sans fin qui recommencait sans cesse.
+
+       On compte donc ce que le DJ comprend, et qui ne peut pas
+       reculer : combien de SA bibliotheque est prete, sur le total.
+       Les fichiers injoignables sortent des deux cotes — ils ne
+       seront jamais prets et ne doivent pas plomber la barre.
+       ------------------------------------------------------------ */
     let horsLigne = 0;
     for (const id of this.file.keys()) {
       const t = this.tracks.get(id);
       if (t && t.offline) horsLigne++;
     }
     const restants = Math.max(0, this.file.size - horsLigne);
-    const total = Math.max(0, this.total - horsLigne);
+    let prets = 0, total = 0;
+    for (const t of this.tracks.values()) {
+      if (t.offline) continue;
+      total++;
+      if (t.analyzed) prets++;
+    }
 
     this.onProgress({
       phase: 'analyse',
-      done: total - restants,
+      done: prets,
       total: total,
       restants: restants,
       offline: horsLigne,
@@ -467,6 +625,53 @@ class AnalysisService {
       /* fini veut dire : plus rien a faire avec ce qui est branche */
       fini: restants === 0
     });
+  }
+
+  /* ------------------------------------------------------------
+     L'etat de sante de l'analyse elle-meme.
+
+     @returns {object|null} un probleme a montrer, ou null si tout
+     va bien. On ne crie qu'au-dela de vingt tentatives : en
+     dessous, un fichier abime isole ne prouve rien.
+     ------------------------------------------------------------ */
+  panne() {
+    if (this.sansFils)
+      return { cle: 'analyse-sans-fils',
+        quoi: 'Liaison ne peut pas lancer ses fils d\'analyse',
+        pourquoi: 'Aucun tempo, aucune tonalite et aucune energie ne seront mesures.',
+        quoiFaire: ['Redemarre Liaison', 'Si ca persiste, reinstalle l\'application'] };
+
+    const tentes = this.rates + this.reussis;
+    if (tentes < 20) return null;
+
+    if (this.rates >= tentes * 0.8)
+      return { cle: 'analyse-echoue',
+        quoi: 'L\'analyse echoue sur presque tous tes morceaux',
+        pourquoi: this.derniereErreur
+          ? 'Derniere erreur : ' + this.derniereErreur
+          : 'Liaison n\'arrive pas a decoder tes fichiers audio.',
+        quoiFaire: ['Lance « node build/diagnostic.js » pour savoir pourquoi',
+                    'C\'est presque toujours ffmpeg qui manque ou n\'est pas executable'],
+        rates: this.rates, tentes: tentes };
+
+    /* Le cas plus vicieux : ca « reussit », mais rien n'en sort. */
+    if (this.reussis >= 20 && this.mesuresUtiles < this.reussis * 0.1)
+      return { cle: 'analyse-sans-resultat',
+        quoi: 'L\'analyse tourne mais ne trouve aucun tempo',
+        pourquoi: this.reussis + ' morceaux analyses, ' + this.mesuresUtiles + ' tempos trouves.',
+        quoiFaire: ['Lance « node build/diagnostic.js » et envoie la sortie'],
+        rates: this.rates, tentes: tentes };
+    return null;
+  }
+
+  /** Ce morceau est-il dans la file, en attente de mesure ? */
+  enAttente(id) {
+    if (this.sansFils) return false;      /* aucun fil : ca n'arrivera pas */
+    const e = this.file.get(id);
+    if (!e) return false;
+    const t = this.tracks.get(id);
+    if (t && t.offline) return false;     /* fichier injoignable : jamais */
+    return true;
   }
 
   /** Combien de morceaux sont injoignables — disque debranche. */
@@ -485,4 +690,5 @@ class AnalysisService {
   }
 }
 
-module.exports = { desaccordTempo, desaccordTonalite, SUR_TEMPO, SUR_TONALITE, AnalysisService, AnalysisCache };
+module.exports = { desaccordTempo, desaccordTonalite, SUR_TEMPO, SUR_TONALITE, MARGE_TONALITE,
+                   VERSION_MESURE, AnalysisService, AnalysisCache };
