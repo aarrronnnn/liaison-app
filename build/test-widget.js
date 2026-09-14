@@ -193,6 +193,40 @@ const SOS = [
       verifier('6. « ' + c.quoi +' » : un titre et une marche a suivre',
                aUnTitre && aUneMarche);
     }
+
+    /* ------------------------------------------------------------
+       Et le cas qui a change : la liste vide alors que tout va
+       bien. Le widget servait « Rien ne se cale — aucun titre ne
+       s'enchaine sur ce tempo » quelle que soit la cause reelle.
+       main.js envoie maintenant un conseil sous la cle « vide » :
+       le widget doit le servir plutot que sa phrase generique.
+       ------------------------------------------------------------ */
+    const avecCause = await p.evaluate(() => {
+      const avant = { an: etatAn, now: typeof curNow !== 'undefined' ? curNow : null };
+      etatAn = { library: 22000, analyses: 900, offline: 0, restants: 0, importing: false,
+                 conseils: [{ cle: 'vide-filtres', quand: 'vide',
+                              titre: 'Tes filtres ne laissent presque rien',
+                              texte: '14 morceaux sur 22 000 passent tes filtres (un crate).',
+                              marche: ['Ouvre FILTRES en bas du widget et desserre'] }] };
+      curNow = { title: 'x', artist: 'y' };
+      const html = etatVide();
+      etatAn = avant.an; curNow = avant.now;
+      return html;
+    });
+    verifier('6bis. la vraie cause remplace « rien ne se cale »',
+             /filtres ne laissent/.test(avecCause) && !/s.enchaine sur ce tempo/.test(avecCause),
+             avecCause.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').slice(0, 64) + '…');
+
+    const sansCause = await p.evaluate(() => {
+      const avant = { an: etatAn, now: typeof curNow !== 'undefined' ? curNow : null };
+      etatAn = { library: 22000, analyses: 900, offline: 0, restants: 0, importing: false, conseils: [] };
+      curNow = { title: 'x', artist: 'y' };
+      const html = etatVide();
+      etatAn = avant.an; curNow = avant.now;
+      return html;
+    });
+    verifier('6ter. et sans diagnostic, l\'ancienne phrase tient encore',
+             /Rien ne se cale/.test(sansCause) && /<li>/.test(sansCause));
   }
 
   /* ---------- 7. la cabine etroite ---------- */

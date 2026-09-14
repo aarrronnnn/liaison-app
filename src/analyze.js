@@ -185,14 +185,17 @@ async function analyze(file, opts) {
     if (cm > bestScore) { bestScore = cm; bestKey = CAM_MIN[r]; }
   }
 
-  /* tempo : autocorrelation de l'enveloppe d'attaques */
-  const bpm = estimateBPM(flux, SR / HOP);
+  /* tempo : autocorrelation de l'enveloppe d'attaques.
+     On rend aussi la confiance : elle decide si on ose contredire
+     un tag, ou seulement combler un trou. */
+  const tempo = estimateBPM(flux, SR / HOP);
 
   /* indice de presence vocale : energie 300-3400 Hz + variabilite du centroide */
   const vocalish = clamp(Math.round((mean(highRatio) * 12 + (1 - mean(lowRatio)) * 4)), 0, 10);
 
   return {
-    bpm: bpm,
+    bpm: tempo.bpm,
+    bpmConfidence: tempo.confiance,
     energy: energy,
     timbre: [brightness, dens, warmth],
     key: bestKey,
@@ -209,7 +212,7 @@ async function analyze(file, opts) {
    la duree, donc le bon tempo se detache au centieme pres.
    Deux passes : 0,5 BPM pour trouver la zone, 0,02 BPM pour affiner. */
 function estimateBPM(flux, frameRate) {
-  if (!flux || flux.length < 64) return 0;
+  if (!flux || flux.length < 64) return { bpm: 0, confiance: 0 };
   const n = flux.length;
   const m = flux.reduce((a, b) => a + b, 0) / n;
   const env = new Float64Array(n);
@@ -240,12 +243,46 @@ function estimateBPM(flux, frameRate) {
   const lagFor = bpm => (60 / bpm) * frameRate;
   const LO = 60, HI = 200;
 
+  /* ------------------------------------------------------------
+     On garde toute la courbe, pas seulement son sommet.
+
+     Jusqu'ici cette fonction rendait un tempo et rien d'autre. Un
+     tempo sans confiance ne peut servir qu'a combler un trou : on
+     n'ose pas s'en servir pour CONTREDIRE un tag, meme faux, parce
+     qu'on ne sait pas si la mesure vaut mieux que lui.
+
+     La confiance se lit pourtant sur place. Quand le morceau a une
+     pulsation nette, le peigne resonne a un seul endroit et le
+     sommet ecrase tout le reste. Quand il n'en a pas — une nappe,
+     un morceau live, une intro parlee — la courbe est plate et
+     plusieurs tempos se valent. On compare donc le sommet au
+     meilleur concurrent QUI N'EST PAS une harmonique : le double,
+     la moitie et le tiers decrivent le meme rythme, les compter
+     comme des rivaux ferait passer un morceau tres net pour un
+     morceau douteux.
+     ------------------------------------------------------------ */
+  const courbe = [];
   let bestScore = -1, bestBpm = 0;
   for (let bpm = LO; bpm <= HI; bpm += 0.5) {
     const s = combAt(lagFor(bpm), 12);
+    courbe.push([bpm, s]);
     if (s > bestScore) { bestScore = s; bestBpm = bpm; }
   }
-  if (!bestBpm) return 0;
+  if (!bestBpm) return { bpm: 0, confiance: 0 };
+
+  const harmonique = (a, b) => {
+    for (const r of [1, 2, 0.5, 3, 1 / 3, 4, 0.25, 1.5, 2 / 3]) {
+      if (Math.abs(b * r - a) / a < 0.04) return true;
+    }
+    return false;
+  };
+  let rival = 0;
+  for (const [bpm, sc] of courbe) {
+    if (harmonique(bestBpm, bpm)) continue;
+    if (sc > rival) rival = sc;
+  }
+  /* 0 = aucune pulsation qui se detache, 1 = un seul tempo possible */
+  const confiance = bestScore > 0 ? Math.max(0, Math.min(1, 1 - rival / bestScore)) : 0;
 
   for (let bpm = Math.max(LO, bestBpm - 0.6); bpm <= Math.min(HI, bestBpm + 0.6); bpm += 0.02) {
     const s = combAt(lagFor(bpm), 16);
@@ -277,8 +314,9 @@ function estimateBPM(flux, frameRate) {
     }
   }
 
-  if (!isFinite(bpm) || bpm <= 0) return 0;
-  return Math.round(bpm * 10) / 10;
+  if (!isFinite(bpm) || bpm <= 0) return { bpm: 0, confiance: 0 };
+  return { bpm: Math.round(bpm * 10) / 10,
+           confiance: Math.round(confiance * 100) / 100 };
 }
 
 module.exports = { analyze, ffmpegPath, estimateBPM };

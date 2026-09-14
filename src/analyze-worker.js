@@ -32,6 +32,7 @@ parentPort.on('message', async job => {
            on les compare, et c'est cette comparaison qui revele les
            morceaux mal tagues. */
         mBpm: r.bpm || 0,
+        mBpmConf: r.bpmConfidence || 0,
         mKey: r.key || null,
         mKeyConf: r.keyConfidence || 0
       }

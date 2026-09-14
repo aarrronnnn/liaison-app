@@ -710,6 +710,96 @@ function lesAffinites() {
 }
 function oublierAffinites() { affinitesCache = null; }
 
+/* ============================================================
+   POURQUOI IL N'Y A RIEN.
+
+   « Si un son n'est pas reconnu, l'utilisateur doit voir pourquoi. »
+
+   Le widget disait « Rien ne se cale — aucun titre ne s'enchaine
+   sur ce tempo » dans TOUS les cas de liste vide. C'est souvent
+   faux : la vraie raison est ailleurs neuf fois sur dix — un
+   filtre de crate oublie, un morceau en cours sans tempo, un
+   disque debranche, une bibliotheque pas encore analysee. Le DJ
+   cherchait une panne de tempo qui n'existait pas.
+
+   On passe donc la chaine en revue dans l'ordre, et on nomme la
+   PREMIERE porte qui se ferme, avec la marche a suivre. C'est la
+   meme logique que build/pourquoi.js, ramenee en cabine.
+
+   @returns {object|null} un conseil, ou null si tout va bien.
+   ============================================================ */
+function raisonDuVide(cur, vivier, tam) {
+  const total = library.length;
+  if (!total) return null;                 /* deja traite par le widget */
+
+  if (!cur) return null;
+
+  /* 1. le morceau en cours n'a pas de tempo ET rien d'autre non plus */
+  const avecTempo = vivier.filter(t => t.bpm > 0).length;
+  if (!(cur.bpm > 0) && !avecTempo) {
+    return { cle: 'vide-sans-tempo', quand: 'vide',
+      titre: 'Aucun tempo nulle part',
+      texte: 'Ni le morceau en cours ni ta bibliotheque n\'ont de tempo enregistre. ' +
+             'Liaison le mesure lui-meme, mais il lui faut le temps d\'ecouter chaque titre.',
+      marche: ['Laisse l\'analyse tourner quelques minutes',
+               'Ou fais analyser ta collection dans ton logiciel de mix'] };
+  }
+
+  /* 2. les filtres */
+  const sansFiltre = library.length;
+  if (vivier.length < sansFiltre * 0.25) {
+    const quoi = [];
+    if (config.fCrate) quoi.push('un crate');
+    if (config.fBpmMin || config.fBpmMax) quoi.push('une fourchette de tempo');
+    if (config.fNoExplicit) quoi.push('le filtre paroles');
+    return { cle: 'vide-filtres', quand: 'vide',
+      titre: 'Tes filtres ne laissent presque rien',
+      texte: vivier.length + ' morceaux sur ' + sansFiltre + ' passent tes filtres' +
+             (quoi.length ? ' (' + quoi.join(', ') + ')' : '') + '.',
+      marche: ['Ouvre FILTRES en bas du widget et desserre',
+               'Le crate est le filtre qui coupe le plus souvent'] };
+  }
+
+  /* 3. le disque */
+  const absents = vivier.filter(t => t.offline).length;
+  if (absents > vivier.length * 0.5) {
+    return { cle: 'vide-disque', quand: 'vide',
+      titre: 'Le disque n\'est pas la',
+      texte: absents + ' morceaux sur ' + vivier.length + ' pointent un fichier introuvable.',
+      marche: ['Rebranche le disque externe',
+               'Ou reexporte ta collection depuis ton logiciel'] };
+  }
+
+  /* 4. tout a deja ete joue ce soir */
+  const joues = setlog && setlog.current ? setlog.current.played.length : 0;
+  if (joues && joues >= vivier.length - 1) {
+    return { cle: 'vide-tout-joue', quand: 'vide',
+      titre: 'Tu as joue presque toute la selection',
+      texte: joues + ' titres joues sur ' + vivier.length + ' disponibles.',
+      marche: ['Desserre le crate pour ouvrir la selection',
+               'Le bouton SOS, lui, a le droit de rejouer'] };
+  }
+
+  /* 5. le vrai cas du tempo : on dit lequel etait le plus proche */
+  if (cur.bpm > 0) {
+    let proche = null, ecart = Infinity;
+    for (const t of vivier) {
+      if (!(t.bpm > 0) || t.id === cur.id) continue;
+      const d = Math.abs(t.bpm - cur.bpm) / cur.bpm;
+      if (d < ecart) { ecart = d; proche = t; }
+    }
+    if (proche) {
+      return { cle: 'vide-tempo', quand: 'vide',
+        titre: 'Rien ne se cale sur ' + Math.round(cur.bpm) + ' BPM',
+        texte: 'Le plus proche est « ' + proche.title + ' » a ' + Math.round(proche.bpm) +
+               ' BPM, soit ' + Math.round(ecart * 100) + ' % d\'ecart.',
+        marche: ['Passe par un morceau relais',
+                 'Ou desserre la fourchette de tempo dans FILTRES'] };
+    }
+  }
+  return null;
+}
+
 function computeSuggestions(limit) {
   if (!current) return [];
   const f = feat();
@@ -752,7 +842,7 @@ function computeSuggestions(limit) {
   const bruts = engine.suggest(current, vivier, {
     dna: currentDNA(), arc: arc, mode: mode, bulle: bulleActive,
     affinites: lesAffinites(),
-    poids: g.poids, marge: g.marge, variete: g.variete,
+    poids: g.poids, marge: g.marge, variete: g.variete, pas: g.pas,
     banned: bannedSet(), wanted: clientSet.wanted,
     trends: trends, limit: n,
     /* la memoire de la soiree : ce qui vient d'etre joue */
@@ -768,6 +858,15 @@ function computeSuggestions(limit) {
      les notes par critere, et donc l'etiquette dont l'apprentissage
      a besoin au prochain changement de morceau. */
   dernieresPropositions = bruts;
+
+  /* Liste vide : on dit pourquoi, tout de suite, au lieu de laisser
+     le widget servir sa phrase generique sur le tempo. */
+  if (!bruts.length) {
+    try {
+      const avis = raisonDuVide(current, vivier, tam);
+      if (avis) send('conseils', [avis]);
+    } catch (e) { /* expliquer ne doit jamais empecher de jouer */ }
+  }
 
   return bruts.map(r => {
     ensureStructure(r.track);

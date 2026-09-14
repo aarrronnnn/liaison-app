@@ -100,6 +100,33 @@ class AnalysisCache {
 /* ------------------------------------------------------------
    La file.
    ------------------------------------------------------------ */
+/* ------------------------------------------------------------
+   Les deux regles de desaccord, identiques a celles de health.js
+   qui les utilise deja pour la jauge de sante. Elles sont ici parce
+   que l'analyse ne doit pas dependre de l'ecran de sante.
+   ------------------------------------------------------------ */
+const SUR_TEMPO = 0.55;
+const SUR_TONALITE = 0.72;
+
+function desaccordTempo(a, b) {
+  if (!(a > 0) || !(b > 0)) return false;
+  /* le double, la moitie et le tiers decrivent le meme rythme */
+  for (const r of [1, 2, 0.5, 3, 1 / 3]) {
+    if (Math.abs(b * r - a) / a < 0.02) return false;
+  }
+  return true;
+}
+
+function desaccordTonalite(a, b) {
+  if (!a || !b || a === b) return false;
+  const na = parseInt(a, 10), nb = parseInt(b, 10);
+  const la = String(a).slice(-1).toUpperCase(), lb = String(b).slice(-1).toUpperCase();
+  if (!na || !nb) return false;
+  if (na === nb) return false;                 /* relatif majeur/mineur */
+  const d = Math.min((na - nb + 12) % 12, (nb - na + 12) % 12);
+  return d > 1;                                /* au-dela du voisin immediat */
+}
+
 class AnalysisService {
   /**
    * @param {string} cacheFile
@@ -327,6 +354,50 @@ class AnalysisService {
          montre au DJ, qui ira reanalyser dans SON logiciel. */
       if (!t.key && patch.mKey && patch.mKeyConf >= 0.6) { t.key = patch.mKey; t.keyDeduite = true; }
       if (!(t.bpm > 0) && patch.mBpm > 40) { t.bpm = Math.round(patch.mBpm * 10) / 10; t.bpmDeduit = true; }
+
+      /* ------------------------------------------------------------
+         QUAND LE TAG MENT.
+
+         Jusqu'ici l'analyse comblait les trous et se taisait sur les
+         desaccords : « on ne tranche pas, on marque, et le DJ ira
+         reanalyser dans SON logiciel ». C'etait poli et c'etait
+         faux. Un tempo errone n'est pas une coquille dans une fiche :
+         il fausse le crible, la note de tempo, le plan de mix et le
+         plancher. Toute la soiree, sur ce morceau. Et un DJ qui
+         importe une bibliotheque iTunes de quinze ans en a des
+         centaines.
+
+         On tranche donc, mais seulement quand on est SUR. La
+         confiance vient d'estimateBPM : la hauteur du sommet du
+         peigne comparee au meilleur tempo concurrent qui n'est pas
+         une harmonique. Calibree sur de vrais fichiers :
+
+           battue nette (club, house, disco)   0,57 a 0,70
+           nappe sans pulsation                0,05
+           bruit parle, sans rythme            0,47   <- le pire cas
+
+         Le seuil est donc a 0,55 : au-dessus, aucun de nos faux
+         positifs ne passe, et toutes les vraies battues passent.
+
+         Le double et la moitie ne sont pas des desaccords : un
+         morceau a 140 lu comme 70 se mixe exactement pareil. On ne
+         corrige que les vrais ecarts, on garde l'ancienne valeur, et
+         la jauge de sante la montre.
+         ------------------------------------------------------------ */
+      if (t.bpm > 0 && patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO &&
+          !t.bpmDeduit && desaccordTempo(t.bpm, patch.mBpm)) {
+        t.bpmTag = t.bpm;
+        t.bpm = Math.round(patch.mBpm * 10) / 10;
+        t.bpmCorrige = true;
+      }
+      /* La tonalite se mesure moins bien que le tempo : on exige
+         davantage avant de contredire un tag. */
+      if (t.key && patch.mKey && patch.mKeyConf >= SUR_TONALITE &&
+          !t.keyDeduite && desaccordTonalite(t.key, patch.mKey)) {
+        t.keyTag = t.key;
+        t.key = patch.mKey;
+        t.keyCorrigee = true;
+      }
       t.analyzed = true;
       t.offline = false;
       if (e && e.stamp) this.cache.set(t.path, e.stamp, patch);
@@ -414,4 +485,4 @@ class AnalysisService {
   }
 }
 
-module.exports = { AnalysisService, AnalysisCache };
+module.exports = { desaccordTempo, desaccordTonalite, SUR_TEMPO, SUR_TONALITE, AnalysisService, AnalysisCache };

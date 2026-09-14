@@ -170,8 +170,13 @@ const DNA = { 'variete': 82, 'chanson francaise': 82, 'disco': 80, 'funk': 70, '
        tonalite, meme energie, meme timbre, 123 a 125 BPM). L'axe
        de parente leur donne 100 a toutes, ce qui rapproche les
        totaux au point que l'arrondi les confond. C'est honnete :
-       ces morceaux SE VALENT. */
-  const ATTENDU = 'var1=90 var2=90 var3=90 var4=90 var5=90';
+       ces morceaux SE VALENT.
+
+       14 sept. 2026 (soir) — les DJ demandent l'ordre « BPM, puis
+       style, puis roue de Camelot ». L'harmonie passe de 0,27 a
+       0,16, le tempo de 0,24 a 0,30, la parente de 0,22 a 0,24.
+       Les ex aequo se departagent donc a nouveau, sur le tempo. */
+  const ATTENDU = 'var1=90 var4=90 var7=90 var8=90 var2=89';
   const obtenu = engine.suggest(bib[0], bib, { limit: 5, arc: 'up', dna: DNA, mode: 'crowd' })
     .map(x => nom(x.track) + '=' + x.total).join(' ');
   verifier('2. sans bulle, le classement d\'avant est intact',

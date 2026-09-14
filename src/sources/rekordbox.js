@@ -43,7 +43,23 @@
 const { execFile } = require('child_process');
 const path = require('path');
 
-const AUDIO = /\.(mp3|wav|aiff?|flac|m4a|aac|ogg|wma)$/i;
+/* ------------------------------------------------------------
+   Les extensions que Liaison reconnait comme de la musique.
+
+   Cette liste sert a UNE chose : reperer, parmi tous les fichiers
+   que rekordbox tient ouverts, ceux qui sont des morceaux. Un
+   fichier absent de la liste est invisible — le morceau ne
+   s'affiche pas, n'est pas analyse, ne propose rien. Exactement
+   le symptome signale le 14 septembre 2026 sur un titre precis.
+
+   On y ajoute donc ce que rekordbox sait lire et qui manquait :
+   .aif sans double f est deja couvert, mais pas .aifc, ni les
+   conteneurs .mp4 et .m4b, ni .opus, ni les formats sans perte
+   .alac, .wv, .dsf, .dff, .ape. Les ajouter ne coute rien : au
+   pire on regarde un fichier qui n'est pas dans la bibliotheque,
+   et resoudre() le rejette une ligne plus loin.
+   ------------------------------------------------------------ */
+const AUDIO = /\.(mp3|wav|wave|aiff?|aifc|flac|alac|m4a|m4b|mp4|aac|ogg|oga|opus|wma|wv|ape|dsf|dff|mpc)$/i;
 const INTERVALLE = 3000;
 /* Deux relevés : assez pour ecarter un apercu, assez court pour
    que le morceau soit reconnu avant la fin de son intro. */

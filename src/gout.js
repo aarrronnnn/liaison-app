@@ -102,6 +102,19 @@ function vide() {
     ecartTempo: 0,        /* moyenne glissante de |ecart| / bpm */
     repetitionArtiste: 0, /* part des enchainements ou l'artiste revient */
     sautEnergie: 0,       /* moyenne glissante de la variation d'energie signee */
+    /* ------------------------------------------------------------
+       De COMBIEN il monte quand il monte, et de combien il descend
+       quand il descend.
+
+       sautEnergie melangeait les deux : un DJ qui monte de +2 puis
+       redescend de -2 a une moyenne de zero, et on en concluait
+       qu'il ne bouge pas. Le moteur, lui, visait +1,4 en montee et
+       -1,6 en descente — deux nombres ecrits en dur, les memes pour
+       un mariage et une soiree techno. On mesure donc les deux pas
+       separement, pour pouvoir viser ce que CE DJ fait vraiment.
+       ------------------------------------------------------------ */
+    pasHaut: 0,           /* moyenne des montees, en points d'energie */
+    pasBas: 0,            /* moyenne des descentes (negatif) */
     depuis: Date.now()
   };
 }
@@ -130,7 +143,8 @@ class Gout {
           if (typeof v === 'number' && isFinite(v)) e[c] = v;
         }
         this.d = Object.assign(vide(), j, { ema: e });
-        for (const k of ['emaPop', 'ecartTempo', 'repetitionArtiste', 'sautEnergie'])
+        for (const k of ['emaPop', 'ecartTempo', 'repetitionArtiste', 'sautEnergie',
+                         'pasHaut', 'pasBas'])
           if (!(typeof this.d[k] === 'number' && isFinite(this.d[k]))) this.d[k] = 0;
       }
     } catch (e) { /* premier lancement, ou fichier abime : on repart de zero */ }
@@ -298,8 +312,14 @@ class Gout {
        dans le style. Apprendre « ce DJ tient toujours le niveau »
        d'un bloc annees 80 fausserait toutes ses autres soirees —
        on n'apprend pas d'une pente qu'on a imposee soi-meme. */
-    if (!o.bulle && cur.energy != null && joue.energy != null)
-      this.d.sautEnergie = (1 - 0.07) * this.d.sautEnergie + 0.07 * clamp(joue.energy - cur.energy, -4, 4);
+    if (!o.bulle && cur.energy != null && joue.energy != null) {
+      const pas = clamp(joue.energy - cur.energy, -4, 4);
+      this.d.sautEnergie = (1 - 0.07) * this.d.sautEnergie + 0.07 * pas;
+      /* Chaque pas n'alimente que sa moitie : sinon les montees et
+         les descentes s'annulent et on ne mesure plus rien. */
+      if (pas > 0) this.d.pasHaut = (1 - 0.10) * this.d.pasHaut + 0.10 * pas;
+      else if (pas < 0) this.d.pasBas = (1 - 0.10) * this.d.pasBas + 0.10 * pas;
+    }
 
     /* ------------------------------------------------------------
        Une observation qu'on n'exploite pas ne doit pas compter.
@@ -340,11 +360,30 @@ class Gout {
     /* le crible suit l'ecart observe, avec de la marge au-dessus :
        on veut pouvoir proposer un peu plus loin que ce qu'il fait
        d'habitude, pas exactement ce qu'il fait */
+    /* Le repere de depart suit celui du moteur (0,35) et le plafond
+       laisse la place au DJ qui coupe plutot qu'il ne cale. */
     const marge = this.d.ecartTempo > 0
-      ? clamp(0.12 * (1 - f) + (this.d.ecartTempo * 2.4) * f, 0.06, 0.22)
+      ? clamp(0.35 * (1 - f) + (this.d.ecartTempo * 3.2) * f, 0.06, 0.50)
       : undefined;
     const variete = clamp(1 + (0.5 - this.d.repetitionArtiste * 2.4) * f * 0.8, 0.3, 1.4);
-    return { poids, marge, variete, appris: true, force: f };
+    /* ------------------------------------------------------------
+       Le pas d'energie, rendu au moteur.
+
+       Il le calculait sur trois constantes — +1,4 en montee, -1,6
+       en descente, +0,2 a plat — alors que ces deux valeurs sont
+       mesurees ici depuis toujours et n'ont jamais quitte ce
+       fichier. On les rend, melangees aux reperes d'origine a
+       proportion de ce qu'on a vu : neutre au debut, a lui a la
+       fin. Les bornes evitent qu'un DJ aux mesures bruitees se
+       retrouve a viser six points d'energie d'ecart.
+       ------------------------------------------------------------ */
+    const mele = (base, vu, min, max) => clamp(base * (1 - f) + vu * f, min, max);
+    const pas = {
+      up:   this.d.pasHaut < 0.15 ? 1.4 : mele(1.4, this.d.pasHaut, 0.4, 2.6),
+      down: this.d.pasBas > -0.15 ? -1.6 : mele(-1.6, this.d.pasBas, -2.8, -0.4),
+      hold: 0.2
+    };
+    return { poids, marge, variete, pas, appris: true, force: f };
   }
 
   /**

@@ -88,8 +88,28 @@ function tempoScore(a, b, doubleOk) {
   return { s, pct, ratio, delta: b * ratio - a };
 }
 
-const energyScore = (cur, e, arc) =>
-  Math.max(4, 100 - Math.abs(e - (arc === 'up' ? cur + 1.4 : arc === 'down' ? cur - 1.6 : cur + 0.2)) * 16);
+/* ------------------------------------------------------------
+   Le pas d'energie : de combien on monte, quand on monte.
+
+   Ces trois nombres etaient ecrits en dur. Ils disent qu'un DJ qui
+   monte cherche systematiquement +1,4 point d'energie au morceau
+   suivant, qu'il redescend de 1,6, et qu'il derive de +0,2 quand
+   il tient. C'est une moyenne inventee, la meme pour un DJ de
+   mariage et un DJ de techno.
+
+   Or gout.js MESURE deja ce pas — « sautEnergie », moyenne
+   glissante de la variation reelle — et l'affiche meme au DJ dans
+   son resume (« Ta pente »). Il ne le donnait simplement jamais au
+   moteur. Encore un chiffre appris, montre, et jamais applique.
+   ------------------------------------------------------------ */
+const PAS = { up: 1.4, down: -1.6, hold: 0.2 };
+const RAIDEUR = 16;
+
+const energyScore = (cur, e, arc, pas) => {
+  const p = pas || PAS;
+  const cible = cur + (arc === 'up' ? p.up : arc === 'down' ? p.down : p.hold);
+  return Math.max(4, 100 - Math.abs(e - cible) * RAIDEUR);
+};
 
 /* Ce que vaut un morceau qu'on n'a pas encore ecoute.
 
@@ -329,15 +349,46 @@ function penaliteVariete(t, M, opt) {
    jamais 6 — pour que le crible ne change jamais le classement :
    il ne fait qu'eviter du calcul inutile.
    ------------------------------------------------------------ */
-const MARGE_CRIBLE = 0.12;
-/* La marge est reglable. Certains DJs ne sortent jamais de deux
-   pour cent, d'autres passent de 95 a 128 sans complexe. On mesure
-   ce qu'ils font et on ouvre le crible d'autant — sans descendre
-   sous 6 % (on couperait des enchainements evidents) ni depasser
-   22 % (au-dela ce n'est plus un mix, c'est une coupure). */
+/* ------------------------------------------------------------
+   LE CRIBLE, ouvert a 35 % depuis le 14 septembre 2026.
+
+   « Soprano Cosmo doit proposer Macklemore. » Verifie avec
+   build/pourquoi.js : Cosmo tourne a 100, Can't Hold Us a 146,
+   soit 46 % d'ecart. Le crible l'ecartait AVANT de le noter. Le
+   morceau n'etait pas mal classe, il n'existait pas.
+
+   Ce plafond a 22 % venait d'une idee juste — « au-dela ce n'est
+   plus un mix, c'est une coupure » — appliquee au mauvais public.
+   Un DJ de mariage COUPE en permanence : il passe d'un rap a 100
+   a une pop a 146 sans y penser, parce que la salle suit l'energie
+   et pas la grille. Lui interdire ces enchainements, c'est lui
+   retirer son metier.
+
+   Restait la vraie question : ouvrir le crible fait-il entrer du
+   bruit ? Mesure sur une bibliotheque de mariage de 6 000 titres,
+   300 enchainements, crible a 12 % contre 35 % :
+
+     0 proposition nouvelle dans les cinq premieres.
+
+   Aucune. Le tri s'en charge deja : depuis que le tempo est l'axe
+   le plus lourd, un morceau a 40 % d'ecart tombe tout seul au bas
+   de la liste. Le crible ne protegeait donc rien — il economisait
+   du calcul, comme son propre commentaire le disait — et il coutait
+   toutes les propositions des que la bibliotheque se clairseme.
+   C'est exactement le cas d'Aaron : a 100 BPM dans son style, il
+   n'avait souvent rien d'autre.
+
+   Cout mesure : aucun. 19 ms par appel a 12 %, 14 ms a 35 % — plus
+   rapide, parce que la liste se remplit sans avoir a rouvrir la
+   porte aux morceaux sans tempo.
+   ------------------------------------------------------------ */
+const MARGE_CRIBLE = 0.35;
+/* La marge reste reglable et apprise. Le plancher a 6 % sert au DJ
+   qui ne sort jamais de deux pour cent ; le plafond a 50 % borne
+   l'absurde, pas le metier. */
 function passeLeCrible(bpmRef, bpm, marge, doubleOk) {
   if (!(bpm > 0)) return false;
-  const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.06, Math.min(0.22, marge)) : MARGE_CRIBLE;
+  const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.06, Math.min(0.50, marge)) : MARGE_CRIBLE;
   /* Le crible suit la meme regle que la note : s'il laissait passer
      un rapport que tempoScore refuse ensuite, le candidat sortirait
      avec une note de tempo catastrophique au lieu de ne pas sortir. */
@@ -434,7 +485,27 @@ function suggest(cur, library, opt) {
      ------------------------------------------------------------ */
   const P = opt.poids || {};
   const m = (k) => { const v = P[k]; return (typeof v === 'number' && isFinite(v)) ? Math.max(0.5, Math.min(1.8, v)) : 1; };
-  const wH = sansTonalite ? 0 : 0.27 * m('h'), wT = 0.24 * m('tp');
+  /* ------------------------------------------------------------
+     L'ORDRE DES CRITERES, tel que les DJ le demandent.
+
+     « BPM en numero 1, puis le style, et enfin la roue de Camelot. »
+     Retour collectif du 14 septembre 2026, et il corrige une erreur
+     de depart : l'harmonie pesait 0,27, le plus lourd de tous les
+     axes, devant le tempo a 0,24 et la parente a 0,22.
+
+     C'etait le classement d'un ingenieur, pas celui d'une cabine.
+     Deux morceaux qui ne se calent pas ne s'enchainent pas, quelle
+     que soit leur tonalite : l'ecart de tempo s'entend de tout le
+     monde, la dissonance ne s'entend que du DJ. Et la roue de
+     Camelot ne sert a rien sur une bibliotheque de mariage ou la
+     plupart des titres n'ont aucun tag de tonalite — la moitie du
+     poids le plus lourd tombait donc dans le vide.
+
+     L'ordre est donc : tempo, style, harmonie. Il reste un ordre
+     par DEFAUT : gout.js continue de l'apprendre par DJ, et un DJ
+     de club qui mixe en harmonique verra son poids remonter.
+     ------------------------------------------------------------ */
+  const wH = sansTonalite ? 0 : 0.16 * m('h'), wT = 0.30 * m('tp');
   /* ------------------------------------------------------------
      Ce que la bulle deplace, et ce qu'elle ne touche pas.
 
@@ -536,7 +607,7 @@ function suggest(cur, library, opt) {
      En bulle, il s'efface presque : wBulle fait deja ce travail,
      et en mieux, puisqu'il compare a un ancrage fige.
      ------------------------------------------------------------ */
-  const wPa = 0.22 * m('pa') * (B ? 0.3 : 1);
+  const wPa = 0.24 * m('pa') * (B ? 0.3 : 1);
   const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa;
 
   /* prepares une fois, pas par morceau */
@@ -545,6 +616,9 @@ function suggest(cur, library, opt) {
   /* La memoire des enchainements de CE DJ, construite une fois par
      appel et non par morceau. Absente, l'axe rend 50 partout et ne
      classe donc personne — le comportement d'avant, exactement. */
+  /* Le pas d'energie de CE DJ, quand on l'a mesure. Absent, on
+     garde les reperes d'origine : le comportement ne bouge pas. */
+  const PASDJ = opt.pas || null;
   const AFF = opt.affinites || null;
   const annee = opt.annee || new Date().getFullYear();
   /* Un titre du client qu'on n'a toujours pas joue prend du poids
@@ -654,7 +728,7 @@ function suggest(cur, library, opt) {
          tout le monde au lieu de punir au hasard.
          ------------------------------------------------------------ */
       const en = curMesure
-        ? (t.mesure ? energyScore(cur.energy, t.energy, arc) : EN_INCONNU)
+        ? (t.mesure ? energyScore(cur.energy, t.energy, arc, PASDJ) : EN_INCONNU)
         : EN_NEUTRE;
       const ti = (curMesure && t.mesure) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
       const cr = crowdScore(t, dna, dnaPret);
@@ -1331,6 +1405,7 @@ function search(text, library, limit, threshold) {
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
+                   PAS,
                    doubleAdmis, plancher, parente,
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,

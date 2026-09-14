@@ -607,7 +607,21 @@ function etatVide() {
                'Ou clique la loupe en haut et tape deux lettres du titre'] });
   if (etatAn.offline >= etatAn.library * 0.5 && etatAn.offline > 10)
     return '<div class="empty"><b>Disque introuvable</b>' + etatAn.offline + ' morceaux pointent un disque<br>qui n\'est pas branche.</div>';
-  return '<div class="empty"><b>Rien ne se cale</b>Aucun titre ne s\'enchaine sur ce tempo.<br>Desserre les filtres, ou passe par un relais.</div>';
+  /* ------------------------------------------------------------
+     « Rien ne se cale » servait de reponse a TOUTES les listes
+     vides. C'est faux neuf fois sur dix : la vraie cause est un
+     crate oublie, un disque debranche, un morceau en cours sans
+     tempo, ou une bibliotheque pas encore analysee. Le DJ cherchait
+     une panne de tempo qui n'existait pas.
+
+     main.js diagnostique maintenant la vraie cause et l'envoie
+     sous la cle « vide ». On la sert si elle est arrivee, et on
+     garde l'ancienne phrase comme dernier recours. */
+  return conseilHTML(conseilPour('vide') || {
+    titre: 'Rien ne se cale',
+    texte: 'Aucun titre ne s\'enchaine sur ce tempo.',
+    marche: ['Desserre les filtres en bas du widget',
+             'Ou passe par un morceau relais'] });
 }
 
 /* Le bandeau d'analyse : il dit que ca travaille, et surtout que

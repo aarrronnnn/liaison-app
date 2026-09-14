@@ -167,14 +167,43 @@ const nom = t => (t.path || '').replace('/m/', '').replace('.mp3', '');
 }
 
 /* ============================================================
-   5. Le crible de tempo tient quand le tempo est connu.
+   5. Le tempo CLASSE, il n'exclut plus.
+
+   Ce cas disait « un titre a 90 BPM reste ecarte a 128 ». Le
+   crible l'excluait a 12 % d'ecart, et c'etait une erreur de
+   public : un DJ de mariage passe d'un rap a 100 a une pop a 146
+   sans y penser, parce que la salle suit l'energie et pas la
+   grille. Signale en cabine — « Soprano Cosmo doit proposer
+   Macklemore », 46 % d'ecart, jamais propose.
+
+   Mesure avant d'ouvrir : sur 6 000 titres et 300 enchainements,
+   passer le crible de 12 % a 35 % fait entrer ZERO proposition
+   nouvelle dans les cinq premieres. Le tri s'en charge deja.
+
+   La regle devient donc : le lointain est PROPOSE quand il n'y a
+   rien d'autre, jamais devant. C'est ca qu'on verifie.
    ============================================================ */
 {
   const lent = titreMesure(9); lent.bpm = 90; lent.path = '/m/lent.mp3';
   const bib = viaBibliotheque([GUETTA, lent, titreMesure(1)]);
   const r = engine.suggest(bib[0], bib, { limit: 5, arc: 'up' });
-  verifier('5. un titre a 90 BPM reste ecarte a 128',
-           !r.some(x => nom(x.track) === 'lent'), '');
+  const rang = r.map(x => nom(x.track)).indexOf('lent');
+  verifier('5. a 128, un titre a 90 BPM est propose plutot que cache',
+           rang >= 0, rang < 0 ? 'absent' : 'position ' + (rang + 1) + ' sur ' + r.length);
+  verifier('5bis. mais il ne passe jamais devant',
+           rang === r.length - 1, 'dernier sur ' + r.length);
+  const ecart = r[0].total - r[rang].total;
+  verifier('5ter. et l\'ecart de note est net', ecart >= 15,
+           r[0].total + ' contre ' + r[rang].total + ' — ' + ecart + ' points');
+
+  /* Et avec de quoi remplir la liste, il en sort. */
+  const plein = viaBibliotheque([GUETTA, lent, titreMesure(1), titreMesure(2),
+                                 titreMesure(3), titreMesure(4), titreMesure(5),
+                                 titreMesure(6)]);
+  const r2 = engine.suggest(plein[0], plein, { limit: 5, arc: 'up' });
+  verifier('5quater. des qu\'il y a mieux, il quitte les cinq premiers',
+           !r2.some(x => nom(x.track) === 'lent'),
+           r2.map(x => x.track.bpm).join(', ') + ' BPM');
 }
 
 /* ============================================================
@@ -349,6 +378,59 @@ const nom = t => (t.path || '').replace('/m/', '').replace('.mp3', '');
     echecs++;
     console.error('  RATE le temoin ne reproduit pas le defaut : ce cas ne prouve rien.');
   }
+}
+
+/* ============================================================
+   9. LE PAS D'ENERGIE, mesure puis applique.
+
+   Le moteur visait +1,4 point d'energie en montee et -1,6 en
+   descente. Trois constantes, les memes pour un mariage et une
+   soiree techno — alors que gout.js mesure ces deux pas depuis
+   toujours, les affiche meme au DJ dans son resume (« Ta pente »),
+   et ne les a jamais donnes au moteur.
+
+   C'est la troisieme fois dans ce projet qu'un chiffre est appris,
+   montre, et jamais applique. Ce cas fige la correction.
+   ============================================================ */
+{
+  const { Gout } = require('../src/gout.js');
+  const g = new Gout(null);
+  verifier('9. tant qu\'on n\'a rien vu, aucun pas n\'est impose',
+           g.reglages().pas === undefined, 'reglages neutres');
+
+  g.d.n = 60;                       /* apprentissage a plein */
+  g.d.pasHaut = 0; g.d.pasBas = 0;
+  const vierge = g.reglages().pas;
+  verifier('9bis. appris mais sans pas mesure : les reperes d\'origine',
+           vierge.up === 1.4 && vierge.down === -1.6,
+           JSON.stringify(vierge));
+
+  g.d.pasHaut = 0.6; g.d.pasBas = -0.9;
+  const doux = g.reglages().pas;
+  verifier('9ter. un DJ aux petits pas le voit applique',
+           doux.up < 1.0 && doux.down > -1.2, JSON.stringify(doux));
+
+  g.d.pasHaut = 9; g.d.pasBas = -9;   /* mesure aberrante */
+  const borne = g.reglages().pas;
+  verifier('9quater. et une mesure aberrante reste bornee',
+           borne.up <= 2.6 && borne.down >= -2.8, JSON.stringify(borne));
+
+  /* Et le moteur s'en sert vraiment : meme bibliotheque, deux pas,
+     deux propositions differentes. */
+  const cur = { path: '/m/pc.mp3', artist: 'Cur', title: 'Cur', bpm: 126, key: '8A',
+                duration: 210, genre: 'House', pop: 60, analyse: true, energy: 5,
+                timbre: [0.5, 0.5, 0.5] };
+  const bruts = [cur];
+  for (const e of [3, 4, 5, 6, 7, 8, 9])
+    bruts.push(Object.assign({}, cur, { path: '/m/pe' + e + '.mp3', artist: 'E' + e,
+                                        title: 'E' + e, energy: e }));
+  const bib = viaBibliotheque(bruts);
+  const avec = (pas) => engine.suggest(bib[0], bib.slice(1),
+                          { limit: 1, arc: 'up', pas: pas })[0].track.title;
+  const franc = avec({ up: 3, down: -3, hold: 0 });
+  const plat = avec({ up: 0, down: 0, hold: 0 });
+  verifier('9quinquies. le moteur suit le pas qu\'on lui donne',
+           franc !== plat, 'pas franc -> ' + franc + ', pas plat -> ' + plat);
 }
 
 if (echecs) {
