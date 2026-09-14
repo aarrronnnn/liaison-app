@@ -59,6 +59,10 @@ const ERE_INCONNUE = 45;
 /* Une annee credible. Les tags contiennent de tout : « 0 », des
    dates completes, « 2019-04-03T00:00:00Z », parfois un siecle. */
 function anneeDe(t) {
+  /* Une annee de reedition ferait sortir un disque des annees 70 de
+     la bulle « annees 70 » — l'inverse exact de ce qu'on veut. On
+     prefere ne pas savoir. */
+  if (t && t.anneeIncertaine) return null;
   const v = t && t.year;
   if (v == null) return null;
   const n = parseInt(String(v).slice(0, 4), 10);

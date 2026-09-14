@@ -126,6 +126,47 @@ if (bloque !== 'A.mp3') {
    On lance donc un vrai processus imposteur et on verifie que
    Liaison ne s'y laisse pas prendre.
    ============================================================ */
+/* ============================================================
+   LES ACCENTS QUE LSOF ECHAPPE.
+
+   Temoin, releve en cabine le 14 septembre 2026 sur un vrai
+   morceau : le widget affichait « PIL\XC3\XA9E (GOSPEL VERSION) »,
+   se declarait hors bibliotheque, et n'a jamais rien mesure —
+   ni tempo, ni tonalite, ni energie.
+
+   Une seule cause pour les trois symptomes. lsof remplace tout
+   octet non ASCII d'un chemin par les quatre caracteres « \xHH ».
+   Le chemin ainsi abime ne correspond a aucune entree de la
+   bibliotheque, ffprobe ne trouve aucun fichier a ce nom, et
+   statSync non plus — donc l'analyse range le morceau en
+   « injoignable » pour toujours.
+
+   Ca ne se voit pas en anglais. Dans une bibliotheque francaise,
+   ca touche un morceau sur trois.
+   ============================================================ */
+{
+  const rbEsc = require('../src/sources/rekordbox.js');
+  const cas = [
+    ['/M/Mauvais Djo - Pil\\xc3\\xa9e (Gospel Version).mp3',
+     '/M/Mauvais Djo - Pil\u00e9e (Gospel Version).mp3'],
+    ['/M/Bj\\xc3\\xb6rk - Army of Me.flac', '/M/Bj\u00f6rk - Army of Me.flac'],
+    ['/M/Je m\\x27en fous.mp3', '/M/Je m\'en fous.mp3'],
+    ['/M/Daft Punk - One More Time.mp3', '/M/Daft Punk - One More Time.mp3']
+  ];
+  for (const [brut, attendu] of cas) {
+    verifier('lsof deschappe : ' + brut.slice(3, 34), rbEsc.deschapper(brut), attendu);
+  }
+  /* Et le chemin repare doit retrouver le morceau dans la
+     bibliotheque, ce qui est tout l'objet de l'operation. */
+  const libmod = require('../src/library.js');
+  const vraie = '/M/Mauvais Djo - Pil\u00e9e (Gospel Version).mp3';
+  const escape = '/M/Mauvais Djo - Pil\\xc3\\xa9e (Gospel Version).mp3';
+  verifier('avant reparation, la bibliotheque ne le trouve pas',
+           libmod.cleChemin(escape) === libmod.cleChemin(vraie), false);
+  verifier('apres reparation, elle le trouve',
+           libmod.cleChemin(rbEsc.deschapper(escape)) === libmod.cleChemin(vraie), true);
+}
+
 if (process.platform !== 'win32') {
   const { spawn } = require('child_process');
   const rb = require('../src/sources/rekordbox.js');

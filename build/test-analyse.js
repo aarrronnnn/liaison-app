@@ -191,6 +191,43 @@ const chemin = nom => path.join(dossier, nom + '.wav');
     piste.energy >= 7, 'energie ' + piste.energy);
 
   /* ------------------------------------------------------------
+     1quinquies. DEUX PRESSAGES DU MEME DISQUE, MEME ENERGIE.
+
+     « J'ai une version de Daddy Cool en version originale : ca me
+       propose des morceaux vieillots. Si je prends la version
+       remasterisee, ca me propose des morceaux actuels — et
+       pourtant c'est la meme chanson. »
+
+     Une reedition est masterisee plus fort. Tant que l'energie
+     comptait le niveau absolu, le meme enregistrement rendait 7 a
+     -9 dB et 10 une fois remonte : energyScore vise « energie du
+     morceau en cours + un pas » avec une raideur de 16 points par
+     unite, donc trois crans d'ecart changeaient la liste entiere.
+
+     Les trois mesures qui composent l'energie sont maintenant des
+     RAPPORTS. Monter le volume ne doit plus rien changer du tout.
+     ------------------------------------------------------------ */
+  {
+    const gain = (db, nom) => {
+      const src = morceau({ bpm: 126, tonique: 9, mineur: true, batterie: true });
+      const f = Math.pow(10, db / 20);
+      const o = new Float64Array(src.length);
+      for (let i = 0; i < src.length; i++) o[i] = src[i] * f;
+      ecrireWav(o, chemin(nom));
+      return chemin(nom);
+    };
+    const bas = await analyze(gain(-12, 'gain-bas'));
+    const haut = await analyze(gain(-3, 'gain-haut'));
+    verifier('1quinquies. monter le volume ne change pas l\'energie',
+      bas.energy === haut.energy && bas.energyBrut === haut.energyBrut,
+      '-12 dB : ' + bas.energy + ' (' + bas.energyBrut + ')   -3 dB : ' +
+      haut.energy + ' (' + haut.energyBrut + ')');
+    verifier('1sexies. ni le tempo, ni la tonalite',
+      bas.bpm === haut.bpm && bas.key === haut.key,
+      bas.bpm + ' BPM / ' + bas.key);
+  }
+
+  /* ------------------------------------------------------------
      2. timbre[1], la densite que plancher.js lit pour juger ce que
      le morceau fait a la salle. Elle etait calculee a l'envers :
      une nappe rendait 7, un morceau de club 2.

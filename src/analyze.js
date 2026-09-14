@@ -321,7 +321,34 @@ async function analyze(file, opts) {
   const tranchant = clamp(fluxP90 > 0 ? (fluxP90 - fluxMed) / fluxP90 : 0, 0, 1);
   const pulsation = clamp((tempo.confiance - 0.12) / 0.55, 0, 1);
 
-  const brut = 0.34 * activite + 0.22 * pulsation + 0.22 * level + 0.22 * tranchant;
+  /* ------------------------------------------------------------
+     LE NIVEAU NE COMPTE PAS. C'EST UNE DECISION D'INGENIEUR DU SON,
+     PAS UNE PROPRIETE DE LA MUSIQUE.
+
+     « J'ai une version de Daddy Cool en version originale : ca me
+       propose des morceaux vieillots. Si je prends la version
+       remasterisee, ca me propose des morceaux actuels — et
+       pourtant c'est la meme chanson. »
+
+     Mesure : le meme fichier, une fois a -9 dB et une fois
+     compresse puis remonte de 3 dB, donnait energie 7 dans un cas
+     et 10 dans l'autre. Or energyScore vise « energie du morceau en
+     cours + un pas », avec une raideur de 16 points par unite :
+     trois points d'ecart deplacent la cible de trois crans et
+     changent la liste entiere. Deux pressages du meme disque
+     donnaient donc deux soirees differentes.
+
+     Le niveau absolu ne dit rien de musical dans une bibliotheque
+     de DJ, ou tout a ete masterise pour sonner fort. Il dit
+     l'epoque du mastering, ce qui n'interesse personne ici.
+
+     Les trois mesures qui restent sont toutes des RAPPORTS —
+     attaques par seconde, nettete de la pulsation, ecart entre le
+     centile 90 et la mediane. Aucune ne bouge si on monte le
+     volume : l'energie devient insensible au gain, et deux
+     versions du meme morceau se retrouvent au meme endroit.
+     ------------------------------------------------------------ */
+  const brut = 0.44 * activite + 0.28 * pulsation + 0.28 * tranchant;
   /* La plage utile observee va de 0,20 (rien) a 0,90 (piste pleine) :
      on l'etale sur 1..10 au lieu de laisser tout le monde a 5. */
   const energy = clamp(Math.round(1 + 9 * clamp((brut - 0.20) / 0.70, 0, 1)), 1, 10);

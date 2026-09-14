@@ -116,8 +116,12 @@ try {
   if (cfg && cfg.libraryMode === 'rekordbox' && cfg.libraryPath)
     bruts = lib.parseRekordboxXML(cfg.libraryPath);
   else if (cfg && cfg.libraryPath) {
+    /* Une entree du cache de scan est un TABLEAU compact, pas un
+       objet : la lire comme un objet rendait des morceaux sans titre
+       ni tempo. Voir build/_biblio.js. */
     const c = lib.chargerScanCache(path.join(DIR, 'scan-cache.json')).e;
-    bruts = Object.keys(c).map(k => Object.assign({ path: k.split('|')[0] }, c[k]));
+    const bib = require('./_biblio.js');
+    bruts = Object.keys(c).map(k => bib.depuisCache(k, c[k]));
   }
   L = lib.finalize(bruts);
   if (L.length) {

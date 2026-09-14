@@ -41,6 +41,7 @@
    le portable seul.
    ============================================================ */
 const { execFile } = require('child_process');
+const fs = require('fs');
 const path = require('path');
 
 /* ------------------------------------------------------------
@@ -126,6 +127,70 @@ function pids(cb) {
 }
 
 /** Les fichiers audio qu'un processus tient ouverts. */
+/* ============================================================
+   LSOF ECHAPPE LES ACCENTS. C'EST TOUT LE PROBLEME.
+
+   Mesure, sur un fichier nomme « Pilee (Gospel Version).mp3 » avec
+   un vrai accent :
+
+     lsof rend  n/Users/.../Mauvais Djo - Pil\xc3\xa9e (Gospel Version).mp3
+
+   Ce ne sont pas des octets : ce sont les QUATRE CARACTERES
+   « \ », « x », « c », « 3 », ecrits noir sur blanc. lsof remplace
+   ainsi tout octet non ASCII. Personne ne le remarque en anglais.
+   Dans une bibliotheque francaise, ca touche un morceau sur trois.
+
+   Et le chemin ainsi abime empoisonnait toute la chaine, en
+   silence, a quatre endroits differents :
+
+     — la recherche dans la bibliotheque echoue, puisque la vraie
+       entree porte un « e » accentue : le morceau est declare hors
+       bibliotheque ALORS QU'IL Y EST ;
+     — ffprobe ne trouve aucun fichier a ce nom, donc aucun tag :
+       le titre affiche retombe sur le nom de fichier, escaped
+       compris — c'est le « PIL\XC3\XA9E (GOSPEL VERSION) » vu en
+       cabine ;
+     — statSync echoue aussi, donc l'analyse range le morceau en
+       « fichier injoignable » et ne le mesure JAMAIS : ni tempo,
+       ni tonalite, ni energie, pour toujours ;
+     — et avant la version 1.4.7, ou rien ne rattrapait les
+       morceaux hors bibliotheque, le widget restait simplement
+       muet. C'est l'origine de « j'ai des sons qui ne sont pas du
+       tout reconnus ».
+
+   On remet donc les octets a leur place. Et on verifie : si le
+   chemin reconstruit n'existe pas alors que l'original existe, on
+   garde l'original — un vrai antislash dans un nom de fichier est
+   rare, mais il ne doit pas casser ce qui marchait.
+   ============================================================ */
+function deschapper(p) {
+  if (!p || p.indexOf('\\') < 0) return p;          /* le cas courant, sans frais */
+  const octets = [];
+  for (let i = 0; i < p.length; i++) {
+    if (p[i] === '\\' && p[i + 1] === 'x' && /^[0-9a-fA-F]{2}$/.test(p.substr(i + 2, 2))) {
+      octets.push(parseInt(p.substr(i + 2, 2), 16));
+      i += 3;
+      continue;
+    }
+    if (p[i] === '\\' && p[i + 1] === '\\') { octets.push(0x5c); i += 1; continue; }
+    const c = p.charCodeAt(i);
+    if (c < 128) octets.push(c);
+    else for (const b of Buffer.from(p[i], 'utf8')) octets.push(b);
+  }
+  const buf = Buffer.from(octets);
+  const utf8 = buf.toString('utf8');
+  return utf8.indexOf('\ufffd') < 0 ? utf8 : buf.toString('latin1');
+}
+
+/** Le chemin utilisable : celui qui existe vraiment sur le disque. */
+function vraiChemin(p) {
+  const d = deschapper(p);
+  if (d === p) return p;
+  try { if (fs.statSync(d).isFile()) return d; } catch (e) {}
+  try { if (fs.statSync(p).isFile()) return p; } catch (e) {}
+  return d;            /* aucun des deux : le deschappe reste le plus lisible */
+}
+
 function fichiersAudio(pid, cb) {
   /* -Fn : une ligne par champ, les noms prefixes par « n ».
      Format stable, et bien plus simple a lire que le tableau. */
@@ -133,8 +198,8 @@ function fichiersAudio(pid, cb) {
     const set = [];
     for (const ligne of out.split('\n')) {
       if (ligne.charCodeAt(0) !== 110 /* n */) continue;
-      const p = ligne.slice(1);
-      if (p && AUDIO.test(p)) set.push(p);
+      const p = vraiChemin(ligne.slice(1));
+      if (p && AUDIO.test(p) && set.indexOf(p) < 0) set.push(p);
     }
     cb(set);
   });
@@ -341,4 +406,4 @@ function start(opts, cb) {
   return { stop() { if (timer) clearInterval(timer); timer = null; } };
 }
 
-module.exports = { start, dispo, fichiersAudio, pids, EST_REKORDBOX };
+module.exports = { start, dispo, fichiersAudio, pids, deschapper, vraiChemin, EST_REKORDBOX };

@@ -76,6 +76,10 @@ function parseRekordboxXML(xmlPath) {
          pas. C'est elle qui permet a une soiree annees 80 de rester
          dans les annees 80 — voir bulle.js. */
       year: anneeTag(attrs.Year),
+      /* rekordbox n'a pas de champ « annee d'origine » : une
+         reedition y porte l'annee de sa reedition. On ne peut pas la
+         corriger, mais on peut refuser de s'y fier. */
+      anneeIncertaine: estReedition({ title: attrs.Name, album: attrs.Album }),
       pop: Math.min(100, 30 + num(attrs.PlayCount) * 6 + num(attrs.Rating) / 51 * 20)
     });
   }
@@ -167,11 +171,25 @@ function probe(file) {
 /* Une entree tient en tableau plutot qu'en objet : sur 22 000
    morceaux, les noms de champs repetes pesaient plus que les
    valeurs elles-memes. */
+/* La version du cache de tags. A monter des qu'on lit les tags
+   AUTREMENT — pas quand on lit d'autres fichiers.
+
+     1 — jusqu'a 1.4.7
+     2 — l'annee vient des tags d'origine (TORY, TDOR, originalyear)
+         avant ceux de l'edition, et une reedition est marquee
+         incertaine. Les entrees de la version 1 portent l'annee du
+         pressage : les garder, c'est garder le defaut.
+
+   Le cout est une relecture des tags, pas une reanalyse audio :
+   quelques minutes sur une grosse bibliotheque, contre plusieurs
+   heures pour l'analyse. */
+const VERSION_TAGS = 2;
+
 function chargerScanCache(file) {
   if (!file) return { e: {}, sale: false };
   try {
     const j = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (j && j.v === 1 && j.e) return { e: j.e, sale: false };
+    if (j && j.v === VERSION_TAGS && j.e) return { e: j.e, sale: false };
   } catch (e) {}
   return { e: {}, sale: false };
 }
@@ -185,7 +203,7 @@ function ecrireScanCache(file, e) {
   if (!file) return;
   const tmp = file + '.tmp';
   try {
-    fs.writeFileSync(tmp, JSON.stringify({ v: 1, e: e }));
+    fs.writeFileSync(tmp, JSON.stringify({ v: VERSION_TAGS, e: e }));
     fs.renameSync(tmp, file);
   } catch (err) {
     try { fs.unlinkSync(tmp); } catch (e2) {}
@@ -202,6 +220,69 @@ function anneeTag(v) {
   if (!m) return null;
   const n = parseInt(m[0], 10);
   return (n >= 1900 && n <= 2100) ? n : null;
+}
+
+/* ============================================================
+   L'ANNEE D'UN REMASTER N'EST PAS L'ANNEE DE LA CHANSON.
+
+   « J'ai une version de Daddy Cool mixee en version originale.
+     Quand je la mets, l'analyse me propose des morceaux vieillots.
+     Si je prends la version remasterisee, ca me propose des
+     morceaux actuels — et pourtant c'est la meme chanson. »
+
+   Deux fichiers, une seule chanson, deux annees : 1976 pour le
+   pressage d'origine, 2010 pour la reedition. Les tags ne mentent
+   pas — ils repondent simplement a une autre question que la
+   notre. Nous voulons savoir de quand DATE LA MUSIQUE ; le tag
+   « date » dit de quand date CE FICHIER.
+
+   Deux corrections :
+
+     1. on lit d'abord les tags d'annee D'ORIGINE, qui existent
+        exactement pour ca : TORY et TDOR en ID3, originaldate et
+        originalyear en Vorbis. Quand ils sont la, la question est
+        reglee.
+     2. quand ils manquent et que le titre ou l'album annonce une
+        reedition, on ne fait pas semblant : l'annee est marquee
+        INCERTAINE. epoque.js et bulle.js la traitent alors comme
+        une annee inconnue — neutre — au lieu de ranger avec
+        assurance un disque de 1976 parmi les nouveautes.
+
+   « Ca serait cool de ne pas l'utiliser s'il n'est pas implicite. »
+   C'est exactement ce que fait le point 2.
+   ============================================================ */
+const REEDITION = new RegExp(
+  '\\b(' +
+  'remaster(ed|ing|ise|isee)?|' +
+  'r[ée][ée]dition|reissue|' +
+  'anniversary|deluxe|' +
+  'version remasteris[ée]e|' +
+  'digitally remastered|' +
+  'expanded edition|special edition' +
+  ')\\b', 'i');
+
+function estReedition(tags) {
+  const t = tags || {};
+  return REEDITION.test(String(t.title || '') + ' ' + String(t.album || '') +
+                        ' ' + String(t.comment || ''));
+}
+
+/**
+ * L'annee de la MUSIQUE, et si on peut s'y fier.
+ * @returns {{an:number|null, incertaine:boolean}}
+ */
+function anneeDeLaMusique(tags) {
+  const t = tags || {};
+  /* Les tags qui parlent de l'enregistrement d'origine. */
+  const origine = anneeTag(t.originalyear) || anneeTag(t.original_year) ||
+                  anneeTag(t.originaldate) || anneeTag(t.original_date) ||
+                  anneeTag(t.tory) || anneeTag(t.tdor);
+  if (origine) return { an: origine, incertaine: false };
+
+  const edition = anneeTag(t.date) || anneeTag(t.year) ||
+                  anneeTag(t.tyer) || anneeTag(t.tdrc);
+  if (!edition) return { an: null, incertaine: false };
+  return { an: edition, incertaine: estReedition(t) };
 }
 
 function empreinte(p) {
@@ -244,7 +325,8 @@ async function scanFolder(dir, onProgress, opt) {
     bpm: num(t.tbpm || t.bpm || 0),
     key: toCamelot(t.initial_key || t.tkey || t.key),
     duration: dur || 0,
-    year: anneeTag(t.date || t.year || t.originalyear || t.tyer || t.tdrc),
+    year: anneeDeLaMusique(t).an,
+    anneeIncertaine: anneeDeLaMusique(t).incertaine,
     pop: 40
   });
 
@@ -272,7 +354,12 @@ async function scanFolder(dir, onProgress, opt) {
            les autres s'en passent. */
         out[i] = { path: f, title: c[2], artist: c[3], genre: c[4],
                    bpm: c[5], key: c[6] || null, duration: c[7],
-                   year: c[8] == null ? null : c[8], pop: 40 };
+                   year: c[8] == null ? null : c[8],
+                   /* La dixieme case dit si cette annee est celle d'une
+                      reedition. Absente, on la rededuit du titre : ca ne
+                      coute rien et ca rattrape les caches anciens. */
+                   anneeIncertaine: c[9] == null ? estReedition({ title: c[2] }) : !!c[9],
+                   pop: 40 };
         caches++;
       } else {
         let info = {};
@@ -281,7 +368,8 @@ async function scanFolder(dir, onProgress, opt) {
         out[i] = r;
         neufs++;
         if (emp) {
-          cache[cle] = [emp[0], emp[1], r.title, r.artist, r.genre, r.bpm, r.key, r.duration, r.year];
+          cache[cle] = [emp[0], emp[1], r.title, r.artist, r.genre, r.bpm, r.key, r.duration,
+                        r.year, r.anneeIncertaine ? 1 : 0];
           depuisSauvegarde++;
         }
       }
@@ -534,4 +622,4 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, ffprobePath };
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath };

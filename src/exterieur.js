@@ -36,7 +36,7 @@
    ============================================================ */
 const fs = require('fs');
 const path = require('path');
-const { probe, toCamelot, cleChemin, hash53, anneeTag } = require('./library');
+const { probe, toCamelot, cleChemin, hash53, anneeDeLaMusique } = require('./library');
 
 /* Les numeros de piste en tete de nom de fichier : « 03 », « 03 - »,
    « 03. », « A1 ». On les retire, ils ne sont jamais le titre. */
@@ -112,7 +112,8 @@ async function depuisFichier(chemin, pris) {
     aMesurer: bpm == null,
     key: toCamelot(tags.initial_key || tags.tkey || tags.key) || null,
     duration: (info && info.duration) || 0,
-    year: anneeTag(tags.date || tags.year || tags.originalyear || tags.tyer || tags.tdrc)
+    year: anneeDeLaMusique(tags).an,
+    anneeIncertaine: anneeDeLaMusique(tags).incertaine
   });
 }
 

@@ -83,18 +83,44 @@ function usure(age) {
  * @param {number} [anneeRef] l'annee en cours
  * @returns {number} 100 = de son temps ; 20 = date.
  */
+/* ------------------------------------------------------------
+   NE PAS CONNAITRE L'ANNEE NE COUTE PAS LE MEME PRIX A TOUT LE
+   MONDE.
+
+   Ce module rendait 62 des que l'annee manquait — la meme note
+   pour un disco sans tag que pour un titre d'EDM sans tag. C'est
+   contraire a sa propre these : si le disco ne se date pas, alors
+   ignorer l'annee d'un disco ne devrait rien changer.
+
+   Le defaut s'est vu en reparant les reeditions. Un pressage de
+   1976 obtenait 98 ; le meme disque remasterise, dont l'annee est
+   declaree incertaine, tombait a 62. On avait remplace une erreur
+   de 2 points par une erreur de 36 — dans le test ecrit pour la
+   corriger.
+
+   L'incertitude coute donc EN PROPORTION de ce que le genre doit a
+   son epoque : presque rien pour un disco, beaucoup pour de l'EDM.
+   ------------------------------------------------------------ */
+const USURE_INCONNUE = 0.45;
+
 function fraicheur(track, anneeRef) {
   const an = track && track.year;
-  if (!(an > 1900)) return 62;     /* annee inconnue : neutre, jamais punie */
+  const p = perissabilite(track);
+  /* Annee absente, ou annee de reedition qui n'est pas celle de la
+     chanson : on ne sait pas dater ce morceau. Voir
+     anneeDeLaMusique() dans library.js. */
+  if ((track && track.anneeIncertaine) || !(an > 1900)) {
+    return Math.round(Math.max(8, 100 - p * USURE_INCONNUE * 86));
+  }
   const ref = anneeRef || new Date().getFullYear();
   const age = Math.max(0, ref - an);
-  const p = perissabilite(track);
   return Math.round(Math.max(8, 100 - p * usure(age) * 86));
 }
 
 /** Pour l'affichage : dire au DJ POURQUOI un titre est note bas. */
 function raison(track, anneeRef) {
   const an = track && track.year;
+  if (track && track.anneeIncertaine) return null;
   if (!(an > 1900)) return null;
   const ref = anneeRef || new Date().getFullYear();
   const age = ref - an;
@@ -105,4 +131,4 @@ function raison(track, anneeRef) {
   return 'date (' + an + ')';
 }
 
-module.exports = { fraicheur, perissabilite, usure, raison, PERISSABILITE };
+module.exports = { fraicheur, perissabilite, usure, raison, PERISSABILITE, USURE_INCONNUE };

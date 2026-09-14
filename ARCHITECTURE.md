@@ -109,6 +109,11 @@ Consequences a retenir :
   garde-fou refuse de continuer si les deux divergent.
 - **Ne jamais lancer `git` sur le Mac par un pont exterieur** : cela
   laisse un `index.lock` qui bloque `PUBLIER.command`.
+- **Modifier `PUBLIER.command` de l'exterieur lui retire son droit
+  d'execution.** `sed -i` ecrit un fichier neuf et le renomme par-dessus :
+  le bit `+x` ne suit pas, et le double-clic repond
+  `zsh: permission denied`. Toujours refaire `chmod +x PUBLIER.command`
+  apres l'avoir modifie.
 - **Ne jamais faire `tar x` directement dans le dossier monte** : il ne
   peut pas faire `unlink`. Utiliser une boucle `cat "$f" > "$APP/$f"`.
 
@@ -204,10 +209,39 @@ C'est le coeur. Neuf etapes, du materiel jusqu'au widget.
 |---|---|
 | `index.js` | `NowPlaying` : choisit la source, emet `{ text }`. |
 | `prolink.js` | Pro DJ Link, UDP 50000/50001/50002. Le seul protocole qui annonce ce qui est CHARGE sur un deck. Demande du vrai materiel (CDJ/XDJ/DJM). |
-| `rekordbox.js` | rekordbox seul sur un portable n'emet rien : on lit les **fichiers audio ouverts** par le processus (`lsof`). |
+| `rekordbox.js` | rekordbox seul sur un portable n'emet rien : on lit les **fichiers audio ouverts** par le processus (`lsof`), dont les chemins doivent etre **deschappes** (§6bis). |
 | `serato.js` | Fin du fichier de session de l'historique, chaines UTF-16BE. |
 | `virtualdj.js` | `Documents/VirtualDJ/Tracklists/AAAA-MM-JJ.txt`. |
 | `traktor.js` | On se fait passer pour un serveur Icecast local (127.0.0.1:8000). |
+
+### 6bis. Le piege le plus cher du projet : `lsof` echappe les accents
+
+`lsof` remplace tout octet non ASCII d'un chemin par les quatre
+caracteres `\xHH`. Mesure :
+
+```
+fichier  : /M/Mauvais Djo - Pilee (Gospel Version).mp3   (avec un vrai accent)
+lsof rend: n/M/Mauvais Djo - Pil\xc3\xa9e (Gospel Version).mp3
+```
+
+Un seul defaut, **quatre symptomes sans rapport apparent** :
+
+1. le chemin ne correspond a aucune entree de la bibliotheque, donc
+   le morceau est declare **hors bibliotheque alors qu'il y est** ;
+2. `ffprobe` ne trouve aucun fichier a ce nom : aucun tag, et le
+   titre affiche retombe sur le nom de fichier, echappements
+   compris — c'est le `PIL\XC3\XA9E (GOSPEL VERSION)` vu en cabine ;
+3. `statSync` echoue aussi, donc l'analyse range le morceau en
+   « injoignable » et ne le mesure **jamais** : ni tempo, ni
+   tonalite, ni energie, pour toute la soiree ;
+4. avant la 1.4.7, ou rien ne rattrapait les morceaux hors
+   bibliotheque, le widget restait simplement **muet**. C'est
+   l'origine de « j'ai des sons qui ne sont pas du tout reconnus ».
+
+Ca ne se voit pas en anglais. Dans une bibliotheque francaise, ca
+touche une grande part du catalogue. `deschapper()` et
+`vraiChemin()` dans `sources/rekordbox.js` remettent les octets a
+leur place, en verifiant sur le disque avant de trancher.
 
 ### `src/ui/` — les trois pages
 
@@ -467,6 +501,32 @@ fichier, jamais de la facon dont on l'a mesure.
 **A monter a chaque changement de `analyze.js` qui modifie une
 valeur rendue.**
 
+Il existe un second numero, independant : `VERSION_TAGS` dans
+`library.js`, pour le cache de **lecture des tags**
+(`scan-cache.json`). A monter quand on lit les tags autrement — par
+exemple en preferant l'annee d'origine a celle de l'edition. Son
+cout est une relecture ffprobe (quelques minutes), pas une
+reanalyse audio (plusieurs heures).
+
+### 8.8 L'annee d'un remaster n'est pas l'annee de la chanson
+
+« Version originale : ca propose des morceaux vieillots. Version
+remasterisee : ca propose des morceaux actuels. Pourtant c'est la
+meme chanson. »
+
+`anneeDeLaMusique()` dans `library.js` lit d'abord les tags
+d'origine (`TORY`, `TDOR`, `originaldate`, `originalyear`) ; a
+defaut, si le titre ou l'album annonce une reedition, l'annee est
+marquee **`anneeIncertaine`**. `epoque.js` et `bulle.js` la
+traitent alors comme inconnue.
+
+Et « inconnue » ne veut plus dire « 62 pour tout le monde » :
+l'ignorance coute **en proportion de ce que la famille doit a son
+epoque** (`USURE_INCONNUE`). Ne pas dater un disco coute 2 points,
+ne pas dater de l'EDM en coute 37. Le contraire revenait a punir
+un genre intemporel d'une ignorance qui ne lui coute rien — c'est
+le defaut qu'a attrape le temoin ecrit pour les reeditions.
+
 ---
 
 ## 9. L'apprentissage — `gout.js`
@@ -615,6 +675,7 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 | `test-tags` | « notre mesure fait foi », y compris l'exception d'octave |
 | `test-analyse` | ce que Liaison mesure lui-meme, sur de l'audio synthetise a tempo et tonalite connus — et le cache qui doit oublier quand la mesure change |
 | `test-detection` | le morceau qui tourne doit s'afficher, meme hors bibliotheque |
+| `test-rekordbox` | contient aussi le temoin des accents echappes par `lsof` (§6bis) |
 | `test-widget` | le rendu reel du widget (Playwright) |
 | `test-licence-ui` | le parcours d'achat et d'activation (Playwright) |
 
@@ -639,6 +700,7 @@ Quand un DJ dit « ca ne marche pas », on ne devine pas : on mesure.
 | `node build/pourquoi.js "<titre A>" "<titre B>"` | Pourquoi B n'est pas propose apres A : presence en bibliotheque, passage du crible, note par axe. Avec un seul titre : les trois portes (bibliotheque / extension / fichier accessible), puis la verification en direct des fichiers ouverts par rekordbox. |
 | `node build/sonde-decks.js` | Sonde 40 s : quels fichiers audio sont ouverts, avec compteurs de descripteurs et positions de lecture. |
 | `node build/banc-familles.js` | Banc de mesure sur six profils de DJ : accord de style, de tempo, de direction d'energie. Sert a prouver qu'un changement ne fait regresser aucun profil. |
+| `node build/versions.js "<titre>"` | **« Ca depend des versions »** : met cote a cote tous les fichiers du meme titre — tags, familles de genre, annees, mesures, et les cinq propositions de chacun — puis nomme ce qui differe. Repond en une commande a « pourquoi ce rip marche et pas l'autre ». |
 | `node build/banc-suggestions.js` | Performance et couverture sur une grosse bibliotheque. |
 
 Mesures de reference actuelles : style 100 %, tempo 100 %, energie
@@ -699,7 +761,19 @@ prix tout en facturant le nouveau.
    Dancing in the Street » devient « Dancing Queen » d'ABBA (mesure :
    0,63, au-dessus du seuil) et toutes les propositions partent d'une
    base fausse.
-9. **L'axe energie est le plus faible** (42-59 % d'accord). Il ne peut
+9. **Le niveau sonore n'entre pas dans l'energie.** Mesure : le meme
+   fichier a -9 dB puis compresse et remonte donnait energie 7 et 10.
+   `energyScore` vise « energie du morceau en cours + un pas » avec
+   16 points de raideur par unite : trois crans d'ecart changent la
+   liste entiere, et deux pressages du meme disque donnaient deux
+   soirees. Les trois mesures qui composent l'energie sont des
+   RAPPORTS, donc insensibles au gain. Ne pas y remettre de dB.
+10. **Une entree de `scan-cache.json` est un TABLEAU compact**, pas un
+   objet. `diagnostic.js` et `pourquoi.js` la lisaient comme un objet
+   et rendaient des morceaux sans titre ni tempo — le diagnostic
+   annoncait alors « ta bibliotheque n'a presque aucun tempo » a un
+   DJ dont tout allait bien. Passer par `build/_biblio.js`.
+11. **L'axe energie est le plus faible** (42-59 % d'accord). Il ne peut
    pas etre ameliore honnetement sans de vrais `sets.json` de soirees
    jouees. Ne pas le « regler » a l'aveugle en bougeant des constantes.
 
