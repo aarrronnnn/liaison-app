@@ -55,7 +55,13 @@ const GOLDMAN = t({ title: 'Je te donne', artist: 'Jean-Jacques Goldman',
 
 /* ---------- 1. le temoin : le defaut existait bien ---------- */
 {
-  const avant = engine.tempoScore(130, 65);              /* sans la porte */
+  /* 18 sept. 2026 — le demi et le double ne sont plus admis par
+     defaut : tempoScore ne les essaie que si on le demande. Le
+     temoin doit donc les demander explicitement, sinon il ne
+     reproduit plus le defaut qu'il existe pour prouver — et la
+     porte de famille testee juste en dessous ne prouverait plus
+     rien non plus. */
+  const avant = engine.tempoScore(130, 65, true);        /* sans la porte */
   verifier('1. TEMOIN : sans la porte, 65 derriere 130 valait 100/100',
            avant.s === 100 && avant.ratio === 2,
            'note ' + avant.s + ', rapport x' + avant.ratio);

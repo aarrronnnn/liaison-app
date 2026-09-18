@@ -38,6 +38,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const { Worker } = require('worker_threads');
+const lib = require('./library');
 
 const SAUVE_MS = 5000;         /* on n'ecrit jamais plus souvent que ca */
 const RELANCE_MS = 60000;      /* delai avant de reessayer un fichier absent */
@@ -129,6 +130,37 @@ class AnalysisCache {
       this.sale = false;
     } catch (e) { /* on reessaiera au prochain lot */ }
   }
+  /* ------------------------------------------------------------
+     L'ENTRETIEN — un cache qui ne fait que grandir.
+
+     Le cache de tags a le sien depuis longtemps ; celui de l'analyse
+     n'en avait aucun. Or sa cle est « chemin + taille + date » :
+     chaque fois qu'un DJ retague un morceau, reconvertit un fichier
+     ou le remplace par une meilleure version, l'ANCIENNE entree
+     reste, pour toujours. Sur une bibliotheque vivante, le fichier
+     finit par peser plusieurs fois ce qu'il devrait — et il est relu
+     en entier a chaque demarrage, sur le fil qui ouvre le widget.
+
+     On n'elague qu'au-dela de trois fois la taille de la
+     bibliotheque, et on ne retire que ce dont le CHEMIN n'existe
+     plus dans la bibliotheque courante. Un disque externe debranche
+     n'a donc rien a craindre : ses morceaux sont toujours dans la
+     bibliotheque, seulement injoignables.
+     ------------------------------------------------------------ */
+  entretenir(library) {
+    const n = Object.keys(this.data).length;
+    if (!library || !library.length || n < library.length * 3) return 0;
+    const chemins = new Set();
+    for (const t of library) if (t.path) chemins.add(t.path);
+    let retires = 0;
+    for (const cle of Object.keys(this.data)) {
+      const chemin = cle.slice(0, cle.lastIndexOf('|'));
+      if (!chemins.has(chemin)) { delete this.data[cle]; retires++; }
+    }
+    if (retires) { this.sale = true; this.programmer(); }
+    return retires;
+  }
+
   get taille() { return Object.keys(this.data).length; }
 }
 
@@ -184,6 +216,7 @@ class AnalysisService {
     this.faits = 0;
     this.total = 0;
     this.absents = new Map();     /* id -> quand reessayer */
+    this.reessais = new Map();    /* id -> tentatives deja faites */
     this.workers = [];
     this.libres = [];
     this.arrete = false;
@@ -270,6 +303,19 @@ class AnalysisService {
     this.tracks.clear();
     this.file.clear();
     this.faits = 0;
+    /* ------------------------------------------------------------
+       Une bibliotheque qui se recharge remet les compteurs d'echec
+       a zero.
+
+       Le DJ qui voit un morceau marque illisible fait la chose la
+       plus naturelle du monde : il le reconvertit, il le retague,
+       il rebranche le bon disque, et il relance la lecture. Si on
+       gardait le compteur de tentatives, son morceau repare
+       resterait illisible pour toute la session — et il n'aurait
+       aucun moyen de comprendre pourquoi.
+       ------------------------------------------------------------ */
+    this.reessais.clear();
+    this.absents.clear();
     let caches = 0;
 
     for (const t of library) {
@@ -285,11 +331,12 @@ class AnalysisService {
         continue;
       }
       const c = this.cache.get(t.path, st);
-      if (c) { Object.assign(t, c); t.analyzed = true; caches++; continue; }
+      if (c) { Object.assign(t, c); this._arbitrer(t, c); t.analyzed = true; caches++; continue; }
       this.file.set(t.id, { priorite: 0, stamp: st });
     }
 
     this.total = this.file.size;
+    this.cache.entretenir(library);
     this._rapport(true);
     return { caches: caches, aFaire: this.total, mesurePerimee: !!this.cache.perimee };
   }
@@ -313,7 +360,7 @@ class AnalysisService {
     const st = AnalysisCache.stamp(t.path);
     if (st === null) { t.offline = true; return false; }
     const c = this.cache.get(t.path, st);
-    if (c) { Object.assign(t, c); t.analyzed = true; this._rapport(); return true; }
+    if (c) { Object.assign(t, c); this._arbitrer(t, c); t.analyzed = true; this._rapport(); return true; }
     const p = force == null ? 2 : force;
     const e = this.file.get(t.id);
     if (e) { if (p > e.priorite) e.priorite = p; }
@@ -403,13 +450,171 @@ class AnalysisService {
       /* une derniere chance au cache : le fichier a pu etre
          analyse par une autre session entre-temps */
       const c = this.cache.get(t.path, st);
-      if (c) { Object.assign(t, c); t.analyzed = true; this.file.delete(id); this.faits++; this._rapport(); continue; }
+      if (c) { Object.assign(t, c); this._arbitrer(t, c); t.analyzed = true; this.file.delete(id); this.faits++; this._rapport(); continue; }
 
       const w = this.libres.pop();
       w.job = id;
       this.encours.add(id);
       w.postMessage({ id: id, path: t.path, seconds: 90 });
     }
+  }
+
+  /* ------------------------------------------------------------
+     L'ARBITRAGE, SORTI DE _resultat().
+
+     Il y vivait, et il n'y tournait donc QUE sur une analyse
+     fraiche. Or la quasi-totalite des morceaux d'un DJ qui utilise
+     deja Liaison arrive par le cache : charger() y trouve la
+     mesure, la recopie sur le morceau, et l'arbitrage n'etait
+     jamais joue. Consequence exacte : on corrige la regle, le DJ
+     installe la mise a jour, et il ne voit strictement aucune
+     difference — le meme defaut que VERSION_MESURE existe pour
+     eviter, revenu par une autre porte.
+
+     L'arbitrage est donc une methode, appelee aux TROIS endroits
+     ou une mesure rencontre un morceau : le cache au chargement,
+     le cache a l'ajout, et le resultat d'un fil.
+     ------------------------------------------------------------ */
+  _arbitrer(t, patch) {
+    if (!t || !patch) return;
+    /* ============================================================
+       QUI A RAISON, ET SELON QUOI.
+
+       Trois regles se sont succede ici avant celle-ci :
+
+         1. « le tag prime toujours » — une bibliotheque iTunes de
+            quinze ans passait ses erreurs au moteur ;
+         2. « on corrige quand le tag ment et qu'on est sur » ;
+         3. « notre mesure fait toujours foi » — coherent, mais
+            elle ecrasait aussi la grille de rekordbox, sur
+            laquelle le DJ a pose ses reperes et cale ses mix.
+
+       La quatrieme, celle-ci, ne demande plus « qui mesure le
+       mieux » mais « d'ou vient ce chiffre ». Un BPM pose par
+       rekordbox, Serato, Traktor ou VirtualDJ vient d'une analyse
+       qui a servi a construire une grille de temps : on ne le
+       touche pas, on signale seulement quand on n'est pas
+       d'accord. Un BPM venu d'iTunes ou d'un tag ID3 est une
+       saisie : notre mesure le corrige des qu'elle est sure.
+
+       C'est ce qui repond a Mamma Mia : 105 dans un champ iTunes
+       contre 130 mesures avec confiance, la mesure gagne. Et si
+       c'etait rekordbox qui disait 105, le DJ mixerait a 105 —
+       c'est son beatgrid, pas le notre, et lui contredire en
+       cabine ne servirait a rien.
+
+       On garde toujours l'ancienne valeur, dans les deux sens :
+       le DJ doit pouvoir voir ce que son logiciel disait, et nous
+       contredire.
+       ============================================================ */
+    const FORT = 3;
+    const rangBpm = t.bpm > 0 ? lib.fiabilite(t.bpmSrc) : 0;
+    const rangKey = t.key ? lib.fiabilite(t.keySrc) : 0;
+
+    const surTempo = patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO;
+    /* La marge compte autant que la correlation. Deux tonalites
+       voisines obtiennent presque la meme note : quand elles sont
+       a egalite, on n'a pas mesure une tonalite, on a tire a pile
+       ou face — et ce n'est pas avec ca qu'on contredit le DJ. */
+    const surTonalite = patch.mKey && patch.mKeyConf >= SUR_TONALITE
+                        && (patch.mKeyMarge === undefined || patch.mKeyMarge >= MARGE_TONALITE);
+    const mesureBpm = patch.mBpm > 40 ? Math.round(patch.mBpm * 10) / 10 : 0;
+
+    /* ---------------- le tempo ---------------- */
+    if (!rangBpm) {
+      /* Rien du tout : n'importe quelle mesure vaut mieux qu'un
+         vide, et on dit franchement laquelle des deux c'est. */
+      if (mesureBpm) {
+        t.bpm = mesureBpm;
+        t.bpmDeduit = true;
+        t.bpmSource = surTempo ? 'liaison' : 'liaison-incertain';
+      }
+    } else if (rangBpm >= FORT) {
+      /* Une grille de temps posee par un vrai analyseur. On la
+         garde — mais on ne se tait pas : health.js montre au DJ
+         les morceaux ou nous ne sommes pas d'accord, pour qu'il
+         aille les reanalyser dans SON logiciel. */
+      t.bpmSource = t.bpmSrc;
+      if (surTempo && desaccordTempo(t.bpm, mesureBpm)) {
+        t.bpmDoute = true;
+        t.bpmMesure = mesureBpm;
+      }
+    } else if (surTempo) {
+      /* Une saisie, contre une mesure sure : la mesure gagne. */
+      const avant = t.bpm;
+      /* ------------------------------------------------------------
+         L'OCTAVE DU DJ, PAS LA NOTRE.
+
+         Un morceau a 140 peut se compter a 70 : c'est le meme
+         rythme, et notre estimateur ramene d'ailleurs tout entre
+         70 et 190 pour cette raison. Mais si le logiciel du DJ
+         annonce 140, sa grille est calee sur 140, ses reperes
+         sont a 140, et il pense a 140. Lui afficher 70 parce que
+         notre peigne a resonne une octave plus bas serait juste
+         en theorie et insupportable en cabine.
+
+         Quand les deux valeurs decrivent le meme rythme mais pas
+         la meme octave, on garde la sienne. Quand c'est la meme
+         octave, on garde la notre : elle est plus precise au
+         dixieme pres.
+         ------------------------------------------------------------ */
+      const memeRythme = !desaccordTempo(avant, mesureBpm);
+      const memeOctave = memeRythme && Math.abs(mesureBpm - avant) / avant < 0.06;
+      if (memeRythme && !memeOctave) {
+        t.bpmSource = t.bpmSrc;        /* son octave, confirmee par nous */
+      } else {
+        t.bpm = mesureBpm;
+        t.bpmSource = 'liaison';
+        if (!memeRythme) { t.bpmTag = avant; t.bpmCorrige = true; }
+      }
+    } else {
+      /* Une saisie, et rien de sur en face : on la garde. */
+      t.bpmSource = t.bpmSrc;
+    }
+
+    /* ---------------- la tonalite ----------------
+       « Il ne donne jamais et n'affiche jamais la cle des musiques
+         alors que c'est un point hyper important. »
+
+       Le seuil de 0,72 de correlation ne servait pas a AFFICHER
+       une tonalite : il servait a en CONTREDIRE une. On l'avait
+       mis aux deux endroits. Resultat : chez un DJ dont la seule
+       source est iTunes — qui n'a aucun champ tonalite — la
+       roue de Camelot etait vide de bout en bout, et l'axe
+       harmonique du moteur ne notait rien du tout.
+
+       Les deux questions sont maintenant separees :
+
+         COMBLER un vide — des que la mesure rend une tonalite.
+           Une estimation affichee « 8A ? » vaut infiniment mieux
+           qu'un « ? » : le DJ peut la verifier a l'oreille, et le
+           moteur peut s'en servir.
+
+         CONTREDIRE une source — seulement sur une mesure sure ET
+           detachee de sa suivante, et seulement contre une source
+           faible. Le seuil severe reste la, a sa vraie place.
+       ---------------- */
+    if (!rangKey) {
+      if (patch.mKey) {
+        t.key = patch.mKey;
+        t.keyDeduite = true;
+        t.keySource = surTonalite ? 'liaison' : 'liaison-incertain';
+      }
+    } else if (rangKey >= FORT) {
+      t.keySource = t.keySrc;
+      if (surTonalite && desaccordTonalite(t.key, patch.mKey)) {
+        t.keyDoute = true;
+        t.keyMesuree = patch.mKey;
+      }
+    } else if (surTonalite) {
+      const avant = t.key;
+      t.key = patch.mKey;
+      t.keySource = 'liaison';
+      if (desaccordTonalite(avant, t.key)) { t.keyTag = avant; t.keyCorrigee = true; }
+    } else {
+      t.keySource = t.keySrc;
+    }
+
   }
 
   _resultat(w, msg) {
@@ -425,120 +630,39 @@ class AnalysisService {
       this.reussis++;
       if (patch && patch.mBpm > 40) this.mesuresUtiles++;
 
-      /* Ce que le logiciel de mix affirme prime toujours : sa
-         tonalite a ete posee par le DJ ou par un analyseur dedie,
-         et son BPM a servi a caler la grille. Notre mesure ne
-         remplace donc rien — elle comble les trous, et elle
-         signale les desaccords.
-
-         Combler : un morceau sans tonalite est invisible pour la
-         roue de Camelot, un morceau sans BPM est invisible tout
-         court. Mieux vaut une estimation qu'un vide.
-
-         Signaler : quand les deux valeurs existent et divergent,
-         on ne tranche pas — on marque, et la jauge de sante le
-         montre au DJ, qui ira reanalyser dans SON logiciel. */
-      /* ============================================================
-         NOTRE MESURE FAIT FOI.
-
-         « En meme temps que l'analyse de la bibliotheque, on fait
-           nous-memes l'analyse BPM, key, etc. On doit se fier qu'a
-           nous, comme un pro. »
-
-         Trois regles se sont succede ici, et il a fallu les trois
-         pour arriver a la bonne :
-
-           1. « le tag prime toujours, on comble les trous »
-              Une bibliotheque iTunes de quinze ans passait donc ses
-              erreurs au moteur, en connaissance de cause.
-
-           2. « on corrige quand le tag ment et qu'on est sur »
-              Mieux, mais toujours a deux vitesses : le meme morceau
-              etait traite differemment selon qu'un logiciel tiers
-              avait ecrit quelque chose ou non.
-
-           3. celle-ci : quand notre mesure est sure, c'est ELLE la
-              valeur. Le tag ne sert plus que de repli, quand on n'a
-              pas su mesurer.
-
-         Ce n'est pas de l'arrogance, c'est de la coherence : une
-         bibliotheque ou la moitie des tempos vient de rekordbox,
-         un quart d'iTunes et un quart de nous ne peut pas etre
-         comparee a elle-meme. Une seule regle de mesure pour tout
-         le monde, c'est ce que fait un analyseur professionnel.
-
-         On garde toujours l'ancienne valeur : le DJ doit pouvoir
-         voir ce que son logiciel disait, et nous contredire.
-         ============================================================ */
-      const surTempo = patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO;
-      /* La marge compte autant que la correlation. Deux tonalites
-         voisines obtiennent presque la meme note : quand elles sont
-         a egalite, on n'a pas mesure une tonalite, on a tire a pile
-         ou face — et ce n'est pas avec ca qu'on contredit le DJ. */
-      const surTonalite = patch.mKey && patch.mKeyConf >= SUR_TONALITE
-                          && (patch.mKeyMarge === undefined || patch.mKeyMarge >= MARGE_TONALITE);
-
-      if (surTempo) {
-        const avant = t.bpm;
-        const mesure = Math.round(patch.mBpm * 10) / 10;
-        /* ------------------------------------------------------------
-           L'OCTAVE DU DJ, PAS LA NOTRE.
-
-           Un morceau a 140 peut se compter a 70 : c'est le meme
-           rythme, et notre estimateur ramene d'ailleurs tout entre
-           70 et 190 pour cette raison. Mais si le logiciel du DJ
-           annonce 140, sa grille est calee sur 140, ses reperes
-           sont a 140, et il pense a 140. Lui afficher 70 parce que
-           notre peigne a resonne une octave plus bas serait juste
-           en theorie et insupportable en cabine.
-
-           Quand les deux valeurs decrivent le meme rythme mais pas
-           la meme octave, on garde la sienne. Quand c'est la meme
-           octave, on garde la notre : elle est plus precise au
-           dixieme pres.
-           ------------------------------------------------------------ */
-        const memeRythme = avant > 0 && !desaccordTempo(avant, mesure);
-        const memeOctave = memeRythme && Math.abs(mesure - avant) / avant < 0.06;
-        if (memeRythme && !memeOctave) {
-          t.bpmSource = 'tag';           /* son octave, confirmee par nous */
-        } else {
-          t.bpm = mesure;
-          t.bpmSource = 'liaison';
-          if (avant > 0 && !memeRythme) { t.bpmTag = avant; t.bpmCorrige = true; }
-          else if (!(avant > 0)) t.bpmDeduit = true;
-        }
-      } else if (!(t.bpm > 0) && patch.mBpm > 40) {
-        /* Pas sur de nous, mais le morceau n'a rien du tout :
-           une estimation vaut mieux qu'un vide, et on le dit. */
-        t.bpm = Math.round(patch.mBpm * 10) / 10;
-        t.bpmDeduit = true;
-        t.bpmSource = 'liaison-incertain';
-      } else if (t.bpm > 0) {
-        t.bpmSource = 'tag';
-      }
-
-      if (surTonalite) {
-        const avant = t.key;
-        t.key = patch.mKey;
-        t.keySource = 'liaison';
-        if (avant && desaccordTonalite(avant, t.key)) { t.keyTag = avant; t.keyCorrigee = true; }
-        else if (!avant) t.keyDeduite = true;
-      } else if (!t.key && patch.mKey && patch.mKeyConf >= 0.6) {
-        t.key = patch.mKey;
-        t.keyDeduite = true;
-        t.keySource = 'liaison-incertain';
-      } else if (t.key) {
-        t.keySource = 'tag';
-      }
+      this._arbitrer(t, patch);
 
       t.analyzed = true;
       t.offline = false;
       if (e && e.stamp) this.cache.set(t.path, e.stamp, patch);
       this.onTrack(t);
     } else if (t) {
-      /* un fichier illisible ne doit pas revenir toutes les
-         minutes : on lui donne ses valeurs par defaut et on
-         l'oublie — mais on ne l'oublie plus EN SILENCE. */
+      /* ------------------------------------------------------------
+         UN ECHEC N'EST PAS TOUJOURS DEFINITIF.
+
+         Un morceau etait declare illisible A LA PREMIERE TENTATIVE,
+         pour toujours. Or la premiere tentative est justement celle
+         qui tombe au pire moment : le disque externe qui se reveille,
+         le fichier encore en cours de copie depuis une cle USB,
+         ffmpeg qui n'a pas pu se lancer parce que trois autres
+         tournaient deja. Le morceau perdait alors sa tonalite, son
+         tempo mesure et son energie pour le reste de la soiree — et
+         il restait marque illisible dans l'ecran de sante, ce qui
+         envoyait le DJ chercher un probleme qui n'existait pas.
+
+         On lui donne une seconde chance, une seule, apres le meme
+         delai que pour un disque absent. Ce qui echoue deux fois
+         echoue vraiment.
+         ------------------------------------------------------------ */
+      const n = (this.reessais.get(id) || 0) + 1;
+      if (n === 1 && e) {
+        this.reessais.set(id, n);
+        this.absents.set(id, Date.now() + RELANCE_MS);
+        this.encours.delete(id);
+        this.libres.push(w);
+        this._pousser();
+        return;                       /* on ne le compte pas encore comme rate */
+      }
       if (t.energy == null) t.energy = 5;
       if (!t.timbre) t.timbre = [5, 5, 5];
       if (t.vocal == null) t.vocal = 0;

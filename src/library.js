@@ -12,6 +12,47 @@ const { analyze } = require('./analyze');
 
 const AUDIO = new Set(['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.aac', '.ogg', '.wma']);
 
+/* ============================================================
+   D'OU VIENT CE CHIFFRE, ET COMBIEN IL VAUT.
+
+   « Liaison me donne des donnees fausses sur les sons. Pour lui,
+     Mamma Mia est a 105 BPM alors que c'est un son a 130. »
+
+   Un 105 sur un morceau a 130 n'est ni un demi ni un double : ce
+   n'est pas une erreur d'octave, c'est un chiffre faux. Et un
+   chiffre faux, dans une bibliotheque de DJ, a presque toujours
+   la meme origine : un champ BPM tape a la main ou devine par un
+   logiciel qui n'a jamais analyse le fichier. iTunes en est plein
+   — le champ existe depuis vingt ans, il se remplit a la main,
+   personne ne le corrige. Les tags ID3 d'un MP3 achete en ligne
+   aussi.
+
+   Jusqu'ici Liaison ne faisait pas la difference : un BPM etait
+   un BPM, et le dernier arrive gagnait. Or ces sources ne se
+   valent pas du tout :
+
+     FORT (3) — rekordbox, Serato, Traktor, VirtualDJ. Ces
+       logiciels ont ANALYSE le fichier pour poser une grille de
+       temps ; le DJ mixe sur cette grille, ses points de repere
+       sont cales dessus. Les contredire serait lui mentir, meme
+       si notre mesure etait meilleure.
+
+     MESURE (2) — Liaison. Un calcul, pas une saisie. Il vaut
+       mieux qu'un champ rempli a la main, moins qu'une grille sur
+       laquelle un DJ a deja travaille.
+
+     FAIBLE (1) — iTunes, tags ID3. Un champ de texte. Il comble
+       un trou, il ne fait autorite sur rien.
+
+   C'est cette echelle qui repond a Mamma Mia : le 105 vient d'un
+   champ faible, notre mesure est forte de sa confiance, elle
+   passe devant. Et si demain rekordbox annonce 130, c'est lui qui
+   gagne, meme contre nous.
+   ============================================================ */
+const FIABILITE = { rekordbox: 3, serato: 3, traktor: 3, virtualdj: 3,
+                    liaison: 2, 'liaison-incertain': 1, itunes: 1, tag: 1 };
+const fiabilite = src => FIABILITE[src] || 1;
+
 /* ---------- tonalite musicale -> Camelot ---------- */
 const CAMELOT = {
   'Abm':'1A','G#m':'1A','B':'1B',
@@ -27,14 +68,83 @@ const CAMELOT = {
   'F#m':'11A','Gbm':'11A','A':'11B',
   'C#m':'12A','Dbm':'12A','E':'12B'
 };
+/* ============================================================
+   TOUTES LES FACONS D'ECRIRE UNE TONALITE.
+
+   « Il ne donne jamais et n'affiche jamais la cle des musiques. »
+
+   Une partie des « ? » ne venait pas d'un tag manquant : elle
+   venait d'un tag qu'on ne savait pas LIRE. La version precedente
+   comprenait le Camelot et la notation anglo-saxonne collee
+   (« Am », « F#m »), et rendait null pour tout le reste. Ce
+   « reste » represente des bibliotheques entieres :
+
+     — la NOTATION OUVERTE (Open Key) de Mixed In Key : « 1m »,
+       « 12d ». Des dizaines de milliers de DJ l'utilisent, et
+       c'est meme le reglage par defaut de MIK depuis des annees.
+       Elle ne ressemble pas au Camelot et s'en decale de sept
+       crans : 1m vaut 8A, 1d vaut 8B.
+     — les suffixes d'energie que MIK colle au tag : « 8A - Energy 7 ».
+     — les formes espacees et longues : « A min », « A minor »,
+       « Db Major », « A-Flat Minor ».
+     — le Camelot a zero devant : « 08A ».
+
+   Chacune de ces formes coutait une tonalite par morceau, donc un
+   axe harmonique muet sur toute la bibliotheque.
+
+   Ce qu'on refuse toujours de faire : deviner. Une chaine qu'on ne
+   reconnait pas rend null, et c'est l'analyse qui prendra le
+   relais — pas une interpretation au hasard.
+   ============================================================ */
+/* Open Key -> Camelot : 1 devient 8, 6 devient 1, 12 devient 7. */
+function ouverteVersCamelot(n, mode) {
+  if (!(n >= 1 && n <= 12)) return null;
+  return (((n + 6) % 12) + 1) + (mode === 'm' ? 'A' : 'B');
+}
+
 function toCamelot(raw) {
-  if (!raw) return null;
+  if (raw == null) return null;
   let s = String(raw).trim();
-  if (/^\d{1,2}[ABab]$/.test(s)) return s.toUpperCase();          // deja Camelot
-  s = s.replace(/\s*(min|minor)$/i, 'm').replace(/\s*(maj|major)$/i, '');
-  s = s.replace(/^([A-Ga-g])/, c => c.toUpperCase());
-  s = s.replace(/♯/g, '#').replace(/♭/g, 'b').replace(/\s+/g, '');
-  return CAMELOT[s] || null;
+  if (!s) return null;
+
+  /* Mixed In Key colle son niveau d'energie au tag : « 8A - Energy 7 ».
+     On retire CE suffixe-la, nommement — couper au premier tiret
+     rendait « A-Flat Minor » en « A », soit la mauvaise tonalite
+     affichee avec assurance. */
+  s = s.replace(/\s*[-–—|/]?\s*energy\s*:?\s*\d+\s*$/i, '')
+       .replace(/\s*\([^)]*\)\s*$/, '')
+       .trim();
+  s = s.replace(/♯/g, '#').replace(/♭/g, 'b');
+
+  /* deja Camelot, zero devant admis */
+  let m = s.match(/^0?(\d{1,2})\s*([ABab])$/);
+  if (m) {
+    const n = parseInt(m[1], 10);
+    if (n >= 1 && n <= 12) return n + m[2].toUpperCase();
+    return null;
+  }
+
+  /* notation ouverte : « 1m » mineur, « 1d » majeur */
+  m = s.match(/^0?(\d{1,2})\s*([dmDM])$/);
+  if (m) return ouverteVersCamelot(parseInt(m[1], 10), m[2].toLowerCase() === 'm' ? 'm' : 'd');
+
+  /* notation anglo-saxonne, sous toutes ses coutures */
+  let x = s.toLowerCase()
+    .replace(/\bflat\b/g, 'b').replace(/\bsharp\b/g, '#')
+    .replace(/[-_]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+  /* Pas de \b devant le « m » : dans « Am » il n'y a pas de frontiere
+     de mot entre la note et le mode, et c'est justement la forme la
+     plus repandue. On teste donc les mots longs d'abord, puis le m
+     colle. */
+  let mineur = null;
+  if (/(\s*(min|minor|moll|mineur)|m)$/.test(x)) { mineur = true; x = x.replace(/(\s*(min|minor|moll|mineur)|m)$/, ''); }
+  else if (/(\s*(maj|major|dur|majeur))$/.test(x)) { mineur = false; x = x.replace(/(\s*(maj|major|dur|majeur))$/, ''); }
+  x = x.replace(/\s+/g, '');
+  if (!/^[a-g](#|b)?$/.test(x)) return null;
+  const note = x.charAt(0).toUpperCase() + x.slice(1);
+  return CAMELOT[note + (mineur ? 'm' : '')] || null;
 }
 
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
@@ -71,6 +181,9 @@ function parseRekordboxXML(xmlPath) {
       genre: attrs.Genre || '',
       bpm: num(attrs.AverageBpm),
       key: toCamelot(attrs.Tonality),
+      /* rekordbox a analyse le fichier pour poser sa grille : c'est
+         la source la plus forte qui existe pour ces deux champs. */
+      bpmSrc: 'rekordbox', keySrc: 'rekordbox',
       duration: num(attrs.TotalTime),
       /* L'annee etait dans l'export depuis toujours, on ne la lisait
          pas. C'est elle qui permet a une soiree annees 80 de rester
@@ -107,6 +220,7 @@ function walk(dir, acc, depth, echecs) {
 }
 
 function ffprobePath() {
+  if (process.env.LIAISON_FFPROBE) return process.env.LIAISON_FFPROBE;
   try {
     let p = require('ffprobe-static');
     if (p && p.path) p = p.path;
@@ -179,11 +293,16 @@ function probe(file) {
          avant ceux de l'edition, et une reedition est marquee
          incertaine. Les entrees de la version 1 portent l'annee du
          pressage : les garder, c'est garder le defaut.
+     3 — toCamelot lit la notation ouverte (Mixed In Key), les
+         formes longues et espacees, et les suffixes d'energie. Les
+         entrees des versions 1 et 2 portent une tonalite VIDE la ou
+         le fichier en avait une : les garder, c'est garder les « ? »
+         que cette version existe pour faire disparaitre.
 
    Le cout est une relecture des tags, pas une reanalyse audio :
    quelques minutes sur une grosse bibliotheque, contre plusieurs
    heures pour l'analyse. */
-const VERSION_TAGS = 2;
+const VERSION_TAGS = 3;
 
 function chargerScanCache(file) {
   if (!file) return { e: {}, sale: false };
@@ -324,6 +443,8 @@ async function scanFolder(dir, onProgress, opt) {
     genre: t.genre || '',
     bpm: num(t.tbpm || t.bpm || 0),
     key: toCamelot(t.initial_key || t.tkey || t.key),
+    /* Un tag ID3 : un champ de texte que personne n'a verifie. */
+    bpmSrc: 'tag', keySrc: 'tag',
     duration: dur || 0,
     year: anneeDeLaMusique(t).an,
     anneeIncertaine: anneeDeLaMusique(t).incertaine,
@@ -354,6 +475,7 @@ async function scanFolder(dir, onProgress, opt) {
            les autres s'en passent. */
         out[i] = { path: f, title: c[2], artist: c[3], genre: c[4],
                    bpm: c[5], key: c[6] || null, duration: c[7],
+                   bpmSrc: 'tag', keySrc: 'tag',
                    year: c[8] == null ? null : c[8],
                    /* La dixieme case dit si cette annee est celle d'une
                       reedition. Absente, on la rededuit du titre : ca ne
@@ -560,6 +682,88 @@ function cleChemin(p) {
   return x.toLowerCase();
 }
 
+/* ============================================================
+   LE MORCEAU SUPPRIME, ET LES TROIS CHOSES QU'ON CONFONDAIT.
+
+   « J'ai supprime des musiques de ma bibliotheque (iTunes,
+     rekordbox, etc) et pourtant, Liaison me les propose toujours
+     au mix. »
+
+   Trois causes se cachaient derriere, et une seule reponse
+   generale les aurait toutes ratees :
+
+     1. LE FICHIER N'EST PLUS LA. Le DJ l'a mis a la corbeille. La
+        base du logiciel, elle, garde souvent l'entree — un export
+        rekordbox est une PHOTO, il ne se met pas a jour tout seul.
+        Liaison lisait donc une ligne qui ne designe plus rien.
+
+     2. LE VOLUME N'EST PAS LA. Le SSD est debranche. Le fichier
+        existe, il est simplement hors de portee ce soir.
+
+     3. LA SOURCE EST PERIMEE. L'export XML date d'avant la
+        suppression. Rien ne le trahit, sauf sa date.
+
+   Les cas 1 et 2 se distinguent en une ligne : on regarde si le
+   VOLUME qui portait le fichier repond. S'il repond et que le
+   fichier manque, il a ete efface — on le sort de la
+   bibliotheque, definitivement. S'il ne repond pas, on garde
+   tout et on marque « hors ligne » : le disque reviendra.
+
+   Confondre les deux serait cher dans les deux sens. Effacer sur
+   un disque debranche, c'est perdre 18 000 titres parce qu'on a
+   mis le SSD dans l'autre poche. Garder sur un fichier efface,
+   c'est proposer toute la nuit un morceau qui ne se chargera pas.
+   ============================================================ */
+function volumeDe(p) {
+  const x = String(p || '');
+  if (process.platform === 'win32') {
+    const m = x.match(/^([A-Za-z]:)[\\/]/);
+    return m ? m[1] + '\\' : null;
+  }
+  const m = x.match(/^(\/Volumes\/[^/]+)/) || x.match(/^(\/(?:media|mnt)\/[^/]+)/);
+  return m ? m[1] : '/';
+}
+
+/**
+ * Sort de la bibliotheque ce qui a vraiment disparu, marque ce qui
+ * est seulement injoignable.
+ * @param {Array} tracks
+ * @returns {{gardes:Array, disparus:Array, horsLigne:number}}
+ */
+function elaguerDisparus(tracks) {
+  const volumes = new Map();          /* un test par volume, pas par morceau */
+  const volumeRepond = (p) => {
+    const v = volumeDe(p);
+    if (!v) return true;
+    if (volumes.has(v)) return volumes.get(v);
+    let ok = true;
+    try { ok = fs.existsSync(v); } catch (e) { ok = true; }
+    volumes.set(v, ok);
+    return ok;
+  };
+
+  const gardes = [], disparus = [];
+  let horsLigne = 0;
+  for (const t of tracks) {
+    /* Pas de chemin de fichier — une entree iTunes sans Location,
+       par exemple. On ne peut rien verifier, on ne jette rien. */
+    if (!t.path || /^[a-z]+:/i.test(t.path) && t.path.indexOf(':\\') < 0 && t.path.charAt(0) !== '/') {
+      gardes.push(t); continue;
+    }
+    let existe = true;
+    try { fs.statSync(t.path); }
+    catch (e) {
+      /* ENOENT seul veut dire « pas la ». Un refus de permission ou
+         un disque qui bougonne n'est pas une suppression. */
+      existe = e && e.code !== 'ENOENT';
+    }
+    if (existe) { t.disparu = false; gardes.push(t); continue; }
+    if (volumeRepond(t.path)) { t.disparu = true; disparus.push(t); }
+    else { t.offline = true; horsLigne++; gardes.push(t); }
+  }
+  return { gardes: gardes, disparus: disparus, horsLigne: horsLigne };
+}
+
 /* Un morceau est utilisable des que le logiciel de mix nous a
    donne son titre, son artiste, son BPM et sa tonalite. L'energie
    et le timbre affinent le classement mais ne le conditionnent
@@ -614,6 +818,10 @@ function finalize(tracks) {
           .map(x => x.trim()).filter(Boolean);
         if (a.length > 1) t.artist = a.join(', ');
       }
+      /* La provenance suit le morceau jusqu'au widget. Sans valeur,
+         il n'y a pas de source : « tag » serait un mensonge poli. */
+      t.bpmSource = t.bpm > 0 ? (t.bpmSrc || 'tag') : null;
+      t.keySource = t.key ? (t.keySrc || 'tag') : null;
       t.out = t.duration > 300 ? 64 : t.duration > 180 ? 32 : 16;
       t.year = anneeTag(t.year);
       if (t.energy == null) t.energy = 5;
@@ -622,4 +830,5 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath };
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath,
+                   FIABILITE, fiabilite, elaguerDisparus, AUDIO };

@@ -43,6 +43,12 @@ position:relative}
 .ref .m i{color:var(--cream)}
 .ref .m span:nth-child(1) i{color:var(--blueLit)}
 .ref .m span:nth-child(3) i{color:var(--redLit)}
+/* Le tempo de reference, a la taille de ce qu'il commande. Tous
+   les ecarts de la liste se lisent par rapport a ce chiffre : il
+   ne peut pas etre ecrit plus petit qu'eux. */
+.ref .m span:nth-child(2) i{font-family:var(--d);font-size:16px;line-height:1;color:var(--cream);
+letter-spacing:-.01em;vertical-align:-2px}
+.ref .m span:nth-child(1) i{font-weight:700;font-size:11px}
 .ref .t{font-family:var(--d);font-size:21px;line-height:.98;text-transform:uppercase;margin-top:7px;
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ref .a{font-family:var(--m);font-size:10px;color:var(--cream3);margin-top:4px;
@@ -130,6 +136,55 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
    doit pouvoir le reperer d'un coup d'oeil sans que ca crie. */
 .mm .hb{color:var(--dim);font-weight:700;letter-spacing:.04em}
 .mm .deja.grave{color:var(--redLit)}
+/* ============================================================
+   LE BPM, SORTI DE LA LIGNE DE METADONNEES.
+
+   « Il faut que le BPM soit plus mis en avant lors des
+     propositions, qu'on le voie clairement. »
+
+   Il n'y etait pas du tout : la ligne disait « 8A · +1,6 % ·
+   fondu », soit l'ECART sans jamais la VALEUR. Pour savoir a quel
+   tempo tourne le morceau propose, il fallait le calculer de tete
+   a partir du tempo de reference — a 2 h du matin, dans le noir.
+
+   Le BPM prend donc une colonne a lui, entre le score et le
+   titre, dans la police d'affichage et a la taille du score. La
+   couleur dit ce que le chiffre ne dit pas :
+
+     bleu  — moins d'un demi pour cent : ca se cale sans toucher
+             au pitch ;
+     creme — dans la fenetre : un coup de pitch et c'est cale ;
+     rouge — entre par la porte elargie : ca ne se cale pas, ca se
+             coupe. Le DJ doit le savoir AVANT de lancer.
+
+   En demi-opacite quand le tempo vient d'une estimation dont
+   Liaison n'est pas sur : une valeur affichee franchement est une
+   valeur qu'on croit, et croire un tempo faux coute un mix.
+   ============================================================ */
+.row.tempo{grid-template-columns:32px 50px minmax(0,1fr) auto}
+.bpmc{display:block;text-align:right;padding-top:2px}
+.bpmc b{display:block;font-family:var(--d);font-weight:400;font-size:18px;line-height:.9;
+color:var(--cream2);letter-spacing:-.01em}
+.bpmc s{display:block;text-decoration:none;font-family:var(--m);font-size:8px;letter-spacing:.04em;
+color:var(--cream3);margin-top:4px}
+.bpmc.pres b{color:var(--blueLit)}
+.bpmc.loin b{color:var(--redLit)}
+.bpmc.loin s{color:var(--redLit)}
+.bpmc.flou b,.bpmc.flou s{opacity:.5}
+/* La tonalite, elle aussi promue : c'est la seconde chose qu'on
+   regarde, et elle s'affichait dans le meme gris que le reste de
+   la ligne. Elle est maintenant en tete du groupe des faits de
+   mix, en gras, et bleue quand elle est sure. */
+.mm .kk{font-weight:700;color:var(--blueLit);letter-spacing:.02em}
+.mm .kk.flou{color:var(--cream3)}
+.mm .kk.vide{color:var(--dim);font-weight:400}
+/* « HORS FENETRE » : la seule etiquette rouge qui parle de mix et
+   pas de programmation. Elle dit « celui-la, tu le coupes ». */
+.mm .hf{color:var(--redLit);font-weight:700;letter-spacing:.04em}
+/* « rare dans ta bibliotheque » : une explication, pas un reproche.
+   Le morceau est la parce qu'il n'y avait rien de mieux — la
+   mention evite que le DJ croie a une erreur de Liaison. */
+.mm .hr{color:var(--dim);font-weight:700;letter-spacing:.04em}
 
 /* ---------- analyse de fond ----------
    Discret par construction : c'est une information, pas une
@@ -198,6 +253,14 @@ padding-top:6px;border-top:1px solid var(--wire);white-space:nowrap;overflow:hid
 .plan .k1 s{color:var(--blueLit)}
 .plan .k3 s{color:var(--redLit)}
 .plan.wait{color:var(--cream3);border-top-color:var(--wire);display:block}
+/* Un calcul rate n'est pas un calcul en cours : il ne doit pas
+   ressembler a une attente. */
+.plan.rate{color:var(--dim);border-top-color:var(--wire);display:block}
+/* Des reperes deduits du tempo plutot que mesures sur la batterie :
+   utilisables, a verifier au casque. */
+.plan.flou s{color:var(--cream2)}
+.plan .estime{margin-left:auto;font-size:8px;letter-spacing:.1em;text-transform:uppercase;
+color:var(--dim);align-self:center}
 .go{font-family:var(--m);font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;padding:6px 7px;
 border-radius:2px;border:1px solid var(--wire2);color:var(--cream3);white-space:nowrap}
 .go:hover{background:var(--blue);border-color:var(--blue);color:#fff}
@@ -580,20 +643,37 @@ function renderNow(n) {
   else renderStrip(curStruct, lastSug[0] && lastSug[0].plan);
 }
 
+/* ------------------------------------------------------------
+   Le bandeau des points de mix, et les quatre etats qu'il montre.
+
+   Il n'en montrait qu'un : « en cours de calcul… », y compris
+   quand le calcul etait fini et rate. Un DJ qui attend quelque
+   chose qui n'arrivera jamais n'attend pas, il conclut que ca ne
+   marche pas — et il a raison.
+
+   Maintenant : rien a dire (pas de morceau en cours), en cours,
+   rate avec sa raison, ou le plan lui-meme — marque « estime »
+   quand il est deduit du tempo plutot que mesure.
+   ------------------------------------------------------------ */
 function planHTML(r) {
-  if (!r.plan) return '<div class="plan wait">Points de mix en cours de calcul…</div>';
-  /* Un plan refuse sans explication donnait un bandeau vide : une
-     bordure et six pixels de marge pour rien, sur chaque ligne. */
-  if (!r.plan.ok) return r.plan.note ? '<div class="plan wait">' + esc(r.plan.note) + '</div>' : '';
+  if (!r.plan) return '';
+  if (!r.plan.ok) {
+    if (r.plan.etat === 'calcul') return '<div class="plan wait">Points de mix en cours de calcul…</div>';
+    return r.plan.note ? '<div class="plan rate">' + esc(r.plan.note) + '</div>' : '';
+  }
   const p = r.plan;
+  /* « estime » : les reperes sont deduits du tempo et de la duree,
+     pas mesures sur la batterie. Ils valent mieux que rien, et le DJ
+     doit savoir qu'il les verifie au casque. */
+  const est = p.estime ? '<span class="estime">estimé</span>' : '';
   if (p.tight)
-    return '<div class="plan"><span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
+    return '<div class="plan' + (p.estime ? ' flou' : '') + '"><span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
            '<span class="k3"><b>Coupe</b> <s>' + p.swapLabel + '</s></span>' +
-           '<span><b>Intro</b> <s>' + p.introPlayed + ' s</s></span></div>';
-  return '<div class="plan" title="Recouvrement ' + p.overlapBars + ' mesures">' +
+           '<span><b>Intro</b> <s>' + p.introPlayed + ' s</s></span>' + est + '</div>';
+  return '<div class="plan' + (p.estime ? ' flou' : '') + '" title="Recouvrement ' + p.overlapBars + ' mesures">' +
     '<span class="k1"><b>Lance</b> <s>' + p.startLabel + '</s></span>' +
     '<span class="k2"><b>Basses</b> <s>' + p.swapLabel + '</s></span>' +
-    '<span class="k3"><b>Sors</b> <s>' + p.outLabel + '</s></span></div>';
+    '<span class="k3"><b>Sors</b> <s>' + p.outLabel + '</s></span>' + est + '</div>';
 }
 
 /* ------------------------------------------------------------
@@ -705,6 +785,35 @@ function dejaHTML(r) {
   return '<span class="deja' + (r.deja.grave ? ' grave' : '') + '">' + esc(r.deja.texte) + '</span> · ';
 }
 
+/* ------------------------------------------------------------
+   La colonne de tempo d'une proposition.
+
+   Trois etats, comme partout ailleurs dans ce widget : une valeur
+   qu'on tient, une valeur qu'on estime, pas de valeur du tout. Un
+   tempo absent affiche « — » et jamais « 0,0 » : c'est la faute
+   qu'on a corrigee sur le morceau en cours, elle n'a pas a
+   revenir par la liste.
+   ------------------------------------------------------------ */
+function bpmHTML(r) {
+  if (!(r.bpm > 0)) return '<span class="bpmc"><b>—</b><s>pas mesuré</s></span>';
+  const cls = ['bpmc'];
+  if (r.horsFenetre) cls.push('loin');
+  else if (r.delta != null && Math.abs(r.delta) <= 0.5) cls.push('pres');
+  if (r.bpmSur === false) cls.push('flou');
+  const ecart = r.delta == null ? '·' : fmt(r.delta);
+  return '<span class="' + cls.join(' ') + '"><b>' +
+         Number(r.bpm).toFixed(1).replace('.', ',') + '</b><s>' + ecart + '</s></span>';
+}
+
+/* La tonalite, toujours dite. « ? » reste possible — un morceau
+   pas encore analyse n'a pas de tonalite et le pretendre serait
+   pire — mais c'est devenu l'exception et non la regle. */
+function keyHTML(r) {
+  if (!r.key) return '<span class="kk vide">clé ?</span>';
+  return '<span class="kk' + (r.keySure === false ? ' flou' : '') + '">' +
+         esc(r.key) + (r.keySure === false ? ' ?' : '') + '</span>';
+}
+
 function renderSug(list) {
   lastSug = list || [];
   if (view !== 'sug') return;
@@ -715,11 +824,12 @@ function renderSug(list) {
     return;
   }
   box.innerHTML = list.map((r, i) => `
-    <div class="row ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel">
+    <div class="row tempo ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel">
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
+      ${bpmHTML(r)}
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.cloture ? '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? (r.cloture?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}${r.relance ? ' · <span class="up">RELANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="mm">${r.horsFenetre || r.horsRepertoire || r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsFenetre ? '<span class="hf">HORS FENÊTRE</span>' : ''}${r.horsRepertoire ? (r.horsFenetre?' · ':'') + '<span class="hr">' + esc(r.horsRepertoire.toUpperCase()) + '</span>' : ''}${r.cloture ? ((r.horsFenetre||r.horsRepertoire)?' · ':'') + '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? ((r.horsFenetre||r.horsRepertoire||r.cloture)?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}${r.relance ? ' · <span class="up">RELANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -738,11 +848,12 @@ function renderSos(list) {
     return;
   }
   box.innerHTML = list.map(r => `
-    <div class="row sos">
+    <div class="row tempo sos">
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
+      ${bpmHTML(r)}
       <span style="min-width:0">
         <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsBulle ? '<span class="hb">HORS BULLE</span>' : ''}${r.client ? (r.horsBulle?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${esc(r.key || '?')} · ${fmt(r.delta)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="mm">${r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsBulle ? '<span class="hb">HORS BULLE</span>' : ''}${r.client ? (r.horsBulle?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -904,7 +1015,7 @@ $('#q').addEventListener('input', e => {
   const v = e.target.value;
   tq = setTimeout(async () => {
     const r = await window.liaison.searchTrack(v);
-    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}">${esc(x.title)} <span style="color:var(--cream3)">— ${esc(x.artist)} · ${esc(x.key || '?')} · ${x.bpm}</span></div>`).join('');
+    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}">${esc(x.title)} <span style="color:var(--cream3)">— ${esc(x.artist)} · ${esc(x.key || 'clé ?')} · ${x.bpm > 0 ? Number(x.bpm).toFixed(1).replace('.', ',') + ' BPM' : 'BPM ?'}</span></div>`).join('');
   }, 200);
 });
 $('#sres').addEventListener('click', async e => {

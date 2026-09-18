@@ -176,7 +176,17 @@ const DNA = { 'variete': 82, 'chanson francaise': 82, 'disco': 80, 'funk': 70, '
        style, puis roue de Camelot ». L'harmonie passe de 0,27 a
        0,16, le tempo de 0,24 a 0,30, la parente de 0,22 a 0,24.
        Les ex aequo se departagent donc a nouveau, sur le tempo. */
-  const ATTENDU = 'var1=90 var4=90 var7=90 var8=90 var2=89';
+  /* 18 sept. 2026 — le bareme de tempo est recalibre sur la plage
+     de pitch d'une platine : 100 sous 0,5 %, 85 a 1,5 %, 60 a 3 %.
+     Les huit titres de ce banc sont a 123, 124 ou 125 BPM contre un
+     morceau joue a 124 : les trois cales au BPM exact (var1, var4,
+     var7) gardent 90 et tiennent toujours la tete, c'est ce que ce
+     temoin verifie. Ceux qui sont a un BPM d'ecart perdent le point
+     que l'ancien bareme leur laissait — 0,8 % ne vaut plus 96 sur
+     100 mais 95 — et se retrouvent a egalite a 89, ou l'ordre de la
+     bibliotheque les departage. C'est le resserrement demande, pas
+     une derive du classement. */
+  const ATTENDU = 'var1=90 var4=90 var7=90 var2=89 var3=89';
   const obtenu = engine.suggest(bib[0], bib, { limit: 5, arc: 'up', dna: DNA, mode: 'crowd' })
     .map(x => nom(x.track) + '=' + x.total).join(' ');
   verifier('2. sans bulle, le classement d\'avant est intact',

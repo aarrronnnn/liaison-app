@@ -184,6 +184,7 @@ function parseTraktor(file) {
       genre: unesc(attr(e, 'GENRE')),
       bpm: Math.round(bpm * 10) / 10,
       key: TRAKTOR_KEY[Number(kv)] || lib.toCamelot(unesc(attr(e, 'KEY'))) || null,
+      bpmSrc: 'traktor', keySrc: 'traktor',
       duration: parseFloat(attr(e, 'PLAYTIME')) || 0,
       year: annee(attr(e, 'RELEASE_DATE')) || annee(attr(e, 'YEAR')),
       pop: 40 + Math.min(40, (parseInt(attr(e, 'PLAYCOUNT'), 10) || 0) * 5)
@@ -229,6 +230,7 @@ function parseVirtualDJ(file) {
       genre: unesc(attr(e, 'Genre')),
       bpm: Math.round(bpm * 10) / 10,
       key: lib.toCamelot(unesc(attr(e, 'Key'))),
+      bpmSrc: 'virtualdj', keySrc: 'virtualdj',
       duration: parseFloat(attr(e, 'SongLength')) || 0,
       year: annee(attr(e, 'Year')),
       pop: 40
@@ -294,6 +296,45 @@ function conseils(sources) {
          lit les tags des fichiers un par un. */
       repli: 'Sinon Liaison lit ton dossier de musique — plus long, et moins precis.'
     });
+  }
+
+  /* ------------------------------------------------------------
+     L'EXPORT QUI DATE.
+
+     « J'ai supprime des musiques de ma bibliotheque et pourtant
+       Liaison me les propose toujours. »
+
+     Quand le fichier a vraiment ete efface du disque, l'elagage
+     s'en charge. Mais il existe un cas qu'aucun elagage ne peut
+     attraper : le morceau est encore sur le disque, le DJ l'a
+     seulement retire de sa collection rekordbox — et l'export XML,
+     lui, date d'avant. Liaison lit alors une photo perimee, sans
+     aucun moyen de le deviner.
+
+     Sauf un : sa date. Un export vieux de deux semaines sur une
+     collection qui bouge tous les jours, ca se dit.
+     ------------------------------------------------------------ */
+  const JOURS = 14;
+  for (const s of sources || []) {
+    if (s.kind !== 'rekordbox') continue;
+    let age = 0;
+    try { age = (Date.now() - fs.statSync(s.path).mtimeMs) / 86400000; } catch (e) { continue; }
+    if (age < JOURS) continue;
+    out.push({
+      cle: 'rekordbox-xml-perime', quand: 'biblio',
+      titre: 'Ton export rekordbox date de ' + Math.round(age) + ' jours',
+      texte: 'Un export XML est une photo, pas un lien : ce que tu as ajoute ou supprime ' +
+             'dans rekordbox depuis n\'y est pas. C\'est la raison la plus frequente d\'un ' +
+             'morceau propose alors que tu l\'as retire de ta collection.',
+      marche: [
+        'Dans rekordbox : Fichier > Exporter la collection au format xml',
+        'Ecrase le fichier precedent, au meme endroit',
+        'Liaison le relit tout seul dans les secondes qui suivent'
+      ],
+      repli: 'Tant que tu ne le refais pas, Liaison travaille sur la collection telle ' +
+             'qu\'elle etait a cette date.'
+    });
+    break;
   }
   return out;
 }
@@ -391,8 +432,23 @@ function parseITunes(file) {
       title: name || path.basename(p, path.extname(p)),
       artist: val('Artist') || val('Album Artist') || '',
       genre: val('Genre') || '',
+      /* ------------------------------------------------------------
+         Le champ BPM d'iTunes est une SAISIE, pas une mesure.
+
+         iTunes n'a jamais analyse un fichier audio de sa vie : ce
+         champ se remplit a la main, ou par un import d'il y a
+         quinze ans, ou par un logiciel tiers depuis longtemps
+         desinstalle. C'est de la que viennent les « 105 » sur des
+         morceaux a 130. On le lit — il vaut mieux que rien — mais
+         on le marque faible, et la mesure de Liaison le corrige
+         des qu'elle est sure d'elle.
+         ------------------------------------------------------------ */
       bpm: bpm > 0 ? Math.round(bpm * 10) / 10 : 0,
-      key: null,
+      bpmSrc: 'itunes',
+      /* iTunes n'a pas de champ tonalite du tout : d'ou les « ? »
+         partout chez un DJ dont c'est la seule source. C'est a
+         l'analyse de Liaison de la donner. */
+      key: null, keySrc: null,
       duration: (parseInt(val('Total Time'), 10) || 0) / 1000,
       /* iTunes sait deux choses que les logiciels DJ ignorent :
          combien de fois le morceau a ete joue, et la note du DJ. */
@@ -417,8 +473,22 @@ function merge(lists) {
       const k = lib.cleChemin(t.path);
       const prev = byPath.get(k);
       if (!prev) { byPath.set(k, t); continue; }
-      if (!prev.bpm && t.bpm) prev.bpm = t.bpm;
-      if (!prev.key && t.key) prev.key = t.key;
+      /* ------------------------------------------------------------
+         La fusion prenait le premier arrive, pas le mieux informe.
+
+         Un DJ qui a iTunes ET rekordbox voyait donc, selon l'ordre
+         de detection, le BPM saisi a la main d'iTunes gagner contre
+         la grille analysee de rekordbox — silencieusement, et
+         differemment d'un demarrage a l'autre. On compare
+         maintenant les provenances : la source la plus fiable
+         gagne, a valeur presente des deux cotes.
+         ------------------------------------------------------------ */
+      if (t.bpm > 0 && (!(prev.bpm > 0) || lib.fiabilite(t.bpmSrc) > lib.fiabilite(prev.bpmSrc))) {
+        prev.bpm = t.bpm; prev.bpmSrc = t.bpmSrc;
+      }
+      if (t.key && (!prev.key || lib.fiabilite(t.keySrc) > lib.fiabilite(prev.keySrc))) {
+        prev.key = t.key; prev.keySrc = t.keySrc;
+      }
       if (!prev.genre && t.genre) prev.genre = t.genre;
       /* L'annee etait la seule etiquette que la fusion oubliait. Sur
          un DJ qui a Serato ET un dossier de musique, Serato passe en

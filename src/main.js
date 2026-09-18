@@ -4,6 +4,7 @@ const path = require('path');
 const fs = require('fs');
 
 const engine = require('./engine');
+const repertoire = require('./repertoire');
 const libmod = require('./library');
 const lib = libmod;
 const locales = require('./locales');
@@ -132,11 +133,35 @@ let analyse = null;
 let landPlan = null, landAt = 0;
 
 /* ---- structure des morceaux : points de mix ---- */
-const structPool = new StructurePool(2);
+/* Trois fils, pas deux : le morceau en cours et les deux premieres
+   suggestions sont ce qui porte l'affichage, et ils doivent partir
+   ensemble. Le quatrieme fil, lui, se disputerait le disque avec
+   l'analyse de fond. */
+const structPool = new StructurePool(3);
+/* ------------------------------------------------------------
+   Le repertoire du DJ : le centre de gravite de SA bibliotheque,
+   et les portes qu'il a ouvertes ce soir en jouant.
+
+   Le centre est calcule a l'import, jamais par suggestion : c'est
+   un parcours complet de la bibliotheque.
+   ------------------------------------------------------------ */
+let repCentre = null;
+let repOuvertes = new Set();
 let structCache = null;
 const structures = new Map();      /* id du morceau -> structure */
 const structBusy = new Set();
 let structTimer = null;
+/* ------------------------------------------------------------
+   LA SANTE DES POINTS DE MIX.
+
+   L'analyse de fond compte ses echecs depuis longtemps et sait
+   dire au DJ « ffmpeg ne demarre pas chez toi ». Les points de mix,
+   eux, echouaient en silence : pas un compteur, pas un message,
+   juste un bandeau qui tourne. Un DJ chez qui le calcul de
+   structure ne marche pas ne pouvait meme pas le SAVOIR, donc
+   encore moins le raconter.
+   ------------------------------------------------------------ */
+const structSante = { reussis: 0, rates: 0, derniereErreur: null, prevenu: false };
 
 const feat = () => (license ? license.features() : TIERS.trial);
 
@@ -267,7 +292,12 @@ async function importLibrary(mode, p) {
   let tracks = [];
   if (mode === 'rekordbox') tracks = lib.parseRekordboxXML(p);
   else tracks = await lib.scanFolder(p, onProgress, { cache: SCAN() });
-  library = lib.finalize(tracks);
+  /* Meme regle qu'a la detection automatique : ce qui n'est plus sur
+     le disque ne doit pas se retrouver dans une proposition. */
+  const elague = lib.elaguerDisparus(tracks);
+  library = lib.finalize(elague.gardes);
+  repCentre = repertoire.centre(library);
+  elaguerStructures();
   indexChemins = null;
   rebuildClient();
   rebuildCrates([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
@@ -306,11 +336,32 @@ async function autoImport(preferKind) {
       catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
     }
     const merged = autolib.merge(lists);
+    /* ------------------------------------------------------------
+       Ce que le DJ a supprime, retire de la bibliotheque.
+
+       Les bases des logiciels de mix ne se vident pas toutes
+       seules — un export rekordbox est une photo prise un jour
+       donne, et iTunes garde une entree pour un fichier qu'on a
+       mis a la corbeille il y a six mois. Liaison lisait donc des
+       lignes qui ne designent plus rien, et les proposait toute la
+       nuit.
+
+       On verifie une fois, a l'import : si le volume repond et que
+       le fichier n'y est pas, il est parti. On le dit — un DJ qui
+       voit « 340 titres retires » comprend tout de suite que son
+       export date ; s'il n'en voyait rien, il croirait a un bug.
+       ------------------------------------------------------------ */
+    const elagage = libmod.elaguerDisparus(merged);
+    if (elagage.disparus.length)
+      send('status', { ok: true, msg: elagage.disparus.length +
+        ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retire' +
+        (elagage.disparus.length > 1 ? 's' : '') + ' : fichier introuvable' });
     /* On ne fait plus attendre le DJ : la base du logiciel donne
        deja titre, artiste, BPM et tonalite, et c'est tout ce qu'il
        faut pour proposer un enchainement. L'energie et le timbre
        arrivent ensuite, morceau par morceau, sans bloquer. */
-    library = libmod.finalize(merged);
+    library = libmod.finalize(elagage.gardes);
+    repCentre = repertoire.centre(library);
     indexChemins = null;
     /* La base du logiciel de mix est reecrite en pleine soiree des
        que le DJ ajoute un morceau, et cette relecture est
@@ -322,6 +373,8 @@ async function autoImport(preferKind) {
     elaguerStructures();
     send('library', { n: library.length, crates: crateList.length,
                       conseils: avis,
+                      retires: elagage.disparus.length,
+                      horsLigne: elagage.horsLigne,
                       sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
     startAnalysis();
 
@@ -478,8 +531,29 @@ function prioriserAnalyse() {
    le DJ a supprime depuis le lancement de l'app. */
 function elaguerStructures() {
   if (!library.length) return;
-  const vivants = new Set(library.map(t => t.id));
-  for (const id of Array.from(structures.keys())) if (!vivants.has(id)) structures.delete(id);
+  const vivants = new Map(library.map(t => [t.id, t]));
+  for (const id of Array.from(structures.keys())) {
+    const t = vivants.get(id);
+    if (!t) { structures.delete(id); continue; }
+    /* ------------------------------------------------------------
+       LE MORCEAU RETAGUE GARDAIT SA VIEILLE STRUCTURE.
+
+       ensureStructure() sort immediatement si structures.has(id), et
+       l'identifiant est calcule sur le CHEMIN : il ne change pas
+       quand le fichier, lui, change. Un DJ qui reconvertit un
+       morceau, le retague ou le remplace par une meilleure version
+       en pleine soiree gardait donc les points de mix de l'ancien
+       fichier jusqu'au redemarrage — des reperes justes pour un
+       fichier qui n'existe plus.
+
+       Le cache disque, lui, est bien indexe sur la date du fichier.
+       On lui demande donc la cle courante et on jette de la memoire
+       ce qui ne correspond plus.
+       ------------------------------------------------------------ */
+    if (!structCache || !t.path) continue;
+    const st = structures.get(id);
+    if (st && st.__cle && st.__cle !== structCache.key(t)) structures.delete(id);
+  }
 }
 
 function rebuildCrates(sources) {
@@ -514,21 +588,98 @@ function rebuildCrates(sources) {
    par morceau, dans un fil separe, et le resultat est garde sur
    disque tant que le fichier ne change pas.
    ============================================================ */
-function ensureStructure(track) {
+function ensureStructure(track, priorite) {
   if (!track || !track.path || structures.has(track.id) || structBusy.has(track.id)) return;
   if (structCache) {
     const hit = structCache.get(track);
-    if (hit) { structures.set(track.id, hit); return; }
+    if (hit) {
+      try { hit.__cle = structCache.key(track); } catch (e) {}
+      structures.set(track.id, hit);
+      return;
+    }
   }
   structBusy.add(track.id);
-  structPool.run(track.path, track.bpm)
+  structPool.run(track.path, track.bpm, { priorite: priorite || 0, cle: track.id })
     .then(r => {
+      /* La cle du fichier voyage avec la structure : c'est elle qui
+         permet a elaguerStructures() de reperer un fichier remplace. */
+      if (structCache && track.path) { try { r.__cle = structCache.key(track); } catch (e) {} }
       structures.set(track.id, r);
+      structSante.reussis++;
       if (structCache) { structCache.set(track, r); structCache.save(); }
       scheduleStructRefresh();
     })
-    .catch(() => { structures.set(track.id, { ok: false }); })
+    /* ------------------------------------------------------------
+       Un echec qui ne dit pas pourquoi est un bandeau « en cours de
+       calcul » a vie.
+
+       On rangeait { ok: false } sans un mot. planFor() rendait null,
+       et le widget — qui ne sait pas distinguer « pas encore » de
+       « jamais » — affichait « Points de mix en cours de calcul… »
+       pour le reste de la soiree. Le motif remonte maintenant
+       jusqu'a la ligne, en francais.
+       ------------------------------------------------------------ */
+    .catch(e => {
+      const msg = String((e && e.message) || '');
+      /* Un abandon volontaire — le morceau n'est plus propose — n'est
+         pas une panne : le compter ferait crier l'app un soir ou le
+         DJ enchaine vite. */
+      if (!/abandonnee/.test(msg)) {
+        structSante.rates++;
+        structSante.derniereErreur = msg.slice(0, 200);
+        annoncerPanneStructure();
+      }
+      structures.set(track.id, {
+        ok: false,
+        abandonne: /abandonnee/.test(msg),
+        note: /aucun fil/.test(msg) ? 'Points de mix indisponibles sur cette machine'
+            : /delai depasse/.test(msg) ? 'Fichier trop lent a lire — points de mix abandonnes'
+            : /abandonnee/.test(msg) ? null
+            : 'Liaison n\'a pas pu lire ce fichier'
+      });
+      scheduleStructRefresh();
+    })
     .then(() => { structBusy.delete(track.id); });
+}
+
+/* Vingt tentatives avant de crier : un fichier abime isole ne
+   prouve rien, vingt echecs sur vingt-cinq sont une panne. */
+function annoncerPanneStructure() {
+  if (structSante.prevenu) return;
+  const tentes = structSante.rates + structSante.reussis;
+  if (tentes < 20 || structSante.rates < tentes * 0.8) return;
+  structSante.prevenu = true;
+  send('conseils', [{
+    cle: 'structure-echoue', quand: 'deck',
+    titre: 'Liaison n\'arrive pas a calculer tes points de mix',
+    texte: structSante.derniereErreur
+      ? 'Derniere erreur : ' + structSante.derniereErreur
+      : 'Le calcul de structure echoue sur presque tous tes morceaux.',
+    marche: ['Lance « node build/diagnostic.js » et envoie la sortie',
+             'C\'est presque toujours ffmpeg qui manque ou qu\'un antivirus bloque',
+             'Contournement : demarre Liaison avec LIAISON_FFMPEG=/chemin/vers/ffmpeg'],
+    repli: 'Les suggestions continuent de fonctionner sans les points de mix.'
+  }]);
+}
+
+/* ------------------------------------------------------------
+   Ce qui n'est plus a l'ecran n'a plus besoin d'etre calcule.
+
+   Appele apres chaque construction de liste : la file du pool ne
+   garde que le morceau en cours et ce qui vient d'etre propose.
+   ------------------------------------------------------------ */
+function oublierStructuresInutiles(ids) {
+  const utiles = new Set(ids);
+  if (current) utiles.add(current.id);
+  try { structPool.oublier(job => utiles.has(job.cle)); } catch (e) {}
+}
+
+/* Un morceau dont la structure a ete abandonnee doit pouvoir etre
+   redemande : on efface la marque plutot que de la garder pour la
+   soiree. */
+function reprendreStructure(track) {
+  const st = structures.get(track.id);
+  if (st && st.ok === false && st.abandonne) structures.delete(track.id);
 }
 
 /* Une structure qui arrive change les reperes affiches : on renvoie
@@ -546,11 +697,34 @@ function scheduleStructRefresh() {
   }, 350);
 }
 
+/* ============================================================
+   LE PLAN, ET LES QUATRE ETATS QU'IL CONFONDAIT.
+
+   planFor() rendait null dans quatre situations qui n'ont rien a
+   voir : pas de morceau en cours, structure pas encore calculee,
+   structure calculee et ratee, et structure impossible sur cette
+   machine. Le widget, qui ne recoit qu'un null, affichait le meme
+   « Points de mix en cours de calcul… » dans les quatre cas — donc
+   une attente sans fin trois fois sur quatre.
+
+   Il rend maintenant un etat. Le bandeau dit ce qui se passe, et
+   quand ca ne marchera pas, il le dit au lieu de faire patienter.
+   ============================================================ */
 function planFor(nextTrack) {
   if (!current) return null;
   const a = structures.get(current.id), b = structures.get(nextTrack.id);
-  if (!a || !b || !a.ok || !b.ok) return null;
-  return engine.mixPlan(current, nextTrack, a, b);
+  /* Pas encore la : c'est la seule situation ou « en cours » est vrai. */
+  if (!a || !b) return { ok: false, etat: 'calcul' };
+  if (!a.ok || !b.ok) {
+    const rate = !a.ok ? a : b;
+    return { ok: false, etat: 'echec',
+             note: rate.note || 'Pas de reperes lisibles sur ce morceau' };
+  }
+  const plan = engine.mixPlan(current, nextTrack, a, b);
+  /* Un plan bati sur une structure deduite reste un plan — il porte
+     seulement sa reserve avec lui. */
+  if (plan && plan.ok) plan.estime = !!(a.estime || b.estime || a.partiel || b.partiel);
+  return plan;
 }
 
 /* ============================================================
@@ -961,7 +1135,8 @@ function computeSuggestions(limit) {
     /* quand l'heure de la cloture est venue, on la fait remonter —
        apres avoir verifie qu'elle est encore mixable depuis ce qui
        tourne, et en la remplacant si elle ne l'est plus */
-    epingle: clotureEpinglee(vivier, ph)
+    epingle: clotureEpinglee(vivier, ph),
+    repertoire: repCentre ? { centre: repCentre, ouvertes: repOuvertes } : null
   });
 
   /* On garde les propositions BRUTES : ce sont elles qui portent
@@ -978,14 +1153,34 @@ function computeSuggestions(limit) {
     } catch (e) { /* expliquer ne doit jamais empecher de jouer */ }
   }
 
+  oublierStructuresInutiles(bruts.map(r => r.track.id));
   return bruts.map(r => {
-    ensureStructure(r.track);
+    reprendreStructure(r.track);
+    ensureStructure(r.track, 1);
     const plan = planFor(r.track);
     const st = structures.get(r.track.id);
     return {
       title: r.track.title, artist: r.track.artist, key: r.track.key, bpm: r.track.bpm,
       energy: r.track.energy, id: r.track.id, path: r.track.path,
       total: r.total, transition: r.transition.n, why: r.transition.d,
+      /* ------------------------------------------------------------
+         Le BPM, la cle, et d'ou ils viennent.
+
+         Le widget recevait deja bpm et key ; il ne recevait pas de
+         quoi dire au DJ s'il lisait un beatgrid rekordbox ou une
+         estimation de Liaison. Sur la ligne la plus lue de la
+         cabine, c'est une difference qui compte : un tempo mesure
+         et sur se cale, un tempo estime se verifie au casque.
+         ------------------------------------------------------------ */
+      bpmSource: r.track.bpmSource || null,
+      keySource: r.track.keySource || null,
+      bpmSur: r.track.bpmSource !== 'liaison-incertain',
+      keySure: r.track.keySource !== 'liaison-incertain',
+      /* Entre par la porte elargie : le tempo ne se cale pas, il se coupe. */
+      horsFenetre: !!r.horsFenetre, fenetre: r.fenetre || null,
+      /* Hors de son repertoire : on le propose quand meme, mais on dit
+         pourquoi il est la — sinon le DJ croit a une erreur. */
+      horsRepertoire: r.repertoireDit || null,
       /* Sans tempo sur le morceau en cours, cette division rendait NaN
          et le widget affichait « -NaN % » sur les cinq lignes : la
          correction du « rien ne se cale » redonnait des propositions
@@ -1140,8 +1335,14 @@ function setCurrent(track, how) {
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
 
   current = track;
+  /* Il vient d'en jouer un : cette ecriture et cette famille cessent
+     d'etre etrangeres a son repertoire pour le reste de la soiree. */
+  try { repertoire.ouvrir(track, repOuvertes); } catch (e) {}
   commentIl = how || 'auto';
-  ensureStructure(track);
+  /* Priorite 2 : sans SA structure, aucun plan n'existe, quelle que
+     soit la qualite de celles des suggestions. */
+  reprendreStructure(track);
+  ensureStructure(track, 2);
   prioriserAnalyse();
   if (setlog) setlog.play(track, how || null);
   envoyerNow();
@@ -1552,6 +1753,10 @@ ipcMain.handle('analysis:state', () => {
     library: n,
     analyses: pret,
     offline: analyse ? analyse.compterAbsents() : 0,
+    /* Les points de mix ont maintenant leur propre bilan : l'ecran de
+       sante peut dire « 0 sur 43 » au lieu de ne rien dire. */
+    structure: { reussis: structSante.reussis, rates: structSante.rates,
+                 erreur: structSante.derniereErreur },
     restants: dernierRapport ? dernierRapport.restants : (analyse ? analyse.file.size : 0),
     fils: analyse ? analyse.workers.length : 0,
     sansFils: analyse ? !!analyse.sansFils : false,
@@ -1587,14 +1792,20 @@ ipcMain.handle('rescue', () => {
     structures: structures,
     recent: setlog && setlog.current ? setlog.current.played : [],
     bulle: bulleActive,
+    repertoire: repCentre ? { centre: repCentre, ouvertes: repOuvertes } : null,
     limit: 3
   }).map(r => {
-    ensureStructure(r.track);
+    reprendreStructure(r.track);
+    ensureStructure(r.track, 1);
     return {
       id: r.track.id, title: r.track.title, artist: r.track.artist,
       key: r.track.key, bpm: r.track.bpm, energy: r.track.energy, path: r.track.path,
       total: r.total, why: r.why, introBars: r.introBars, client: !!r.client,
       transition: r.transition.n,
+      bpmSource: r.track.bpmSource || null,
+      keySource: r.track.keySource || null,
+      bpmSur: r.track.bpmSource !== 'liaison-incertain',
+      keySure: r.track.keySource !== 'liaison-incertain',
       bulle: r.bulle, horsBulle: bulleActive ? !r.dansBulle : false,
       /* Sans tempo sur le morceau en cours, cette division rendait NaN
          et le widget affichait « -NaN % » sur les cinq lignes : la

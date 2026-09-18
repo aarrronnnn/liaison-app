@@ -360,10 +360,18 @@ class Gout {
     /* le crible suit l'ecart observe, avec de la marge au-dessus :
        on veut pouvoir proposer un peu plus loin que ce qu'il fait
        d'habitude, pas exactement ce qu'il fait */
-    /* Le repere de depart suit celui du moteur (0,35) et le plafond
-       laisse la place au DJ qui coupe plutot qu'il ne cale. */
+    /* Le repere de depart suit celui du moteur (0,03 depuis le
+       18 septembre 2026) et les bornes suivent ce qu'une platine
+       sait faire : 1 % pour le DJ de club qui ne quitte jamais la
+       grille, 12 % pour celui qui pousse le pitch au bout.
+
+       Le multiplicateur passe de 3,2 a 1,8 : a 35 % de repere il
+       fallait de la marge au-dessus de l'ecart observe pour que le
+       crible ne soit pas plus etroit que l'habitude du DJ ; a 3 %,
+       cette marge n'a plus lieu d'etre — c'est le repli par paliers
+       de engine.js qui joue ce role, et lui le DIT sur la ligne. */
     const marge = this.d.ecartTempo > 0
-      ? clamp(0.35 * (1 - f) + (this.d.ecartTempo * 3.2) * f, 0.06, 0.50)
+      ? clamp(0.03 * (1 - f) + (this.d.ecartTempo * 1.8) * f, 0.01, 0.12)
       : undefined;
     const variete = clamp(1 + (0.5 - this.d.repetitionArtiste * 2.4) * f * 0.8, 0.3, 1.4);
     /* ------------------------------------------------------------

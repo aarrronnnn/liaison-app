@@ -7,7 +7,21 @@
 const { spawn } = require('child_process');
 const path = require('path');
 
+/* ------------------------------------------------------------
+   Le ffmpeg qu'on utilise, et comment le remplacer.
+
+   Celui qui est livre avec l'app suffit partout — sauf quand il ne
+   suffit pas : un antivirus d'entreprise qui met le binaire en
+   quarantaine, un macOS qui refuse un executable non signe, un
+   banc d'essai qui tourne sur une autre architecture. Dans ces
+   cas-la il n'y avait aucune issue, et le symptome etait muet :
+   aucune tonalite, aucun tempo mesure, aucun point de mix, sur
+   toute la bibliotheque.
+
+   LIAISON_FFMPEG donne une porte de sortie en une ligne, et
+   build/diagnostic.js sait le dire. ------------------------------------------------------------ */
 function ffmpegPath() {
+  if (process.env.LIAISON_FFMPEG) return process.env.LIAISON_FFMPEG;
   try {
     let p = require('ffmpeg-static');
     if (p && p.path) p = p.path;

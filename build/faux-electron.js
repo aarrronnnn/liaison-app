@@ -11,7 +11,10 @@ const chain = new Proxy(function () {}, { get: () => chain, apply: () => chain }
 const app = Object.assign(new EventEmitter(), {
   getPath: (n) => path.join(os.tmpdir(), 'faux-liaison', n),
   getVersion: () => '0.9.6', getName: () => 'Liaison', setName: noop,
-  whenReady: () => new Promise(() => {}),          /* ne resout jamais : on s'arrete au chargement */
+  /* Par defaut on s'arrete au chargement : c'est ce que teste
+     demarrage.js. Un banc d'integration, lui, a besoin que l'app
+     s'initialise pour de vrai — LIAISON_TEST_PRET le lui permet. */
+  whenReady: () => (process.env.LIAISON_TEST_PRET ? Promise.resolve() : new Promise(() => {})),
   requestSingleInstanceLock: () => true, quit: noop, setLoginItemSettings: noop,
   getLoginItemSettings: () => ({}), setAppUserModelId: noop, isPackaged: false,
   dock: { hide: noop, show: noop }, commandLine: { appendSwitch: noop }
@@ -40,8 +43,17 @@ module.exports = {
                  createFromPath: (p) => ({ isEmpty: () => !require('fs').existsSync(p),
                                            resize: () => ({ __icone: p }) }),
                  createEmpty: () => ({ isEmpty: () => true, resize: () => ({}) }) },
-  dialog: { showOpenDialog: async () => ({ canceled: true }), showSaveDialog: async () => ({ canceled: true }),
-            showMessageBox: async () => ({ response: 0 }) },
+  /* Un banc d'essai a besoin de repondre au selecteur de fichiers :
+     sans ca, aucun test ne peut charger une bibliotheque et tout ce
+     qui suit l'import reste invérifiable. LIAISON_TEST_DOSSIER est
+     lu uniquement par ce faux Electron, jamais par l'app. */
+  dialog: {
+    showOpenDialog: async () => (process.env.LIAISON_TEST_DOSSIER
+      ? { canceled: false, filePaths: [process.env.LIAISON_TEST_DOSSIER] }
+      : { canceled: true, filePaths: [] }),
+    showSaveDialog: async () => ({ canceled: true }),
+    showMessageBox: async () => ({ response: 0 })
+  },
   shell: { openExternal: noop, showItemInFolder: noop },
   clipboard: { writeText: noop }, screen: { getPrimaryDisplay: () => ({ workArea: { x:0,y:0,width:1920,height:1080 } }),
             getAllDisplays: () => [] },

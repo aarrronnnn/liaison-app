@@ -149,6 +149,68 @@ function grid(env, bpm) {
 }
 
 /* ---------- structure ---------- */
+/* ============================================================
+   LES REPERES ESTIMES — parce que « rien » n'aide personne.
+
+   « Point de mix doit se calculer plus vite, moi de mon cote je le
+     vois toujours en chargement, je ne l'ai jamais vu fonctionner
+     correctement. »
+
+   Deux causes derriere ce symptome, et celle-ci est la plus
+   sournoise. structure() rendait ok:false des que la grille de
+   mesures ne se laissait pas lire — un morceau trop court, un live
+   sans grosse caisse nette, une chanson sans batterie du tout.
+   planFor() rendait alors null, et le widget affichait « en cours
+   de calcul… » POUR TOUJOURS, sur un calcul termine depuis
+   longtemps. Le DJ n'attendait pas : il attendait quelque chose qui
+   n'arriverait jamais.
+
+   Or un plan de mix n'a besoin que de cinq nombres : ou lancer, ou
+   la batterie arrive, ou elle part, le dernier moment utile, et la
+   duree. Quand on ne sait pas les MESURER, on sait encore les
+   DEDUIRE du tempo et de la duree : une intro de huit mesures, une
+   outro de huit mesures, c'est la convention de tout ce qui se
+   danse, et c'est infiniment plus utile qu'un bandeau vide.
+
+   On le dit, evidemment : le repere porte « estime », le widget
+   l'affiche en gris, et le DJ sait qu'il doit verifier au casque.
+   C'est la meme regle que pour la tonalite — une estimation
+   annoncee vaut mieux qu'un blanc.
+   ============================================================ */
+function structureEstimee(duration, bpm, raison) {
+  const b = (bpm && bpm >= 60) ? bpm : 124;
+  const beatSec = 60 / b;
+  const barSec = beatSec * 4;
+  /* Huit mesures d'intro et huit d'outro, bornees a un quart du
+     morceau : sur un edit de 1 min 30, seize mesures de convention
+     mangeraient la moitie du titre. */
+  const marge = Math.min(barSec * 8, Math.max(barSec, duration / 4));
+  const readyAt = Math.round(marge * 100) / 100;
+  const outPoint = Math.round(Math.max(readyAt + barSec, duration - marge) * 100) / 100;
+  const courbe = new Array(48).fill(0.5);
+  return {
+    ok: true,
+    estime: true,
+    raison: raison || 'grille non lisible',
+    duration: Math.round(duration * 10) / 10,
+    bpm: b,
+    beatSec: Math.round(beatSec * 1000) / 1000,
+    barSec: Math.round(barSec * 1000) / 1000,
+    phraseSec: Math.round(beatSec * 32 * 1000) / 1000,
+    firstBeat: 0,
+    inPoint: 0,
+    readyAt: readyAt,
+    outPoint: outPoint,
+    lastCall: Math.round(Math.max(0, duration - beatSec * 32) * 100) / 100,
+    introSec: Math.round(readyAt * 10) / 10,
+    outroSec: Math.round(Math.max(0, duration - outPoint) * 10) / 10,
+    introBars: Math.max(1, Math.round(readyAt / barSec)),
+    outroBars: Math.max(1, Math.round(Math.max(0, duration - outPoint) / barSec)),
+    breaks: [],
+    curve: courbe
+  };
+}
+
 async function structure(file, bpm) {
   const pcm = await decodeAll(file);
   const duration = pcm.length / SR;
@@ -169,24 +231,41 @@ async function structure(file, bpm) {
     for (let i = Math.floor(x); i < Math.floor(x + barF) && i < env.frames; i++) { s += kickSm[i]; n++; }
     bars.push({ f: x, t: toSec(x), k: n ? (s / n) / ref : 0 });
   }
-  if (bars.length < 8) {
-    return { ok: false, duration: duration, bpm: bpm, reason: 'morceau trop court pour une grille' };
-  }
+  /* Trop court pour une grille de mesures : un jingle, un virage, un
+     edit de trente secondes. On ne renonce plus — on estime. */
+  if (bars.length < 8) return structureEstimee(duration, bpm, 'morceau trop court pour une grille');
 
   const ON = 0.62, OFF = 0.34;
   const isOn = i => bars[i] && bars[i].k >= ON;
 
   /* intro : premiere mesure suivie de 4 mesures pleines */
-  let introBar = 0;
+  let introBar = 0, introVue = false;
   for (let i = 0; i < bars.length - 4; i++) {
-    if (isOn(i) && isOn(i + 1) && isOn(i + 2) && isOn(i + 3)) { introBar = i; break; }
+    if (isOn(i) && isOn(i + 1) && isOn(i + 2) && isOn(i + 3)) { introBar = i; introVue = true; break; }
   }
   /* outro : derniere mesure precedee de 4 mesures pleines */
-  let outroBar = bars.length - 1;
+  let outroBar = bars.length - 1, outroVue = false;
   for (let i = bars.length - 1; i >= 4; i--) {
-    if (isOn(i) && isOn(i - 1) && isOn(i - 2) && isOn(i - 3)) { outroBar = i + 1; break; }
+    if (isOn(i) && isOn(i - 1) && isOn(i - 2) && isOn(i - 3)) { outroBar = i + 1; outroVue = true; break; }
   }
   if (outroBar <= introBar) outroBar = bars.length - 1;
+
+  /* ------------------------------------------------------------
+     AUCUNE BATTERIE NETTE — et les reperes degeneres qu'on rendait.
+
+     Sur une chanson sans grosse caisse marquee — de la variete, un
+     live, une ballade au piano — aucune des deux boucles ne trouve
+     quatre mesures pleines. introBar restait a 0 et outroBar a la
+     derniere mesure : Liaison rendait alors ok:true avec « lance a
+     0:00, la batterie part a la fin du morceau », ce qui n'est pas
+     une estimation mais une affirmation fausse. mixPlan en tirait
+     un recouvrement absurde, et le DJ voyait des reperes qu'il ne
+     pouvait pas suivre.
+
+     On prefere l'estimation honnete : elle donne les memes huit
+     mesures de convention, et elle est ANNONCEE comme estimee.
+     ------------------------------------------------------------ */
+  if (!introVue && !outroVue) return structureEstimee(duration, bpm, 'pas de batterie nette');
 
   /* breaks : au moins 2 mesures creuses entre l'intro et l'outro */
   const breaks = [];
@@ -212,6 +291,9 @@ async function structure(file, bpm) {
 
   return {
     ok: true,
+    /* Un seul des deux bouts a ete vu : le plan reste utilisable,
+       mais le DJ doit savoir que la moitie est deduite. */
+    partiel: !introVue || !outroVue,
     duration: Math.round(duration * 10) / 10,
     bpm: bpm,
     beatSec: Math.round(beatSec * 1000) / 1000,
@@ -314,6 +396,9 @@ class StructureCache {
    L'analyse bloque environ deux secondes de calcul : hors du fil
    principal, sinon le widget se fige en pleine soiree.
    ============================================================ */
+/* Deux changements de morceau d'avance, et pas plus. */
+const PLAFOND_FILE = 24;
+
 class StructurePool {
   constructor(size) {
     this.size = Math.max(1, size || 2);
@@ -382,6 +467,45 @@ class StructurePool {
     if (!w && this.workers.length < this.size) w = this._spawn();
     return w;
   }
+  /* ------------------------------------------------------------
+     LA FILE QUI NE DESSERVAIT PLUS PERSONNE.
+
+     Deuxieme cause du « toujours en chargement ». ensureStructure()
+     demande une structure pour le morceau en cours ET pour chacune
+     des cinq a sept suggestions, a CHAQUE changement de titre. Deux
+     fils, une file premier-arrive-premier-servi, et des morceaux de
+     six minutes a decoder depuis un SSD externe : au troisieme
+     changement de titre, la file contient une vingtaine de travaux
+     dont dix-huit portent sur des suggestions qui ne sont plus
+     affichees, et le morceau EN COURS — celui dont depend CHAQUE
+     plan, puisque mixPlan a besoin des deux structures — attend
+     derriere eux.
+
+     Trois corrections, qui vont ensemble :
+
+       — une PRIORITE. Le morceau en cours passe devant tout le
+         monde. Sans sa structure, aucun plan n'existe : le calculer
+         en dernier, c'est garantir qu'aucun plan n'apparait.
+       — un OUBLI. Ce qui n'est plus ni joue ni propose sort de la
+         file. Le travail n'a pas ete fait, il n'avait plus lieu
+         d'etre.
+       — un PLAFOND. Au-dela, on jette les moins prioritaires : une
+         file qui grandit plus vite qu'elle ne se vide ne rattrapera
+         jamais son retard, elle ne fait que retarder l'utile.
+     ------------------------------------------------------------ */
+  /** Retire de la file d'attente tout ce que garder() ne retient pas. */
+  oublier(garder) {
+    if (!this.queue.length) return 0;
+    const avant = this.queue.length;
+    const restants = [];
+    for (const job of this.queue) {
+      if (garder(job)) restants.push(job);
+      else job.reject(new Error('structure abandonnee : le morceau n\'est plus propose'));
+    }
+    this.queue = restants;
+    return avant - this.queue.length;
+  }
+
   _drain() {
     while (this.queue.length) {
       const w = this._free();
@@ -415,7 +539,12 @@ class StructurePool {
         }
         return;
       }
-      const job = this.queue.shift();
+      /* Le plus prioritaire d'abord, et a priorite egale le plus
+         ancien : la file reste equitable sans devenir arbitraire. */
+      let k = 0;
+      for (let i = 1; i < this.queue.length; i++)
+        if (this.queue[i].priorite > this.queue[k].priorite) k = i;
+      const job = this.queue.splice(k, 1)[0];
       w.busy = true;
       w.jobId = job.id;                      /* pour rejeter si le fil meurt */
       try { w.ref(); } catch (e) {}          /* le fil retient le process tant qu'il calcule */
@@ -423,14 +552,31 @@ class StructurePool {
       w.postMessage({ id: job.id, path: job.path, bpm: job.bpm });
     }
   }
-  run(file, bpm) {
+  /**
+   * @param {string} file
+   * @param {number} bpm
+   * @param {object} opt  { priorite: 2 = le morceau en cours, 1 = une
+   *                        suggestion, 0 = le reste ; cle : de quoi
+   *                        reconnaitre ce travail dans oublier() }
+   */
+  run(file, bpm, opt) {
+    opt = opt || {};
     return new Promise((resolve, reject) => {
       const id = ++this.seq;
-      this.queue.push({ id: id, path: file, bpm: bpm, resolve: resolve, reject: reject });
+      this.queue.push({ id: id, path: file, bpm: bpm, cle: opt.cle == null ? file : opt.cle,
+                        priorite: opt.priorite || 0, resolve: resolve, reject: reject });
+      /* Le plafond : on ne garde que ce qu'on a une chance de servir
+         avant que le DJ ait change deux fois de morceau. */
+      if (this.queue.length > PLAFOND_FILE) {
+        this.queue.sort((a, b) => (b.priorite - a.priorite) || (a.id - b.id));
+        for (const perdu of this.queue.slice(PLAFOND_FILE))
+          perdu.reject(new Error('structure abandonnee : file saturee'));
+        this.queue.length = PLAFOND_FILE;
+      }
       this._drain();
     });
   }
   close() { for (const w of this.workers) { try { w.terminate(); } catch (e) {} } this.workers = []; }
 }
 
-module.exports = { structure, StructureCache, StructurePool, decodeAll, envelopes, grid };
+module.exports = { structure, structureEstimee, StructureCache, StructurePool, decodeAll, envelopes, grid };

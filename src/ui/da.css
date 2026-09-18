@@ -17,6 +17,14 @@
   --paper:#F2EFE6; --paper2:#E7E3D7; --ink:#141518; --ink2:#5E6167; --ink3:#8E9198; --rule:#D5D0C2;
   /* cabine */
   --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#63666D;
+  /* --dim : le ton le plus efface de la palette, pour une mention qui
+     doit etre lisible sans jamais attirer l'oeil — « hors bulle »,
+     « rare dans ta bibliotheque », « estime ». Le widget s'en servait
+     depuis des mois SANS QU'IL EXISTE : var(--dim) retombait alors sur
+     la couleur heritee, c'est-a-dire le creme plein. Les mentions
+     ecrites pour etre discretes s'affichaient donc aussi fort qu'un
+     titre, ce qui est exactement l'inverse de leur role. */
+  --dim:#4A4D54;
   --wire:#26282E; --wire2:#33363E;
   /* drapeau */
   --blue:#1F35D8; --blueLit:#4459FF; --red:#E8402A; --redLit:#FF5A42;
@@ -43,6 +51,7 @@
 [data-theme="jour"]{
   --deep:#F2EFE6; --deep2:#E9E5DA; --deep3:#DFDACB;
   --cream:#141518; --cream2:#4E5157; --cream3:#6E7178;
+  --dim:#9A9DA4;
   --wire:#D5D0C2; --wire2:#BFB9A8;
   --blueLit:#1F35D8; --redLit:#C4321F;
 }

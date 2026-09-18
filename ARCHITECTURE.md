@@ -52,10 +52,17 @@ travail. Les enfreindre est toujours une regression.
 2. **Une liste vide est un bug.** Si le moteur ne propose rien,
    l'utilisateur doit voir **pourquoi**, nomme et en francais
    (`raisonDuVide()` dans `main.js`). Jamais un ecran muet.
-3. **Notre mesure fait foi.** Les tags de rekordbox/iTunes/Serato sont
-   des indices, pas la verite. Quand notre analyse est sure d'elle,
-   c'est elle qui gagne (§8). Un DJ qui n'a que le titre du morceau
-   doit obtenir le meme service qu'un DJ qui a tout tague.
+3. **La source la plus fiable fait foi** (regle revue le 18/09/2026 ;
+   elle disait « notre mesure fait foi » et elle ecrasait des grilles
+   rekordbox justes). Un BPM ou une tonalite porte desormais sa
+   PROVENANCE (`bpmSrc` / `keySrc`) et un rang de fiabilite
+   (`library.fiabilite`) : rekordbox, Serato, Traktor et VirtualDJ
+   valent 3 — ils ont analyse le fichier pour poser une grille sur
+   laquelle le DJ mixe, on ne les contredit jamais, on signale
+   seulement le desaccord. Notre mesure vaut 2. iTunes et les tags ID3
+   valent 1 : ce sont des SAISIES, et notre mesure les corrige des
+   qu'elle est sure. Un DJ qui n'a que le titre du morceau doit
+   obtenir le meme service qu'un DJ qui a tout tague (§8.3).
 4. **Rien ne bloque le fil principal.** L'analyse audio et l'analyse de
    structure tournent dans des `worker_threads`. Le widget doit
    repondre pendant qu'une bibliotheque de 22 000 titres s'analyse.
@@ -170,6 +177,7 @@ C'est le coeur. Neuf etapes, du materiel jusqu'au widget.
 | `engine.js` | Le moteur de notation. Aucune dependance Electron : testable seul, partage avec l'UI. |
 | `plancher.js` | Ce que le morceau FAIT a la salle (remplit / vide la piste). Ne du temoin Sardines -> Aznavour. |
 | `parente.js` | Est-ce que ces deux morceaux vivent dans le meme monde ? Table de proximite entre familles. Ne du temoin Informer -> L'amour l'amour l'amour. |
+| `repertoire.js` | Le centre de gravite de SA bibliotheque — ecriture des titres, familles de genres — et ce qui n'en fait pas partie. Aucune liste de pays nulle part (§7.8). |
 | `genres.js` | 28 familles de genres avec synonymes. Traduit les tags reels vers le vocabulaire des packs. |
 | `bulle.js` | Mode « reste dans ce style » : un morceau d'ancrage fige auquel tout est compare. |
 | `epoque.js` | Fraicheur et perissabilite : « vieux » n'est pas « demode ». |
@@ -270,23 +278,39 @@ suggest(cur, library, opt) -> [{ track, score, why, ... }]
 / `down`), `mode` (`crowd` / `trend`), `bulle`, `banned`, `trends`,
 `wanted`, `marge`, `limit`.
 
-### 7.2 Le crible du tempo
+### 7.2 La fenetre de tempo
 
 Avant de noter, on retire ce qui ne peut pas se caler.
 
 ```js
-const MARGE_CRIBLE = 0.35;                       // +/- 35 % par defaut
-passeLeCrible(bpmRef, bpm, marge, doubleOk)      // marge bornee a [0.06, 0.50]
+const FENETRE = 0.03;                            // +/- 3 % par defaut
+const PALIERS = [0.06, 0.10, null];              // le repli, dans l'ordre
+passeLeCrible(bpmRef, bpm, marge, doubleOk)      // marge bornee a [0.01, 0.12]
 ```
 
-Le crible accepte le **double-temps** (`doubleAdmis`) seulement entre
-familles ou c'est reellement mixe (`FAM_DOUBLE`). Un 70 BPM et un
-140 BPM ne sont pas voisins entre une chanson et un morceau de dnb.
+**Histoire de ce nombre, parce qu'il a fait l'aller-retour.** Il valait
+12 %, il est passe a 35 % le 14/09/2026 (« Soprano Cosmo doit proposer
+Macklemore » : un DJ de mariage COUPE de 100 a 146), puis a 3 % le
+18/09/2026. Les deux decisions sont justes et ne repondent pas a la
+meme question : 35 % repondait a « que peut-on PROPOSER », 3 % repond a
+« que peut-on CALER ». Un DJ qui beatmatch ne sort pas de la plage de
+pitch de sa platine.
 
-Pourquoi 35 % et pas 12 % : mesure sur une bibliotheque de mariage de
-6 000 titres, 300 transitions — **0 nouvelle entree dans le top 5**.
-La marge large ne degrade rien et sauve les cas ou le tempo de
-reference est faux.
+La coupure n'a pas disparu, elle est devenue un **repli explicite** :
+quand moins de propositions que demande passent la fenetre, `suggest()`
+la rouvre par paliers et marque `horsFenetre: true` sur tout ce qui
+entre par la porte elargie — le widget affiche alors **HORS FENETRE**
+en rouge. Le DJ voit ce qu'il voyait avant, en sachant que celui-la se
+coupe au lieu de se caler.
+
+Le **demi-temps et le double** ne sont plus admis par defaut : ils sont
+musicalement vrais et illisibles en cabine, maintenant que le BPM est
+la chose la plus visible de chaque ligne. `doubleAdmis` / `FAM_DOUBLE`
+restent, derriere `opt.demiDouble === true`.
+
+Le bareme `tempoScore` est recalibre sur la meme echelle : 100 sous
+0,5 %, 85 a 1,5 %, 60 a 3 %, 6 a 6 %. L'ancien rendait 76 a 3 % et 37 a
+6 %, ce qui laissait un titre injouable finir troisieme.
 
 ### 7.3 Les onze axes
 
@@ -305,8 +329,14 @@ const wFr    = 0.14 * m('fr') * (B ? 0.4 : 1);             // fraicheur (epoque.
 const wAf    = 0.12 * m('af');                             // affinites du DJ
 const wPl    = 0.17 * m('pl');                             // plancher (plancher.js)
 const wPa    = 0.24 * m('pa') * (B ? 0.3 : 1);             // parente (parente.js)
-const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa;
+const wRp    = REP ? 0.18 : 0;                             // repertoire (repertoire.js)
+const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa + wRp;
 ```
+
+`wRp` est le seul poids qui n'est **pas** appris par `gout.js`, et
+c'est volontaire : les autres disent une PREFERENCE du DJ, celui-ci dit
+un FAIT sur sa bibliotheque. L'adaptation est deja dans la mesure
+elle-meme (§7.8).
 
 `B` = mode bulle actif. En bulle, l'ancre prend 34 % et tout le reste
 s'efface proportionnellement.
@@ -314,6 +344,41 @@ s'efface proportionnellement.
 **Priorite demandee par les DJs : BPM d'abord, puis le style, puis la
 roue de Camelot.** C'est exactement ce que disent les poids —
 tempo 0,30 ; parente + plancher = 0,41 ; harmonie 0,16.
+
+### 7.8 `repertoire.js` — le corps etranger
+
+Ne du retour : « certains DJ ont des sons bizarres d'autres pays dans
+la bibliotheque, ceux-la on va eviter de les proposer ».
+
+**Ce qu'on ne fait pas** : aucune liste de langues, de pays ou de
+genres « exotiques ». Le repertoire normal d'un DJ marocain a Bruxelles
+est le corps etranger d'un DJ de mariage en Bourgogne, et l'inverse est
+tout aussi vrai. Une liste ecrite ici trancherait pour les deux et se
+tromperait au moins une fois sur deux.
+
+**Ce qu'on fait** : on mesure le CENTRE DE GRAVITE de SA bibliotheque,
+sur deux axes lisibles sans rien deviner —
+
+- l'**ECRITURE** des titres et des artistes, comptee caractere par
+  caractere (latin, cyrillique, arabe, han, kana, hangul, grec, hebreu,
+  devanagari, thai…). Une ecriture sous 2 % de la bibliotheque est un
+  corps etranger ;
+- la **FAMILLE DE GENRE** dominante, via `genres.famillesDe` — qui rend
+  une **Map**, pas un tableau ; la confondre ne plante pas, ca rend
+  l'axe muet en silence (cf. §16).
+
+Le centre est calcule **une fois par import** dans `main.js`
+(`repCentre`), jamais par suggestion : c'est un parcours complet.
+
+Le morceau hors repertoire est **relegue, jamais ecarte** — il sort en
+fin de liste avec sa raison affichee (« rare dans ta bibliotheque »), et
+il remonte au rang normal des que le DJ en joue un : `repertoire.ouvrir()`
+ouvre la porte de cette ecriture et de cette famille pour la soiree
+(`repOuvertes`). Sous 300 titres, l'axe se tait : une petite
+bibliotheque n'a pas de centre de gravite, elle n'a que des exceptions.
+
+Banc : `build/test-repertoire.js`, dont le cas 5 est la preuve par le
+miroir — chez un DJ russe, c'est la chanson francaise qui est etrangere.
 
 ### 7.4 Les inconnus
 
@@ -433,27 +498,55 @@ const SUR_TONALITE = 0.72;
 Calibrage : des WAV synthetises avec ffmpeg donnent 0,57-0,70 sur des
 battements nets, et un bruit sans battement culmine a 0,47. D'ou 0,55.
 
-Dans `_resultat` :
+Dans **`_arbitrer(t, patch)`** — et non plus dans `_resultat` : l'arbitrage
+y vivait, il ne tournait donc QUE sur une analyse fraiche. Chez un DJ qui
+utilise deja Liaison, la quasi-totalite des morceaux arrive par le cache :
+corriger la regle ne changeait strictement rien chez lui. `_arbitrer` est
+appele aux **trois** points de rencontre — cache au chargement, cache a
+l'ajout, resultat d'un fil — et il est idempotent.
 
 ```js
-const surTempo = patch.mBpm > 40 && patch.mBpmConf >= SUR_TEMPO;
-if (surTempo) {
-  const memeRythme = avant > 0 && !desaccordTempo(avant, mesure);
-  const memeOctave = memeRythme && Math.abs(mesure - avant) / avant < 0.06;
-  if (memeRythme && !memeOctave) t.bpmSource = 'tag';   // sa grille est calee sur 140
-  else { t.bpm = mesure; t.bpmSource = 'liaison'; /* bpmTag garde si desaccord franc */ }
-}
+const FORT = 3;
+const rangBpm = t.bpm > 0 ? lib.fiabilite(t.bpmSrc) : 0;   // 3 fort / 2 nous / 1 saisie
+
+if (!rangBpm)            { /* rien : on comble, 'liaison' ou 'liaison-incertain' */ }
+else if (rangBpm >= FORT){ /* grille rekordbox & co : intouchable, on pose bpmDoute */ }
+else if (surTempo)       { /* saisie iTunes/ID3 contre mesure sure : la mesure gagne */ }
+else                     { /* rien de sur en face : on garde la saisie */ }
 ```
 
-**L'exception d'octave est essentielle** : si le DJ a tague 140 et que
-nous mesurons 70, c'est le meme rythme et sa grille est calee sur 140 —
-on garde 140. Sans cette exception, notre mesure cassait des grilles
-justes.
+**Le cas Mamma Mia** : 105 dans un champ iTunes contre 130 mesures avec
+confiance — la mesure gagne, `bpmTag` garde 105. Si c'etait rekordbox qui
+disait 105, on garderait 105 et on poserait `bpmDoute` : le DJ mixe sur SA
+grille, le contredire en cabine ne sert a rien.
 
-Etats possibles portes par la piste : `bpmSource` (`tag` / `liaison` /
-`liaison-incertain`), `bpmTag` (l'ancien tag garde en cas de desaccord
-franc), `bpmCorrige`, `bpmDeduit`. L'interface les affiche en clair
-(« tempo mesure par Liaison »).
+**L'exception d'octave reste** : si le DJ a tague 140 et que nous mesurons
+70, c'est le meme rythme et sa grille est calee sur 140 — on garde 140.
+Sans elle, notre mesure cassait des grilles justes.
+
+Etats possibles portes par la piste : `bpmSource` (la provenance —
+`rekordbox`, `serato`, `traktor`, `virtualdj`, `itunes`, `tag`,
+`liaison`, `liaison-incertain`), `bpmTag` (l'ancien tag garde en cas de
+desaccord franc), `bpmCorrige`, `bpmDeduit`, `bpmDoute` + `bpmMesure`
+(desaccord signale mais NON applique, source forte). Idem cote tonalite.
+L'interface les affiche en clair, et le widget grise un BPM ou une cle
+marques `liaison-incertain`.
+
+**La tonalite : combler et contredire sont deux questions.** Le seuil
+severe de 0,72 servait aux deux, d'ou une roue de Camelot vide de bout
+en bout chez un DJ dont la seule source est iTunes — qui n'a aucun champ
+tonalite. Depuis le 18/09/2026 : on **comble** des que la mesure rend
+quelque chose (affiche « 8A ? » en gris), on ne **contredit** qu'avec le
+seuil severe, et seulement contre une source faible.
+
+**Et une partie des « ? » ne venait pas d'un tag manquant mais d'un tag
+qu'on ne savait pas lire.** `toCamelot` comprend desormais la notation
+ouverte de Mixed In Key (`1m` = 8A, `12d` = 7B), les suffixes d'energie
+(`8A - Energy 7`), les formes longues et espacees (`A minor`, `Db Major`,
+`A-Flat Minor`, `A moll`) et le zero devant (`08a`). 35 ecritures
+couvertes, banc dans `build/test-fenetre.js` et `build/test-maj-biblio.js`.
+`VERSION_TAGS` est passe a **3** pour que les caches existants soient
+relus : sans ca, la correction n'atteindrait aucun DJ deja installe.
 
 ### 8.4 Ne jamais echouer en silence
 
@@ -655,7 +748,7 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 
 ## 13. Les tests
 
-`npm run verifier` enchaine dix-huit suites. Toutes doivent passer.
+`npm run verifier` enchaine vingt-deux suites. Toutes doivent passer.
 
 | Suite | Ce qu'elle protege |
 |---|---|
@@ -674,6 +767,10 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 | `test-parente` | Informer contre L'amour l'amour l'amour |
 | `test-tags` | « notre mesure fait foi », y compris l'exception d'octave |
 | `test-analyse` | ce que Liaison mesure lui-meme, sur de l'audio synthetise a tempo et tonalite connus — et le cache qui doit oublier quand la mesure change |
+| `test-fenetre` | la fenetre de tempo a 3 %, son repli par paliers, l'elagage des disparus, la hierarchie des sources — et que le CACHE passe lui aussi par l'arbitrage |
+| `test-repertoire` | le corps etranger relegue sans jamais etre ecarte, mesure sur SA bibliotheque (cas 5 : la preuve par le miroir) |
+| `test-maj-biblio` | ce que le DJ change — retag, reanalyse rekordbox, fichier repare — remonte jusqu'a Liaison |
+| `test-points-de-mix` | **banc d'integration** : demarre main.js pour de vrai, importe des morceaux fabriques a la volee, declare un titre sur le deck et attend le plan. Le seul banc qui teste l'ASSEMBLAGE et non les pieces |
 | `test-detection` | le morceau qui tourne doit s'afficher, meme hors bibliotheque |
 | `test-rekordbox` | contient aussi le temoin des accents echappes par `lsof` (§6bis) |
 | `test-widget` | le rendu reel du widget (Playwright) |
@@ -687,6 +784,20 @@ Ce sont ces cas-la qui ne doivent jamais etre assouplis.
 dans `test-licence-ui.js` et cassait `npm run verifier` sur toute autre
 machine, y compris le runner. Resoudre les modules, jamais coder un
 chemin en dur.
+
+**Piege deja tombe, deuxieme** : pendant des mois, chaque piece des
+points de mix avait son banc — `structure()`, `mixPlan()`, le pool de
+fils — et AUCUN ne verifiait qu'un plan finissait par arriver dans la
+liste. Chaque piece marchait, l'assemblage non : le DJ voyait « points de
+mix en cours de calcul… » toute la soiree. C'est ce qu'a corrige
+`test-points-de-mix.js`. Quand un symptome traverse plusieurs modules, le
+banc doit le traverser aussi.
+
+**`LIAISON_FFMPEG` / `LIAISON_FFPROBE`** remplacent les binaires livres.
+Utile sur un banc qui tourne sur une autre architecture, et surtout comme
+contournement chez un DJ dont l'antivirus met ffmpeg en quarantaine —
+symptome : aucune tonalite, aucun tempo mesure, aucun point de mix, sur
+toute la bibliotheque.
 
 ---
 
@@ -805,7 +916,11 @@ prix tout en facturant le nouveau.
 | « le morceau en cours n'est pas detecte » | `src/sources/` §6 et `src/exterieur.js`, puis `build/diagnostic.js` et `build/sonde-decks.js` |
 | « rien ne s'affiche alors que le son tourne » | `src/exterieur.js`, puis `adopterFichier()` / `adopterTexte()` dans `main.js` |
 | « l'energie / la tonalite / le tempo sont faux » | §8.2bis, puis `build/test-analyse.js` — et **monter `VERSION_MESURE`** |
-| « les BPM sont faux ou a zero » | `analysis.js` et `analyze.js` §8 |
+| « les BPM sont faux ou a zero » | `analysis.js` (§8.3, `_arbitrer`) et `analyze.js` §8 |
+| « il n'affiche jamais la cle » | `toCamelot` dans `library.js` §8.3, puis le seuil de comblement dans `_arbitrer` |
+| « les points de mix restent en chargement » | `planFor()` dans `main.js`, `structureEstimee()` dans `structure.js`, puis lancer `build/test-points-de-mix.js` |
+| « il me propose des morceaux que j'ai supprimes » | `elaguerDisparus()` dans `library.js`, `jouable()` dans `engine.js`, et le conseil `rekordbox-xml-perime` |
+| « il me propose des trucs qui n'ont rien a voir » | `repertoire.js` §7.8 |
 | « l'app ne dit rien quand ca rate » | `raisonDuVide()` et `panne()` §8.4 et §10.5 |
 | « l'interface affiche n'importe quoi » | `envoyerNow()` §10.3, puis `widget.html` |
 | « la licence / le paiement » | `license.js` §12, puis `liaison-web/api/` §15 |

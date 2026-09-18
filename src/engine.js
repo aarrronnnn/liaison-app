@@ -5,6 +5,12 @@
    ============================================================ */
 
 const genres = require('./genres');
+const repertoire = require('./repertoire');
+/* En dessous de cette note, le morceau n'appartient pas au
+   repertoire du DJ et passe en fin de liste. Declare ici, au niveau
+   du module : place plus bas dans suggest(), il tombait dans la zone
+   morte du const et jetait des le premier candidat note. */
+const RELEGUE = 40;
 const bulle = require('./bulle');
 const epoque = require('./epoque');
 const affinites = require('./affinites');
@@ -72,8 +78,31 @@ function doubleAdmis(a, b) {
   return true;
 }
 
+/* ============================================================
+   LE BAREME DE TEMPO, RECALIBRE SUR LA PLATINE.
+
+   « Quand on mixe un son a 128 il faut qu'on soit autour de ce
+     BPM pour pouvoir bien mixer deux musiques ensemble. »
+
+   L'ancien bareme repondait 76 sur 100 a 3 % d'ecart et 37 a
+   6 % — a 128 BPM, 37 points pour un morceau a 120. Sur l'axe le
+   plus lourd du moteur, ca laissait un titre injouable finir
+   troisieme des qu'il gagnait ailleurs. Le DJ, lui, ne peut pas
+   caler ca : au-dela de trois ou quatre pour cent le pitch
+   s'entend, et au-dela de six on ne mixe plus, on coupe.
+
+   Le nouveau bareme colle a la plage de pitch d'une platine :
+   100 dans le demi-pour-cent, encore 85 a 1,5 %, 60 a 3 %, et une
+   chute nette ensuite. A 6 % on est a 6 sur 100 : le morceau
+   existe encore dans la liste, il n'y gagne plus rien.
+
+   Le demi et le double ne sont plus admis par defaut. Ils sont
+   musicalement vrais, mais ils font remonter un morceau a 64 BPM
+   dans une liste calee sur 128, et en cabine ca se lit comme une
+   erreur. doubleOk doit maintenant etre demande explicitement.
+   ============================================================ */
 function tempoScore(a, b, doubleOk) {
-  const rapports = doubleOk === false ? [1] : [1, 2, 0.5];
+  const rapports = doubleOk === true ? [1, 2, 0.5] : [1];
   let best = Infinity, ratio = 1;
   for (const r of rapports) {
     const d = Math.abs(b * r - a);
@@ -81,10 +110,11 @@ function tempoScore(a, b, doubleOk) {
   }
   const pct = (best / a) * 100;
   let s;
-  if (pct <= 0.4) s = 100;
-  else if (pct <= 3) s = 100 - (pct - 0.4) * 9;
-  else if (pct <= 6) s = 76 - (pct - 3) * 13;
-  else s = Math.max(8, 37 - (pct - 6) * 7);
+  if (pct <= 0.5) s = 100;
+  else if (pct <= 1.5) s = 100 - (pct - 0.5) * 15;
+  else if (pct <= 3) s = 85 - (pct - 1.5) * 16.7;
+  else if (pct <= 6) s = 60 - (pct - 3) * 18;
+  else s = Math.max(2, 6 - (pct - 6) * 0.5);
   return { s, pct, ratio, delta: b * ratio - a };
 }
 
@@ -382,17 +412,47 @@ function penaliteVariete(t, M, opt) {
    rapide, parce que la liste se remplit sans avoir a rouvrir la
    porte aux morceaux sans tempo.
    ------------------------------------------------------------ */
-const MARGE_CRIBLE = 0.35;
-/* La marge reste reglable et apprise. Le plancher a 6 % sert au DJ
-   qui ne sort jamais de deux pour cent ; le plafond a 50 % borne
-   l'absurde, pas le metier. */
+/* ============================================================
+   LA FENETRE, REFERMEE A 3 % LE 18 SEPTEMBRE 2026.
+
+   Elle avait ete ouverte a 35 % pour une raison serieuse — un DJ
+   de mariage coupe de 100 a 146 sans y penser — et cette raison
+   reste vraie. Mais elle repondait a la question « que peut-on
+   PROPOSER », et la plainte porte sur une autre : « que peut-on
+   CALER ». Un DJ qui mixe deux morceaux ensemble, beatmatch et
+   recouvrement compris, ne sort pas de la plage de pitch de sa
+   platine.
+
+   La fenetre par defaut est donc de 3 %. A 128 BPM, ca donne
+   124,2 - 131,8 : ce qu'on cale sans que personne n'entende que le
+   morceau a bouge.
+
+   La coupure n'a pas disparu pour autant, elle est devenue un
+   REPLI EXPLICITE. Quand moins de propositions que demande passent
+   la fenetre, suggest() la rouvre par paliers — 3, puis 6, puis 10,
+   puis sans limite — et marque « HORS FENETRE » tout ce qui entre
+   par la porte elargie. Le DJ voit alors ce qu'il voyait avant,
+   mais il sait en le lisant que celui-la, il devra le couper.
+
+   Le demi et le double sortent du crible pour la meme raison que
+   du bareme : ils sont vrais et illisibles.
+   ============================================================ */
+const FENETRE = 0.03;
+/* Les paliers du repli, dans l'ordre. Le dernier — null — veut
+   dire « plus de crible du tout », pour que le widget ne soit
+   jamais vide quand la bibliotheque est maigre. */
+const PALIERS = [0.06, 0.10, null];
+/* La marge reste reglable et apprise. Le plancher a 1 % sert au DJ
+   de club qui ne sort jamais de la grille ; le plafond a 12 % borne
+   ce qu'une platine sait faire, pas ce qu'un DJ ose faire. */
 function passeLeCrible(bpmRef, bpm, marge, doubleOk) {
   if (!(bpm > 0)) return false;
-  const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.06, Math.min(0.50, marge)) : MARGE_CRIBLE;
+  if (marge === null) return true;                 /* repli ultime : plus de crible */
+  const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.01, Math.min(0.12, marge)) : FENETRE;
   /* Le crible suit la meme regle que la note : s'il laissait passer
      un rapport que tempoScore refuse ensuite, le candidat sortirait
      avec une note de tempo catastrophique au lieu de ne pas sortir. */
-  const rapports = doubleOk === false ? [1] : [1, 2, 0.5];
+  const rapports = doubleOk === true ? [1, 2, 0.5] : [1];
   for (const r of rapports) {
     if (Math.abs(bpm * r - bpmRef) / bpmRef <= M) return true;
   }
@@ -608,7 +668,24 @@ function suggest(cur, library, opt) {
      et en mieux, puisqu'il compare a un ancrage fige.
      ------------------------------------------------------------ */
   const wPa = 0.24 * m('pa') * (B ? 0.3 : 1);
-  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa;
+  /* ------------------------------------------------------------
+     LE REPERTOIRE — et pourquoi ce poids-la n'est PAS appris.
+
+     Tous les autres axes sont des multiplicateurs appris par
+     gout.js : ils disent ce que CE DJ privilegie. Celui-ci ne dit
+     pas une preference, il dit un fait sur sa bibliotheque — « ces
+     trente titres en cyrillique ne ressemblent a rien du reste de
+     ton catalogue ». Le faire apprendre n'aurait aucun sens :
+     l'adaptation est deja dans la mesure elle-meme, qui est faite
+     sur SA bibliotheque, et dans la porte qui s'ouvre des qu'il en
+     joue un.
+
+     Il reste modeste — 0,18 — parce que l'essentiel du travail est
+     fait par la relegation dans ordonner(), pas par la note.
+     ------------------------------------------------------------ */
+  const REP = opt.repertoire || null;
+  const wRp = REP ? 0.18 : 0;
+  const W = wH + wT + wE + wI + wCrowd + wTrend + wBulle + wFr + wAf + wPl + wPa + wRp;
 
   /* prepares une fois, pas par morceau */
   const dnaPret = genres.dnaEtendu(dna);
@@ -645,8 +722,60 @@ function suggest(cur, library, opt) {
     if (library[i].bpm > 0) avecTempo++;
   const accepterSansTempo = avecTempo < limit * 4;
 
-  const candidats = library
-    .filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
+  /* ------------------------------------------------------------
+     LE DEMI ET LE DOUBLE, DESORMAIS SUR DEMANDE.
+
+     Un morceau a 64 BPM se cale sous un morceau a 128 : c'est
+     musicalement exact, et le moteur le savait. Mais dans une
+     liste ou le BPM est maintenant la chose la plus lisible de
+     chaque ligne, « 64,0 » sous « 128,0 » se lit comme une panne,
+     pas comme une proposition. On le coupe par defaut, et on
+     garde le calcul pour qui voudra le rallumer.
+     ------------------------------------------------------------ */
+  const DEMI_DOUBLE = opt.demiDouble === true;
+  const doubleOk = (a, b) => DEMI_DOUBLE && doubleAdmis(a, b);
+
+  /* ------------------------------------------------------------
+     LE MORCEAU QUI N'EST PLUS LA.
+
+     « J'ai supprime des musiques de ma bibliotheque et pourtant
+       Liaison me les propose toujours au mix. »
+
+     Trois choses differentes se cachaient derriere ce symptome, et
+     deux d'entre elles se reglent ici : le fichier efface du
+     disque (t.disparu) et le fichier injoignable parce que le
+     volume est parti (t.offline). Dans les deux cas le DJ ne peut
+     pas le charger sur un deck. Le proposer, c'est lui faire
+     perdre le seul temps qu'il n'a pas.
+
+     Mais les deux ne se traitent pas pareil, et c'est la nuance qui
+     a failli couter cher :
+
+       — DISPARU : le volume a repondu et le fichier n'y est pas. Il
+         est efface. On l'ECARTE. De toute facon main.js l'a deja
+         sorti de la bibliotheque a l'import ; ce test est une
+         ceinture de securite.
+
+       — HORS LIGNE : le volume n'a pas repondu. Le SSD est dans
+         l'autre poche, ou il dormait au moment du stat. On le
+         RELEGUE en fin de liste — jamais devant un morceau qu'on
+         peut charger — mais on ne l'ecarte pas.
+
+     Ecarter les hors ligne paraissait plus propre : un fichier
+     injoignable ne se charge pas sur un deck, a quoi bon le
+     proposer. Sauf que le jour ou le disque entier ne repond pas —
+     un reveil de veille, un cable mal enfonce — cette regle vide le
+     widget d'un coup, en pleine soiree, sans que le DJ ait rien fait
+     ni rien perdu pour de bon. C'est exactement la faute que tout ce
+     moteur evite ailleurs : on trie, on ne jette pas.
+     ------------------------------------------------------------ */
+  const jouable = t => !t.disparu;
+
+  /* Le crible, avec son repli par paliers. Il rend la liste des
+     morceaux retenus ET la fenetre qui a servi, pour que l'affichage
+     puisse dire lesquels sont entres par la porte elargie. */
+  const retenir = (marge) => library.filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
+      (jouable(t) || t.id === epingle) &&
       /* Le morceau epingle traverse le crible de tempo. Sans cette
          exception, une cloture reservee a 118 BPM alors que le set
          a derive vers 132 etait ecartee avant meme d'etre notee :
@@ -670,8 +799,36 @@ function suggest(cur, library, opt) {
          ------------------------------------------------------------ */
       (t.bpm > 0
         ? (sansTempo || t.id === epingle ||
-           passeLeCrible(cur.bpm, t.bpm, opt.marge, doubleAdmis(cur, t)))
-        : accepterSansTempo))
+           passeLeCrible(cur.bpm, t.bpm, marge, doubleOk(cur, t)))
+        : accepterSansTempo));
+
+  /* La fenetre demandee : celle du DJ si elle est apprise, sinon 3 %. */
+  const fenetreVoulue = (typeof opt.marge === 'number' && isFinite(opt.marge))
+    ? Math.max(0.01, Math.min(0.12, opt.marge)) : FENETRE;
+  let fenetreUtilisee = fenetreVoulue;
+  let retenus = retenir(fenetreVoulue);
+  /* ------------------------------------------------------------
+     Le repli, et pourquoi il compte autant que la fenetre.
+
+     Resserrer a 3 % sans repli, c'est rendre le widget vide a un
+     DJ de mariage dont la bibliotheque est eparpillee entre 90 et
+     150 BPM. La fenetre dit ce qu'on PREFERE ; les paliers disent
+     ce qu'on accepte de montrer plutot que de ne rien montrer.
+
+     On s'arrete au premier palier qui remplit la liste : tant que
+     trois propositions calees existent, on ne va pas chercher la
+     quatrieme a huit pour cent.
+     ------------------------------------------------------------ */
+  if (!sansTempo) {
+    for (const palier of PALIERS) {
+      if (retenus.length >= limit) break;
+      if (palier !== null && palier <= fenetreUtilisee) continue;
+      fenetreUtilisee = palier;
+      retenus = retenir(palier);
+    }
+  }
+
+  const candidats = retenus
     .map(t => {
       /* ------------------------------------------------------------
          Un seul critere : l'analyse a-t-elle tourne ?
@@ -694,7 +851,7 @@ function suggest(cur, library, opt) {
          ------------------------------------------------------------ */
       t.mesure = !!t.analyzed;
       const h = sansTonalite ? 50 : (t.key ? harmScore(cur.key, t.key) : H_INCONNU);
-      const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
+      const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleOk(cur, t));
       /* ------------------------------------------------------------
          « Inconnu » n'est pas « parfait ».
 
@@ -741,9 +898,10 @@ function suggest(cur, library, opt) {
       const af = AFF ? affinites.score(cur, t, AFF) : 50;
       const pl = plancher.continuite(cur, t, arc);
       const pa = parente.score(cur, t);
+      const rp = REP ? repertoire.score(t, REP.centre, REP.ouvertes) : 100;
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
                    + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf + pl * wPl
-                   + pa * wPa) / W;
+                   + pa * wPa + rp * wRp) / W;
       if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
@@ -779,6 +937,8 @@ function suggest(cur, library, opt) {
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
                fraicheur: fr, affinite: af, plancher: pl, parente: pa,
+               repertoire: rp,
+               repertoireDit: (REP && rp < RELEGUE) ? repertoire.raison(t, REP.centre) : null,
                plancherDit: plancher.raison(cur, t, arc),
                parenteDit: parente.raison(cur, t),
                pourquoi: AFF ? affinites.explication(cur, t, AFF) : null,
@@ -790,6 +950,10 @@ function suggest(cur, library, opt) {
                   un reggaeton de 2022 en cloture d'une soiree annees 80
                   s'affiche CLOTURE ET HORS BULLE. */
                dansBulle: B ? nb.dedans : true,
+               /* Entre par la porte elargie : le DJ doit le lire sur la
+                  ligne, pas le decouvrir au casque. */
+               horsFenetre: !sansTempo && tp.pct != null && tp.pct > fenetreVoulue * 100 + 0.01,
+               fenetre: Math.round(fenetreVoulue * 1000) / 10,
                epinglee: !!pin,
                rejoue: !pin && !!(M.titres && M.titres.has(t.id)),
                transition: transitionOf(cur, t, tp, h) };
@@ -884,12 +1048,37 @@ function suggest(cur, library, opt) {
     const mes = [], autres = [];
     for (const c of out) (c.track.mesure ? mes : autres).push(c);
     out = mes.length >= limit * 2 ? mes.concat(autres) : out;
+    /* ------------------------------------------------------------
+       Le corps etranger passe derriere — sans jamais disparaitre.
+
+       « Certains DJ ont des sons bizarres d'autres pays dans la
+         bibliotheque, ceux-la on va eviter de les proposer. »
+
+       « Eviter », pas « interdire » : sur une petite bibliotheque, ou
+       a 4 h du matin quand tout le reste a ete joue, une proposition
+       inattendue vaut mieux qu'une liste vide. Il sort donc en
+       dernier, avec sa raison ecrite sur la ligne, et il remonte au
+       rang normal des que le DJ en a joue un — c'est repertoire.js
+       qui ouvre la porte, ici on ne fait que ranger.
+       ------------------------------------------------------------ */
+    if (REP) {
+      const dedans = [], dehors = [];
+      for (const c of out) ((c.repertoire != null && c.repertoire < RELEGUE) ? dehors : dedans).push(c);
+      if (dehors.length && dedans.length) out = dedans.concat(dehors);
+    }
     /* Et par-dessus tout le reste : ce qui vide la salle passe en
-       dernier, quelles que soient ses autres qualites. C'est la
-       preference la plus forte du moteur, donc la derniere appliquee. */
+       dernier, quelles que soient ses autres qualites. */
     const tiennent = [], cassent = [];
     for (const c of out) ((c.plancher != null && c.plancher < CASSE) ? cassent : tiennent).push(c);
-    return cassent.length ? tiennent.concat(cassent) : out;
+    out = cassent.length ? tiennent.concat(cassent) : out;
+
+    /* La derniere preference, donc la plus forte : un morceau qu'on
+       ne peut pas charger sur un deck ne passe jamais devant un
+       morceau qu'on peut charger. Il reste visible — le disque peut
+       revenir avant la fin du morceau en cours — mais il attend. */
+    const ici = [], ailleurs = [];
+    for (const c of out) (c.track.offline ? ailleurs : ici).push(c);
+    return ailleurs.length && ici.length ? ici.concat(ailleurs) : out;
   };
 
   let vivier = candidats;
@@ -1070,10 +1259,19 @@ function rescue(cur, library, opt) {
        mesure. Le bouton de sauvetage ne peut pas se permettre de
        l'ignorer — c'est souvent le seul vivier disponible. */
     if (t.id === cur.id || banned.has(keyOf(t))) continue;
+    /* Un fichier efface ne sauve aucune piste. Un fichier sur un
+       disque parti non plus — et ici, contrairement a suggest(), on
+       l'ecarte vraiment : le sauvetage sert a charger un titre dans
+       les trente secondes, pas a esperer qu'un volume revienne. */
+    if (t.disparu || t.offline) continue;
     if (!(t.bpm > 0) && !sansTempo) continue;
     const tp = sansTempo ? { s: 50, pct: null, ratio: 1, delta: 0, muet: true }
-                         : tempoScore(cur.bpm, t.bpm, doubleAdmis(cur, t));
-    if (!sansTempo && tp.s < 52) continue;       /* injouable maintenant : on passe */
+                         : tempoScore(cur.bpm, t.bpm, opt.demiDouble === true && doubleAdmis(cur, t));
+    /* Le sauvetage est le moment ou l'on cale le plus vite et le plus
+       mal : la fenetre y est plus stricte qu'ailleurs, pas plus
+       large. Au-dela de trois pour cent, on ne rattrape pas une
+       piste qui se vide, on l'acheve. */
+    if (!sansTempo && tp.pct > 3) continue;      /* injouable maintenant : on passe */
     /* ------------------------------------------------------------
        Le sauvetage ne fait jamais retomber la salle.
 

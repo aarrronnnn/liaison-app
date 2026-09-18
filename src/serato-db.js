@@ -77,6 +77,9 @@ function parseDatabase(file) {
       genre: t.tgen || '',
       bpm: parseFloat(String(t.tbpm || '0').replace(',', '.')) || 0,
       key: toCamelot(t.tkey) || null,
+      /* Serato analyse le fichier a l'import : grille de temps et
+         tonalite viennent d'un vrai calcul, pas d'une saisie. */
+      bpmSrc: 'serato', keySrc: 'serato',
       duration: parseLen(t.tlen),
       /* Serato la stocke depuis toujours, sous « ttyr ». Elle n'etait
          pas relue : un DJ Serato perdait l'axe des epoques — donc le
