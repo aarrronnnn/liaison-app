@@ -187,6 +187,64 @@ function famillesDe(track) {
   return m;
 }
 
+/* ============================================================
+   LES GENRES DU DJ, DANS SES MOTS A LUI.
+
+   « Pour les styles, prends ceux de la bibliotheque du DJ — iTunes,
+     rekordbox, etc. — car chaque DJ a son habitude. »
+
+   Une liste de genres ecrite ici serait fausse pour tout le monde.
+   Un DJ ecrit « Variete francaise », un autre « Chanson FR », un
+   troisieme « FRENCH 80s ». Aucun des trois ne se reconnaitrait
+   dans la liste des deux autres, et une case a cocher qu'on ne
+   reconnait pas ne se coche jamais.
+
+   On lit donc les etiquettes REELLEMENT presentes dans sa
+   bibliotheque, on les classe par nombre de morceaux, et on les
+   affiche TELLES QU'IL LES A ECRITES. La casse la plus frequente
+   gagne : entre « disco » ecrit 4 fois et « Disco » ecrit 300
+   fois, on montre « Disco ».
+
+   On ne regroupe que ce qui est identique a la casse et aux
+   accents pres. Rapprocher « Funk » et « Soul » serait decider a
+   sa place, et c'est exactement ce qu'on refuse de faire ici —
+   famillesDe() est la pour le moteur, pas pour son ecran.
+   ============================================================ */
+function genresDuDJ(library, limite) {
+  const compte = new Map();      /* cle a plat -> { n, formes: Map(forme -> n) } */
+  for (const t of library || []) {
+    for (const tag of t.tags || []) {
+      const brut = String(tag).trim();
+      if (!brut) continue;
+      const cle = aplatir(brut);
+      if (!cle || cle.length < 2) continue;
+      let e = compte.get(cle);
+      if (!e) { e = { n: 0, formes: new Map() }; compte.set(cle, e); }
+      e.n++;
+      e.formes.set(brut, (e.formes.get(brut) || 0) + 1);
+    }
+  }
+  const out = [];
+  for (const [cle, e] of compte) {
+    /* L'orthographe la plus repandue chez lui, pas la premiere vue. */
+    let libelle = cle, vu = -1;
+    for (const [forme, n] of e.formes) if (n > vu) { vu = n; libelle = forme; }
+    out.push({ cle: cle, libelle: libelle, n: e.n, famille: familleDe(cle) });
+  }
+  out.sort((a, b) => b.n - a.n || a.libelle.localeCompare(b.libelle, 'fr'));
+  /* Une etiquette portee par deux morceaux sur vingt mille n'est pas
+     un genre, c'est une coquille. On ne la propose pas. */
+  const plancher = Math.max(2, Math.round((library || []).length * 0.002));
+  const utiles = out.filter(g => g.n >= plancher);
+  return (limite ? utiles.slice(0, limite) : utiles);
+}
+
+/** La famille d'une etiquette, ou null. Sert a grouper l'affichage. */
+function familleDe(tag) {
+  const f = familles(tag);
+  return f && f.length ? f[0].famille : null;
+}
+
 /** Prepare l'ADN d'un pack : ses cles passent aussi par les familles.
  *
  *  Le maximum est calcule ici, une fois. Il l'etait dans la boucle
@@ -211,4 +269,4 @@ function dnaEtendu(dna) {
   return { poids: out, max: max };
 }
 
-module.exports = { aplatir, familles, famillesDe, dnaEtendu, FAMILLES };
+module.exports = { aplatir, familles, famillesDe, dnaEtendu, genresDuDJ, familleDe, FAMILLES };

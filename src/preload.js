@@ -68,6 +68,15 @@ contextBridge.exposeInMainWorld('liaison', {
   filters: () => invoke('filters:get'),
   setFilters: patch => invoke('filters:set', patch),
   crates: () => invoke('filters:crates'),
+  /* Les etiquettes de style telles qu'elles sont ecrites dans la
+     bibliotheque du DJ — pas une nomenclature de Liaison. */
+  filterGenres: () => invoke('filters:genres'),
+  /* Titres a avoir : ce que la salle a reclame et que le DJ n'a
+     pas, plus le classement du moment quand on le demande. */
+  aAvoir: opt => invoke('aavoir:get', opt),
+  aAvoirOublier: t => invoke('aavoir:oublier', t),
+  aAvoirVider: () => invoke('aavoir:vider'),
+  aAvoirOublierClassements: () => invoke('aavoir:oublierClassements'),
   /* l'atterrissage de fin de set */
   landingPlan: minutes => invoke('landing:plan', minutes),
   landingGet: () => invoke('landing:get'),

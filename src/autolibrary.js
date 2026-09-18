@@ -20,28 +20,79 @@ const win = process.platform === 'win32';
 const exists = p => { try { return fs.existsSync(p); } catch (e) { return false; } };
 
 /* ---------- emplacements connus ---------- */
+/* ============================================================
+   LA BIBLIOTHEQUE N'EST PAS DANS LE DOSSIER PERSONNEL.
+
+   « Quand les DJ jouent un son qui vient de leur bibliotheque
+     rekordbox ou Serato, Liaison ne capte meme pas le son — alors
+     que quand ils jouent un son qui vient de leur bibliotheque
+     iTunes, aucun probleme. »
+
+   Le symptome disait « detection », la cause etait ailleurs : ces
+   morceaux n'etaient PAS DANS LA BIBLIOTHEQUE. On ne peut pas
+   detecter ce qu'on n'a jamais lu.
+
+   Pourquoi : ces quatre fonctions ne cherchaient que sous HOME.
+   Or un DJ mobile ne range pas sa musique dans son dossier
+   personnel — il la met sur un SSD externe, parce que c'est le
+   disque qu'il emporte en soiree et qu'il branche sur la machine
+   du lieu. Et Serato, lui, ecrit un dossier « _Serato_ » A LA
+   RACINE DE CHAQUE DISQUE qui porte des morceaux. Celui du SSD
+   contient la vraie bibliotheque ; celui du disque interne est
+   souvent vide ou residuel.
+
+   Liaison ne trouvait donc rien, retombait sur la bibliotheque
+   iTunes — qui, elle, vit bien dans HOME — et le DJ voyait
+   exactement ce qu'il a decrit : ses morceaux iTunes reconnus, et
+   les autres invisibles. Aucun message, parce que de notre point
+   de vue tout allait bien : on avait trouve une source.
+
+   On cherche donc AUSSI sur les volumes montes. Le cout est nul :
+   c'est un test d'existence par disque, pas un parcours.
+   ============================================================ */
 function seratoPaths() {
+  const out = [];
   const bases = [path.join(HOME, 'Music'), path.join(HOME, 'Musique'), path.join(HOME, 'Musik')];
-  return bases.map(b => path.join(b, '_Serato_', 'database V2'));
+  for (const b of bases) out.push(path.join(b, '_Serato_', 'database V2'));
+  /* Serato pose son dossier a la racine du volume, et aussi sous un
+     dossier Music quand le DJ a range comme sur son Mac. */
+  for (const v of externalVolumes()) {
+    out.push(path.join(v, '_Serato_', 'database V2'));
+    for (const n of ['Music', 'Musique', 'Musik']) {
+      out.push(path.join(v, n, '_Serato_', 'database V2'));
+    }
+  }
+  return out;
 }
 function traktorPaths() {
-  const root = path.join(HOME, 'Documents', 'Native Instruments');
+  const racines = [path.join(HOME, 'Documents', 'Native Instruments')];
+  /* Traktor suit son utilisateur : un DJ qui travaille sur deux
+     machines pose souvent sa collection sur le disque qu'il emporte. */
+  for (const v of externalVolumes()) {
+    racines.push(path.join(v, 'Native Instruments'));
+    racines.push(path.join(v, 'Documents', 'Native Instruments'));
+  }
   const out = [];
-  try {
-    for (const d of fs.readdirSync(root)) {
+  for (const root of racines) {
+    let liste = [];
+    try { liste = fs.readdirSync(root); } catch (e) { continue; }
+    for (const d of liste) {
       if (!/^Traktor/i.test(d)) continue;
       const p = path.join(root, d, 'collection.nml');
-      if (exists(p)) out.push(p);
+      if (exists(p) && out.indexOf(p) < 0) out.push(p);
     }
-  } catch (e) {}
+  }
   return out;
 }
 function virtualdjPaths() {
-  return [
+  const out = [
     path.join(HOME, 'Documents', 'VirtualDJ', 'database.xml'),
     path.join(HOME, 'Library', 'Application Support', 'VirtualDJ', 'database.xml'),
     win ? path.join(process.env.LOCALAPPDATA || '', 'VirtualDJ', 'database.xml') : ''
   ].filter(Boolean);
+  /* VirtualDJ ecrit une base par disque, a sa racine. */
+  for (const v of externalVolumes()) out.push(path.join(v, 'VirtualDJ', 'database.xml'));
+  return out;
 }
 function rekordboxXmlPaths() {
   const dirs = [
@@ -50,6 +101,12 @@ function rekordboxXmlPaths() {
     path.join(HOME, 'Documents'), path.join(HOME, 'Desktop'),
     path.join(HOME, 'Music', 'PioneerDJ'), path.join(HOME, 'Music')
   ];
+  /* Un export rekordbox se pose la ou on le retrouvera : tres
+     souvent a la racine du disque qui porte les morceaux. */
+  for (const v of externalVolumes()) {
+    dirs.push(v);
+    for (const n of ['Music', 'Musique', 'PioneerDJ', 'rekordbox']) dirs.push(path.join(v, n));
+  }
   const out = [];
   for (const d of dirs) {
     let list = [];
@@ -104,6 +161,18 @@ function itunesPaths() {
    des minutes pour trouver ce qui est toujours a la racine. */
 function externalVolumes() {
   const out = [];
+  /* ------------------------------------------------------------
+     Un point de montage qu'on n'a pas prevu.
+
+     La liste ci-dessous couvre macOS, Windows et les deux dossiers
+     habituels sous Linux. Elle ne couvre pas un NAS monte a la main,
+     un chemin d'entreprise, ni un banc d'essai. LIAISON_VOLUMES
+     ajoute des racines separees par « : », et c'est aussi ce qui
+     permet de tester cette detection sans brancher un disque.
+     ------------------------------------------------------------ */
+  for (const v of String(process.env.LIAISON_VOLUMES || '').split(win ? ';' : ':')) {
+    if (v && exists(v)) out.push(v);
+  }
   if (win) {
     for (const l of 'DEFGHIJKLMNOPQRSTUVWXYZ') {
       const r = l + ':\\';
@@ -278,7 +347,7 @@ function rekordboxInstalle() {
  * Rendu tel quel a l'interface : c'est un message pour le DJ, pas
  * un diagnostic pour le journal.
  */
-function conseils(sources) {
+function conseils(sources, opt) {
   const out = [];
   const kinds = new Set((sources || []).map(s => s.kind));
   if (!kinds.has('rekordbox') && rekordboxInstalle()) {
@@ -314,6 +383,44 @@ function conseils(sources) {
      Sauf un : sa date. Un export vieux de deux semaines sur une
      collection qui bouge tous les jours, ca se dit.
      ------------------------------------------------------------ */
+  /* ============================================================
+     UN LOGICIEL QUI TOURNE ET DONT ON N'A PAS LA BIBLIOTHEQUE.
+
+     C'est la moitie manquante du defaut des volumes externes. Meme
+     une fois les disques fouilles, il restera des cas ou la base
+     est ailleurs : un NAS, un dossier d'entreprise, un chemin que
+     le DJ a choisi lui-meme. Dans ces cas-la, Liaison trouvait la
+     bibliotheque iTunes, se declarait content, et le DJ voyait ses
+     morceaux Serato ignores SANS UN MOT.
+
+     Le silence etait le vrai defaut. On ne peut pas deviner tous
+     les chemins ; on peut dire « ton logiciel tourne et je n'ai pas
+     trouve sa bibliotheque », ce qui transforme une panne
+     incomprehensible en un reglage de trente secondes.
+     ============================================================ */
+  const kindsVus = new Set((sources || []).map(s => s.kind));
+  const NOMS = { serato: 'Serato DJ', traktor: 'Traktor', virtualdj: 'VirtualDJ' };
+  for (const [kind, nom] of Object.entries(NOMS)) {
+    if (kindsVus.has(kind)) continue;
+    if (!(opt && opt.tournent && opt.tournent.indexOf(kind) >= 0)) continue;
+    out.push({
+      cle: 'base-introuvable-' + kind, quand: 'biblio',
+      titre: nom + ' tourne, mais je n\'ai pas trouve sa bibliotheque',
+      texte: 'Liaison a cherche aux emplacements habituels, sur le disque interne et sur les ' +
+             'disques branches, et n\'a rien trouve. Tes morceaux ' + nom + ' ne sont donc pas ' +
+             'dans la bibliotheque — et un morceau absent de la bibliotheque ne peut pas etre ' +
+             'reconnu quand tu le joues.',
+      marche: [
+        'Verifie que le disque qui porte ta musique est bien branche',
+        'Ouvre les reglages de Liaison et designe le dossier a la main',
+        kind === 'serato' ? 'Le dossier cherche s\'appelle « _Serato_ », a la racine du disque'
+                          : 'Indique le fichier de collection de ' + nom
+      ],
+      repli: 'En attendant, Liaison travaille avec les autres sources qu\'il a trouvees — ce qui ' +
+             'explique que certains morceaux soient reconnus et d\'autres non.'
+    });
+  }
+
   const JOURS = 14;
   for (const s of sources || []) {
     if (s.kind !== 'rekordbox') continue;

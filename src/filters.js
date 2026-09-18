@@ -22,6 +22,8 @@
 
    C'est un filet, pas un mur : il attrape ce qui est annonce, pas
    ce qui est chante. Un mariage ne se joue pas la-dessus tout seul. */
+const genresmod = require('./genres');
+
 const MARQUE_EXPLICITE = /\[\s*explicit\s*\]|\(\s*explicit\s*\)|\bexplicit\b|\bdirty\s*(version|mix|edit)?\b|\buncensored\b/i;
 const MARQUE_PROPRE = /\bclean\s*(version|mix|edit|radio)?\b|\bradio\s*edit\b|\bcensored\b/i;
 const MOTS = /\b(fuck|fucking|fuckin|shit|bitch|bitches|nigga|niggas|cunt|motherfucker|pussy|salope|encul[ée]|nique|niquer|putain|batard|b[âa]tard|c[ou]nnasse)\b/i;
@@ -50,6 +52,31 @@ function estExplicite(t) {
  *   f.bpmMin, f.bpmMax  number    plage verrouillee (au tempo reel)
  * @returns {{keep:function, active:string[], n:number}}
  */
+/* ============================================================
+   DEUX SORTES DE FILTRES, ET C'EST TOUT LE SUJET.
+
+   Jusqu'ici les quatre interrupteurs se ressemblaient. Ils ne
+   servent pourtant pas au meme moment :
+
+     LES FILTRES DE SOIREE — le crate du vin d'honneur, « sans
+     paroles explicites », « pas ce qui est deja passe ». Le DJ les
+     pose une fois en arrivant et n'y touche plus. Les remettre a
+     zero tout seuls serait une trahison : il joue un titre explicite
+     devant la famille sans rien avoir demande.
+
+     LES FILTRES D'INSTANT — « la maintenant, donne-moi du disco a
+     plus ou moins deux pour cent ». Ils repondent a une situation
+     qui dure trois minutes. Les garder au-dela, c'est se retrouver
+     a 2 h du matin avec un filtre pose a 23 h qu'on a oublie, et
+     un widget qui ne propose plus rien sans qu'on comprenne
+     pourquoi.
+
+   Les seconds retombent donc tout seuls des que le morceau suivant
+   part sur un deck. C'est main.js qui le fait ; ici on se contente
+   de les distinguer, pour que personne n'ait a s'en souvenir.
+   ============================================================ */
+const INSTANT = ['genres', 'marge', 'energyMin', 'energyMax'];
+
 function build(f) {
   f = f || {};
   const active = [];
@@ -71,6 +98,26 @@ function build(f) {
   const bmax = f.bpmMax > 0 ? f.bpmMax : null;
   if (bmin || bmax) active.push((bmin || '?') + '–' + (bmax || '?') + ' BPM');
 
+  /* ------------------------------------------------------------
+     Les genres, dans les mots du DJ.
+
+     On compare sur la forme a plat — accents, casse et separateurs
+     mis de cote — parce que le DJ a coche « Variete francaise » sur
+     un ecran et que ses fichiers portent « variété française ».
+     Un morceau passe des qu'UNE de ses etiquettes est cochee : on
+     filtre, on ne fait pas une intersection.
+     ------------------------------------------------------------ */
+  let genres = null;
+  if (f.genres && f.genres.length) {
+    genres = new Set(Array.from(f.genres).map(g => genresmod.aplatir(g)).filter(Boolean));
+    if (!genres.size) genres = null;
+    else active.push(genres.size === 1 ? Array.from(f.genres)[0] : genres.size + ' genres');
+  }
+
+  const emin = f.energyMin > 0 ? f.energyMin : null;
+  const emax = f.energyMax > 0 && f.energyMax < 10 ? f.energyMax : null;
+  if (emin || emax) active.push('Energie ' + (emin || 1) + '–' + (emax || 10));
+
   const keep = t => {
     if (!t) return false;
     if (crateIds && !crateIds.has(t.id)) return false;
@@ -78,6 +125,21 @@ function build(f) {
     if (f.noExplicit && estExplicite(t)) return false;
     if (bmin && t.bpm < bmin) return false;
     if (bmax && t.bpm > bmax) return false;
+    if (genres) {
+      const tags = t.tags || [];
+      let vu = false;
+      for (const tag of tags) { if (genres.has(genresmod.aplatir(tag))) { vu = true; break; } }
+      if (!vu) return false;
+    }
+    /* Un morceau pas encore analyse porte l'energie par defaut. Le
+       filtrer sur ce chiffre-la reviendrait a ecarter tout ce que
+       l'analyse n'a pas encore atteint — c'est-a-dire l'essentiel
+       de la bibliotheque la premiere heure. */
+    if ((emin || emax) && t.analyzed) {
+      const e = t.energy;
+      if (emin && e < emin) return false;
+      if (emax && e > emax) return false;
+    }
     return true;
   };
 
@@ -102,4 +164,4 @@ function apply(library, f) {
   return { tracks: out, vide: false, active: t.active };
 }
 
-module.exports = { build, apply, estExplicite };
+module.exports = { build, apply, estExplicite, INSTANT };

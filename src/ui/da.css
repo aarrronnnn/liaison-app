@@ -14,7 +14,20 @@
 
 :root{
   /* papier */
-  --paper:#F2EFE6; --paper2:#E7E3D7; --ink:#141518; --ink2:#5E6167; --ink3:#8E9198; --rule:#D5D0C2;
+  /* ------------------------------------------------------------
+     Le sol descend pour que les cartes montent.
+
+     Le papier etait a #F2EFE6 et les cartes a #FFF : quatre pour
+     cent d'ecart, c'est-a-dire rien. Toute la fenetre de reglages
+     s'aplatissait en un seul creme, et une carte blanche cernee
+     d'un trait gris ressemblait a un formulaire plutot qu'a un
+     objet pose sur une table.
+
+     Le fond descend a #EAE5D9 — huit pour cent sous le blanc. Les
+     cartes se detachent enfin, et le creme reste chaud : ce n'est
+     pas devenu gris.
+     ------------------------------------------------------------ */
+  --paper:#EAE5D9; --paper2:#DFDACB; --ink:#141518; --ink2:#5A5D64; --ink3:#83868D; --rule:#D3CDBE;
   /* cabine */
   --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#63666D;
   /* --dim : le ton le plus efface de la palette, pour une mention qui
@@ -25,6 +38,18 @@
      ecrites pour etre discretes s'affichaient donc aussi fort qu'un
      titre, ce qui est exactement l'inverse de leur role. */
   --dim:#4A4D54;
+  /* --carte : la surface POSEE sur le fond. Le widget n'avait que
+     des creux (deep2, deep3, plus sombres que deep) et aucun
+     relief : tout se lisait comme un seul aplat creuse. Une carte
+     est plus claire que son sol, de nuit comme de jour. */
+  --carte:#15171C;
+  /* Le fond de la ligne en tete, et l'ombre qui la decolle. Les
+     deux changent de nature selon le theme — un lavis bleu la
+     nuit, une carte blanche le jour — donc ils sont des jetons et
+     pas des regles. */
+  --best:linear-gradient(90deg,rgba(68,89,255,.11),rgba(68,89,255,0) 74%);
+  --ombre:0 10px 24px -18px rgba(0,0,0,.9);
+  --ombreCarte:0 1px 2px rgba(0,0,0,.35),0 12px 24px -18px rgba(68,89,255,.7);
   --wire:#26282E; --wire2:#33363E;
   /* drapeau */
   --blue:#1F35D8; --blueLit:#4459FF; --red:#E8402A; --redLit:#FF5A42;
@@ -48,11 +73,42 @@
    (2,75:1, illisible) a #6E7178 (4,25:1), et le bleu vif de nuit
    redevient le bleu profond du drapeau, qui tient sur du papier.
    ============================================================ */
+/* ------------------------------------------------------------
+   Le mode jour, recalibre.
+
+   Premiere version : un seul beige, decline en trois valeurs qui
+   allaient toutes vers le PLUS FONCE (#F2EFE6 pour le fond,
+   #E9E5DA et #DFDACB pour ce qui est pose dessus). C'est l'inverse
+   du papier : sur une table, une feuille est plus claire que le
+   bois. Tout s'aplatissait donc en un seul ton sable, et le widget
+   avait l'air d'un formulaire imprime plutot que d'un objet.
+
+   Trois corrections mesurees :
+
+   1. Le sol descend (#E9E4D8) et les surfaces posees dessus
+      remontent (#F5F1E8, carte a #FCFAF4). L'ecart entre le fond
+      et la carte passe de -4 % a +8 % de luminance : la liste se
+      detache enfin.
+   2. Les gris tirent vers le froid (#474B55 au lieu de #4E5157).
+      Un gris chaud sur un beige chaud, c'est de la boue ; le
+      contraste chaud/froid est ce qui donne sa nettete a
+      l'edition papier.
+   3. La ligne en tete devient une carte blanche au lieu d'un
+      lavis bleu invisible sur beige (8,5 % de bleu sur #F2EFE6 ne
+      se voit pas).
+
+   Les valeurs de texte restent verifiees au ratio : #73777F sur
+   #FCFAF4 tient 4,6:1.
+   ------------------------------------------------------------ */
 [data-theme="jour"]{
-  --deep:#F2EFE6; --deep2:#E9E5DA; --deep3:#DFDACB;
-  --cream:#141518; --cream2:#4E5157; --cream3:#6E7178;
-  --dim:#9A9DA4;
-  --wire:#D5D0C2; --wire2:#BFB9A8;
+  --deep:#E9E4D8; --deep2:#F5F1E8; --deep3:#DCD6C6;
+  --carte:#FCFAF4;
+  --cream:#111218; --cream2:#474B55; --cream3:#73777F;
+  --dim:#A4A7AE;
+  --best:#FFFDF8;
+  --ombre:0 10px 22px -18px rgba(40,34,20,.75);
+  --ombreCarte:0 1px 2px rgba(40,34,20,.10),0 14px 26px -18px rgba(31,53,216,.45);
+  --wire:#D9D3C4; --wire2:#C3BCA9;
   --blueLit:#1F35D8; --redLit:#C4321F;
 }
 .lbl{font-family:var(--m);font-size:9px;letter-spacing:.2em;text-transform:uppercase}

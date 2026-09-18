@@ -4,7 +4,40 @@
 <style>
 /* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
    Aucune police distante : hors ligne, le club coupe tout. */
-:root{--card:#FFF;--card2:#EDEAE0;--line:var(--rule);--blue2:#141DA0;--rose:var(--red);--ok:#1B7F4B}
+:root{--card:#FFF;--card2:#EDEAE0;--line:var(--rule);--blue2:#141DA0;--rose:var(--red);--ok:#1B7F4B;
+/* --champ : le fond des puits de saisie. Il etait ecrit « #fff » en
+   dur dans la regle des champs — donc blanc meme en mode nuit, ce
+   qui aurait fait trois rectangles eblouissants au milieu d'un
+   ecran sombre. */
+--champ:#FFF}
+
+/* ============================================================
+   LE MODE NUIT DE LA FENETRE DE PREPARATION.
+
+   Le widget l'avait, pas celle-ci. Or on ne prepare pas toujours
+   une soiree en plein jour : on la prepare souvent la veille au
+   soir, et passer d'un widget noir a une fenetre creme en plein
+   ecran, c'est un flash dans les yeux.
+
+   Le theme est le MEME reglage que celui du widget — une seule
+   bascule, les deux fenetres suivent. Les valeurs sont celles de
+   la cabine (da.css), pour que les deux fenetres soient faites de
+   la meme matiere et pas seulement de la meme couleur.
+   ============================================================ */
+:root[data-theme="nuit"]{
+  --paper:#0E0F13; --paper2:#15171C;
+  --ink:#EFEAE0; --ink2:#9BA0A8; --ink3:#71767F;
+  --rule:#272A32; --line:#272A32;
+  --card:#15171C; --card2:#1B1E26; --champ:#0B0C0F;
+  --blue:#3549F0; --blue2:#5C6EFF; --rose:#FF5A42; --ok:#2E9B62;
+}
+/* Le grain s'inverse : il assombrit le papier, il eclaire la nuit. */
+:root[data-theme="nuit"] body::after{mix-blend-mode:overlay;opacity:.05}
+/* Un filet clair sur l'arete haute, comme sur le widget : c'est ce
+   qui separe une fenetre d'un rectangle noir. */
+:root[data-theme="nuit"] .pan .card{box-shadow:inset 0 1px 0 rgba(255,255,255,.045),
+  0 1px 2px rgba(0,0,0,.4),0 18px 34px -26px rgba(0,0,0,.9)}
+:root[data-theme="nuit"] .mot{background:var(--card2)}
 /* Interlettrage en Anton — mesure, pas gout.
    Anton est une grasse condensee : ses lettres sont deja serrees
    par dessin. A 15 px avec le -0,01em qu'on avait, la barre du T
@@ -28,7 +61,7 @@ h2{font-family:var(--d);font-weight:700;font-size:15px;margin:0 0 12px;display:f
 @media(max-width:520px){.two{grid-template-columns:1fr}}
 @media(max-width:760px){.grid{grid-template-columns:1fr}}
 label{display:block;font-family:var(--m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:14px 0 6px}
-select,input[type=text],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:#fff;color:var(--ink);font:inherit;font-size:14px}
+select,input[type=text],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:var(--champ);color:var(--ink);font:inherit;font-size:14px}
 button{font-family:var(--m);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:10px 15px;border-radius:2px;
 border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer}
 button.g{background:transparent;color:var(--ink);border-color:var(--line)}
@@ -119,7 +152,7 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
    identifiant casse et aucun gestionnaire perdu.
    ============================================================ */
 .shell{display:grid;grid-template-columns:236px minmax(0,1fr);gap:0;align-items:start;
-min-height:calc(100vh - 118px)}
+min-height:calc(100vh - 270px)}
 @media(max-width:820px){.shell{grid-template-columns:minmax(0,1fr)}}
 
 .rail{position:sticky;top:0;align-self:start;padding:4px 18px 24px 0;border-right:1.5px solid var(--line)}
@@ -195,16 +228,330 @@ text-transform:uppercase;color:#8D9099;margin-bottom:7px}
 /* Les etats : une couleur par sens, jamais deux sens par couleur. */
 .pill{font-family:var(--m);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
 padding:4px 8px;border-radius:2px;background:var(--card2);color:var(--ink2)}
-.pill.ok{background:var(--ok);color:#fff}
+/* La pastille « tout va bien » etait verte, c'est-a-dire d'une
+   couleur qui n'existe nulle part ailleurs chez Liaison. Elle
+   passe au bleu du drapeau : c'est deja la couleur de ce que
+   Liaison tient. */
+.pill.ok{background:var(--blue);color:#fff}
 .pill.att{background:var(--rose);color:#fff}
 .pill.info{background:var(--blue);color:#fff}
 button:not(.g):hover{background:var(--blue2);border-color:var(--blue2)}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
 
+/* ============================================================
+   LA MEME MATIERE QUE LE WIDGET.
+
+   Les deux fenetres sont le meme produit ; elles doivent etre
+   faites de la meme chose. Grain, filet de signature, relief,
+   chiffres alignes — tout ce qui a sorti le widget de l'aplat
+   beige s'applique ici, ou le probleme etait identique et plus
+   grand encore puisque la surface est plus grande.
+   ============================================================ */
+
+/* Le grain : ce qui fait la difference entre « un aplat CSS » et
+   « du papier ». Il ne capte aucun clic. */
+body::after{content:"";position:fixed;inset:0;z-index:50;pointer-events:none;
+background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+opacity:.07;mix-blend-mode:multiply}
+
+/* Le filet de signature, bleu vers rouge, comme le X du logo. */
+body::before{content:"";position:fixed;left:0;right:0;top:0;height:3px;z-index:60;pointer-events:none;
+background:linear-gradient(90deg,var(--blue) 0%,#4459FF 34%,#FF5A42 66%,var(--rose) 100%)}
+.wrap{padding-top:32px}
+
+/* Du relief sur les cartes : un aplat blanc cerne d'un trait est
+   un formulaire ; la meme surface avec une ombre courte est un
+   objet pose. Le rayon vaut le double du decalage et l'opacite ne
+   depasse pas 8 % — une ombre qu'on remarque est une ombre ratee. */
+/* ------------------------------------------------------------
+   LA FEUILLE.
+
+   Dans un panneau, .card etait remis a plat — fond transparent,
+   bordure retiree, rembourrage a zero. Le contenu de chaque
+   rubrique flottait donc a nu sur le creme : pas de surface, pas
+   d'ombre, rien qui dise ou commence et ou finit la rubrique.
+   C'est la cause la plus directe du « ca manque quelque chose » :
+   il n'y avait litteralement AUCUN objet a l'ecran, seulement du
+   texte pose sur un fond.
+
+   Le contenu redevient donc une feuille : blanche, un filet, un
+   angle de 6 px et une ombre courte. L'en-tete — pictogramme,
+   nom, phrase, mots-cles — reste dehors, sur le creme : il
+   annonce la feuille, il n'est pas dedans.
+   ------------------------------------------------------------ */
+.pan .card{background:var(--card);border:1px solid var(--line);border-radius:6px;padding:22px 24px;
+box-shadow:0 1px 2px rgba(40,34,20,.05),0 16px 30px -24px rgba(40,34,20,.6)}
+.pan .card + .card{margin-top:14px}
+/* Les blocs a deux colonnes sont DANS la feuille : ils n'ont plus
+   besoin de leur propre cadre, sinon on encadre un cadre. Un
+   simple filet vertical suffit a les separer. */
+.pan .card .grid > div{background:transparent;border:0;padding:0}
+.pan .card .grid > div:nth-child(even){background:transparent;padding-left:22px;border-left:1px solid var(--line)}
+@media(max-width:760px){.pan .card .grid > div:nth-child(even){padding-left:0;border-left:0;
+  padding-top:18px;border-top:1px solid var(--line)}}
+.rnav[aria-current="true"]{box-shadow:0 2px 10px -4px rgba(20,21,24,.45)}
+
+/* Les chiffres en colonne : un compteur qui ondule oblige a lire
+   au lieu de voir. */
+.state,.state b,.mono,table td,table th{font-variant-numeric:tabular-nums;font-feature-settings:"tnum" 1}
+
+/* ------------------------------------------------------------
+   L'EN-TETE D'UNE RUBRIQUE : PICTO, PHRASE, MOTS-CLES.
+   ------------------------------------------------------------ */
+.panh h2{font-size:30px;align-items:center;gap:12px;margin-bottom:10px}
+.panh h2 .pic{width:26px;height:26px;flex:none;stroke:var(--blue);fill:none;stroke-width:1.5;
+stroke-linecap:round;stroke-linejoin:round}
+.panh h2 .hn{line-height:1}
+.panh .paneb{letter-spacing:.2em}
+
+/* La phrase : une seule, assez grande pour etre lue sans decision.
+   C'est le seul texte long qui reste visible par defaut. */
+.panh .phrase{font-size:17px;line-height:1.45;color:var(--ink2);margin:0 0 14px;max-width:62ch}
+
+/* Les mots-cles. Ce sont les noms propres et les chiffres qu'un DJ
+   cherche des yeux — rekordbox, Serato, SACEM, 14 jours, 90 s.
+   Il ne les LIT pas, il les REPERE : d'ou la chasse fixe, les
+   capitales et le cadre. */
+.panh .mots{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 4px}
+.panh .mot{font-family:var(--m);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
+padding:5px 9px;border:1px solid var(--line);border-radius:2px;color:var(--ink2);
+background:var(--card);white-space:nowrap}
+.panh .mot:first-child{border-color:var(--blue);color:var(--blue)}
+
+/* « En detail » : la prose n'est pas supprimee, elle est rangee.
+   Celui qui sait ne la voit jamais, celui qui doute la deplie. */
+.panh .detail{margin:12px 0 0}
+.panh .detail>summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;list-style:none;
+font-family:var(--m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);
+padding:5px 0;user-select:none}
+.panh .detail>summary::-webkit-details-marker{display:none}
+.panh .detail>summary::after{content:"";width:5px;height:5px;border-right:1.4px solid currentColor;
+border-bottom:1.4px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .16s}
+.panh .detail[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
+.panh .detail>summary:hover{color:var(--blue)}
+.panh .detail>div{font-size:14px;line-height:1.65;color:var(--ink2);max-width:66ch;
+padding:10px 0 2px 13px;border-left:2px solid var(--line);margin-top:2px}
+.panh{border-bottom:1.5px solid var(--line);padding-bottom:18px;margin-bottom:20px}
+
+/* Les pictogrammes de la nav, au meme trait que dans l'en-tete. */
+.rnav .pic{width:16px;height:16px;flex:none;stroke:currentColor;fill:none;stroke-width:1.5;
+stroke-linecap:round;stroke-linejoin:round;opacity:.75}
+.rnav[aria-current="true"] .pic{opacity:1}
+
+/* ------------------------------------------------------------
+   LE MODE D'EMPLOI DES BOUTONS, RANGE LUI AUSSI.
+
+   Les paragraphes .tips expliquent ce que fait chaque bouton. Ils
+   sont utiles une fois, puis ils encombrent pour toujours — et
+   ils representaient a eux seuls trente et un blocs de prose.
+   Ils se replient derriere un « ? » pose la ou ils etaient.
+   ------------------------------------------------------------ */
+details.aide{margin:12px 0 0}
+details.aide>summary{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
+border:1px solid var(--line);border-radius:50%;cursor:pointer;list-style:none;
+font-family:var(--m);font-size:11px;color:var(--ink3);user-select:none}
+details.aide>summary::-webkit-details-marker{display:none}
+details.aide>summary:hover{border-color:var(--blue);color:var(--blue)}
+details.aide[open]>summary{background:var(--blue);border-color:var(--blue);color:#fff}
+details.aide .tips{margin-top:10px;padding-left:13px;border-left:2px solid var(--line);max-width:66ch}
+
+/* ------------------------------------------------------------
+   LE CHIFFRE QUI COMPTE, A LA TAILLE DE CE QU'IL DIT.
+
+   « 22000 titres prets » s'ecrivait en 11 px monospace gris, sur
+   la meme ligne que le chemin du dossier. C'est pourtant LA
+   reponse a la seule question qu'on se pose en ouvrant cet ecran :
+   est-ce que Liaison a bien trouve ma musique ? Elle merite le
+   corps d'un titre, et le chemin merite d'etre discret.
+   ------------------------------------------------------------ */
+#libState{font-family:var(--b);font-size:14px;color:var(--ink2);display:flex;align-items:baseline;
+gap:9px;flex-wrap:wrap;margin-top:14px}
+#libState b{font-family:var(--d);font-weight:400;font-size:30px;line-height:1;color:var(--ink);
+letter-spacing:.01em}
+#libState .oz{font-family:var(--m);font-size:10.5px;color:var(--ink3);flex:1 1 100%;
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* La table des sources : des lignes, pas un tableau. La colonne
+   « TYPE » n'apprenait rien que la pastille ne disait deja. */
+/* Les sources, en tuiles : le nom du logiciel devant, le chemin
+   dessous. Deux par rangee, parce qu'un chemin est long et qu'on
+   ne le lit qu'en cas de doute. */
+.srcs{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:8px;margin:18px 0 0}
+.src{border:1px solid var(--line);border-radius:5px;padding:11px 13px;background:var(--paper2);
+position:relative;overflow:hidden}
+.src::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue)}
+.src b{display:block;font-family:var(--m);font-weight:700;font-size:11px;letter-spacing:.13em;
+text-transform:uppercase;color:var(--ink)}
+.src .pth{display:block;font-family:var(--m);font-size:10px;color:var(--ink3);margin-top:5px;
+overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.vide{font-size:13.5px;color:var(--ink2);line-height:1.6;margin:16px 0 0;max-width:58ch}
+
+/* Le pied de carte : les commandes se rangent en bas, separees
+   par un filet. On ne cherche plus le bouton au milieu du texte. */
+.pied{display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:20px;padding-top:16px;
+border-top:1px solid var(--line)}
+.pied .tips{margin:0;flex:1 1 100%;order:9;font-size:12px}
+.pied details.aide{margin:0}
+
+/* Le chiffre cle prend la tete de la carte. */
+/* ------------------------------------------------------------
+   LES TROIS BLOCS DE « A AVOIR ».
+
+   Ils ne se melangent jamais en une liste unique classee :
+   « demande 4 fois chez toi » et « 12e du classement France » ne
+   se comparent pas, et leur fabriquer un score commun reviendrait
+   a inventer une equivalence qui n'existe pas. Trois blocs, trois
+   autorites, dans l'ordre : ta salle, ton client, le monde.
+   ------------------------------------------------------------ */
+.aabloc{margin:0 0 22px;padding-bottom:20px;border-bottom:1px solid var(--line)}
+.aabloc:last-of-type{border-bottom:0;padding-bottom:0}
+.aah{display:flex;align-items:baseline;gap:10px;margin-bottom:12px}
+.aah b{font-family:var(--d);font-weight:400;font-size:17px;text-transform:uppercase;letter-spacing:.03em;color:var(--ink)}
+.aah select{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
+background:var(--champ);color:var(--ink);border:1px solid var(--line);border-radius:2px;
+padding:4px 6px;width:auto;max-width:200px;cursor:pointer}
+.aah select:hover{border-color:var(--blue)}
+.aarf{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;padding:0;
+border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink3);cursor:pointer}
+.aarf svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;
+stroke-linecap:round;stroke-linejoin:round}
+.aarf:hover{border-color:var(--blue);color:var(--blue);background:var(--card)}
+.aarf[disabled]{opacity:.45;cursor:default}
+.aarf.tourne svg{animation:aaTourne .9s linear infinite}
+@keyframes aaTourne{to{transform:rotate(360deg)}}
+@media(prefers-reduced-motion:reduce){.aarf.tourne svg{animation:none}}
+/* La date du releve : discrete, mais jamais absente. Un classement
+   « du moment » sans date, c'est une affirmation invérifiable. */
+.aadate{font-family:var(--m);font-size:10px;letter-spacing:.06em;color:var(--ink3);margin-top:12px}
+.aadate.vieux{color:var(--rose)}
+.aah i{font-style:normal;font-family:var(--m);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.aaliste{display:flex;flex-direction:column;gap:7px}
+/* Une ligne = un titre absent. Le rang ou le compte a gauche, en
+   chiffres d'affichage : c'est ce qui se lit en diagonale. */
+.aal{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;
+padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:var(--paper2);
+position:relative;overflow:hidden}
+.aal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--line)}
+.aal.fort::before{background:var(--rose)}
+.aal .cpt{font-family:var(--d);font-weight:400;font-size:22px;line-height:1;text-align:right;
+color:var(--ink3);font-variant-numeric:tabular-nums}
+.aal.fort .cpt{color:var(--rose)}
+.aal .nom{min-width:0}
+.aal .nom b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aal .nom s{display:block;text-decoration:none;font-family:var(--m);font-size:10px;color:var(--ink3);
+margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.aal .nom s em{font-style:normal;color:var(--blue)}
+.aal .go{display:flex;gap:5px;align-items:center;flex:none}
+.aal .go a{font-family:var(--m);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
+padding:5px 8px;border:1px solid var(--line);border-radius:2px;color:var(--ink2);text-decoration:none;cursor:pointer}
+.aal .go a:hover{border-color:var(--blue);color:var(--blue)}
+.aal .go .x{border:0;background:none;color:var(--ink3);font-size:15px;line-height:1;padding:2px 5px;cursor:pointer}
+.aal .go .x:hover{color:var(--rose)}
+/* L'etat du bloc quand il n'a rien a dire : une phrase qui
+   explique le vide, jamais un vide muet. */
+.aavide{font-size:13px;color:var(--ink3);line-height:1.6;max-width:62ch}
+.aavide b{color:var(--ink2);font-weight:600}
+
+#libState{margin-top:0}
+.bar{margin-top:12px}
+
+/* ------------------------------------------------------------
+   LA BANDE D'ETAT : quatre chiffres, aucune phrase.
+
+   Chaque tuile est un bouton : on lit l'etat, on clique, on est
+   dans la rubrique. C'est le seul endroit de la fenetre ou
+   l'information et l'action sont au meme endroit — et c'est
+   exactement ce qu'on veut en haut d'un tableau de bord.
+   ------------------------------------------------------------ */
+.bandeau{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:0 0 26px}
+@media(max-width:820px){.bandeau{grid-template-columns:repeat(2,minmax(0,1fr))}}
+.tuile{display:block;text-align:left;background:var(--card);border:1px solid var(--line);border-radius:6px;
+padding:13px 15px 14px;cursor:pointer;color:var(--ink);font-family:var(--b);
+box-shadow:0 1px 2px rgba(40,34,20,.05),0 14px 26px -22px rgba(40,34,20,.55);
+transition:border-color .14s,transform .14s,box-shadow .14s;position:relative;overflow:hidden}
+:root[data-theme="nuit"] .tuile{box-shadow:inset 0 1px 0 rgba(255,255,255,.04),0 14px 26px -22px rgba(0,0,0,.9)}
+/* Un lavis bleu qui monte au survol : la meme grammaire que la
+   ligne en tete du widget — a gauche, du bleu, ca veut dire
+   « celle-la ». */
+.tuile::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blue);
+transform:scaleY(0);transform-origin:50% 50%;transition:transform .16s ease}
+.tuile:hover{border-color:var(--blue);transform:translateY(-1px)}
+.tuile:hover::before{transform:scaleY(1)}
+.tuile .tl{display:block;font-family:var(--m);font-size:9px;letter-spacing:.16em;text-transform:uppercase;
+color:var(--ink3);margin-bottom:7px}
+.tuile b{display:block;font-family:var(--d);font-weight:400;font-size:25px;line-height:1;letter-spacing:.015em;
+color:var(--ink);text-transform:uppercase;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+font-variant-numeric:tabular-nums}
+.tuile .ts{display:block;font-family:var(--m);font-size:9.5px;letter-spacing:.05em;color:var(--ink3);
+margin-top:7px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* ------------------------------------------------------------
+   Pas de vert.
+
+   La DA de Liaison tient en trois couleurs : le bleu et le rouge
+   du drapeau, de part et d'autre de l'encre. Le vert de « tout va
+   bien » vient d'ailleurs — c'est la couleur des tableaux de bord
+   d'administration, pas celle d'un objet de cabine. Trois valeurs
+   vertes cote a cote donnaient un bandeau de supervision reseau.
+
+   Ce qui va bien s'ecrit donc a l'encre, plein et net : c'est
+   l'etat normal, il n'a pas besoin d'etre celebre. Le bleu dit
+   « Liaison tient ca », le rouge dit « regarde ». Le silence est
+   la bonne nouvelle.
+   ------------------------------------------------------------ */
+.tuile[data-etat="ok"] b{color:var(--ink)}
+.tuile[data-etat="att"] b{color:var(--rose)}
+.tuile[data-etat="att"]{border-color:var(--rose)}
+.tuile[data-etat="info"] b{color:var(--blue)}
+/* Le point d'etat : deux pixels qui disent l'etat sans occuper de
+   place, en haut a droite de la tuile. */
+.tuile::after{content:"";position:absolute;top:11px;right:11px;width:5px;height:5px;border-radius:50%;
+background:var(--line)}
+.tuile[data-etat="ok"]::after{background:var(--blue)}
+.tuile[data-etat="info"]::after{background:var(--blue)}
+.tuile[data-etat="att"]::after{background:var(--rose)}
+
+/* Le bouton de theme, en haut a droite, hors du flux du titre. */
+.theme{position:absolute;top:26px;right:28px;width:34px;height:32px;padding:0;border-radius:4px;
+border:1px solid var(--line);background:var(--card);color:var(--ink2);font-size:16px;line-height:1;
+display:flex;align-items:center;justify-content:center;letter-spacing:0}
+.theme:hover{border-color:var(--blue);color:var(--blue);background:var(--card)}
+.wrap{position:relative}
+
+
+
 </style></head><body><div class="wrap">
 
 <h1><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 3.4 10 12l-6.6 8.6" stroke="var(--blue)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.6 3.4 14 12l6.6 8.6" stroke="var(--rose)" stroke-width="2.7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="currentColor"/></svg> Liaison</h1>
+<button class="theme" id="btnTheme" type="button" title="Mode jour / mode nuit">☾</button>
 <p class="sub">Reglages. Tout reste sur cette machine.</p>
+
+<!-- ============================================================
+     LA BANDE D'ETAT.
+
+     La fenetre s'ouvrait sur une rubrique, au hasard de la
+     derniere consultee, et ne repondait a aucune des quatre
+     questions qu'un DJ se pose en l'ouvrant : est-ce qu'il a
+     trouve ma musique, est-ce qu'il voit mon logiciel, est-ce que
+     ma licence tourne, et quelle soiree est armee. Il fallait
+     ouvrir quatre rubriques pour le savoir.
+
+     Quatre tuiles, quatre chiffres, aucune phrase. C'est aussi ce
+     qui remplit le haut de la fenetre, qui etait vide.
+     ============================================================ -->
+<div class="bandeau" id="bandeau">
+  <button class="tuile" data-va="pan-1" type="button">
+    <span class="tl">Bibliothèque</span><b id="bTitres">—</b><span class="ts" id="bSources">lecture…</span>
+  </button>
+  <button class="tuile" data-va="pan-3" type="button">
+    <span class="tl">Logiciel de mix</span><b id="bApp">—</b><span class="ts" id="bAppSub">aucun détecté</span>
+  </button>
+  <button class="tuile" data-va="pan-0" type="button">
+    <span class="tl">Licence</span><b id="bLic">—</b><span class="ts" id="bLicSub">&nbsp;</span>
+  </button>
+  <button class="tuile" data-va="pan-4" type="button">
+    <span class="tl">Soirée armée</span><b id="bSoir">—</b><span class="ts" id="bSoirSub">&nbsp;</span>
+  </button>
+</div>
 
 <div class="card" id="licCard">
   <h2>Licence <span class="pill" id="licPill">—</span></h2>
@@ -254,14 +601,19 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
 <div class="grid">
   <div class="card">
     <h2>1 — Ta bibliotheque <span class="pill ok">automatique</span></h2>
-    <p class="tips">Liaison lit la base de ton logiciel la ou elle se trouve — Serato, Traktor, VirtualDJ, rekordbox. Rien a importer, rien a exporter, rien a pointer : tu ajoutes un morceau dans ton logiciel, il est la. Ce qui n'est pas encore analyse l'est en local, sans qu'aucun fichier ne quitte la machine.</p>
-    <table id="srcTable"><thead><tr><th>Sources trouvees</th><th style="width:90px">Type</th></tr></thead><tbody></tbody></table>
-    <div class="bar"><i id="bar"></i></div>
+    <!-- Le paragraphe qui se trouvait ici repetait mot pour mot
+         l'intro du panneau, deux centimetres plus haut. Elle est
+         desormais servie une seule fois, par COURTS. -->
+    <!-- Le chiffre d'abord : c'est la seule question qu'on se pose
+         en ouvrant cet ecran — est-ce que Liaison a trouve ma
+         musique ? Les sources ensuite, les commandes en pied. -->
     <div class="state" id="libState">Recherche en cours…</div>
-    <p class="tips" id="scanInfo" style="margin-top:14px"></p>
-    <div class="row">
+    <div class="bar"><i id="bar"></i></div>
+    <div id="srcTable"></div>
+    <div class="pied">
       <button id="reScan">Relire maintenant</button>
       <button id="reScanTout" class="g">Tout relire</button>
+      <p class="tips" id="scanInfo"></p>
     </div>
     <p class="tips" style="margin-top:10px">
       <b>Relire</b> ne rouvre que ce qui a change : dix titres ajoutes coutent dix lectures,
@@ -478,6 +830,57 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
   <div id="hOut"></div>
 </div>
 
+<!-- ============================================================
+     TITRES A AVOIR.
+
+     Le seul ecran de Liaison qui parle de musique que le DJ n'a
+     PAS. Trois blocs qui ne se melangent jamais : sa salle, son
+     client, le monde — dans cet ordre d'autorite, parce que les
+     deux premiers se verifient sur cette machine et que le
+     troisieme vient de l'exterieur.
+     ============================================================ -->
+<div class="card" id="aavoirCard">
+  <h2>Titres a avoir <span class="pill" id="aaPill">—</span></h2>
+
+  <div class="aabloc" id="aaSalle">
+    <div class="aah"><b>Ta salle te l'a demandé</b><i id="aaSalleN"></i></div>
+    <div class="aaliste" id="aaSalleL"></div>
+  </div>
+
+  <div class="aabloc" id="aaClient">
+    <div class="aah"><b>Le client l'impose</b><i id="aaClientN"></i></div>
+    <div class="aaliste" id="aaClientL"></div>
+  </div>
+
+  <div class="aabloc" id="aaCharts">
+    <div class="aah">
+      <b>Le classement du moment</b>
+      <!-- Le pays se choisit ici, pas dans un ecran de reglages :
+           on le change quand on prepare une date a l'etranger,
+           c'est-a-dire en regardant cette liste. -->
+      <select id="aaPays" title="Le pays dont on regarde le classement"></select>
+      <!-- Le classement est garde sur le disque et ne se rafraichit
+           jamais tout seul : ce bouton est le seul moyen d'en
+           redemander un neuf. Il economise le quota de l'accord
+           Last.fm, et il rend la rubrique utilisable hors ligne. -->
+      <button class="aarf" id="aaRefresh" type="button" title="Redemander un classement à jour">
+        <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M13.4 8a5.4 5.4 0 1 1-1.7-3.9"/><path d="M13.8 2.4v3.2h-3.2"/></svg>
+      </button>
+      <i id="aaChartsN"></i>
+    </div>
+    <div class="aaliste" id="aaChartsL"></div>
+    <p class="tips">Ce bloc est le seul de Liaison dont la donnee vienne de l'exterieur :
+      il ne sait rien de ta salle, il dit ce que le pays ecoute. Par defaut il suit le
+      contexte de ta soiree ; change le pays si tu joues ailleurs.</p>
+  </div>
+
+  <div class="pied">
+    <button class="g" id="aaVider">Vider la liste</button>
+    <p class="tips">Un titre que tu ne veux pas acheter se retire d'un clic. Sans ce
+      bouton, une liste de courses devient une liste de reproches.</p>
+  </div>
+</div>
+
 <div class="card">
   <h2>7 — Preparer une soiree <span class="pill">avant de partir</span></h2>
   <p class="tips">Beaucoup de soirees se jouent sur des CDJ, sans ordinateur en cabine — et la, le widget ne sert a rien. Liaison construit alors chez toi le vivier que tu aurais joue : un ordre mixable, cale sur la courbe du contexte choisi plus haut, qui respecte les listes du client. Tu l'exportes en playlist, ton logiciel l'ouvre, tu la mets sur ta cle.</p>
@@ -576,6 +979,11 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-of
 
 <script>
 const $ = s => document.querySelector(s);
+/* L'espace insecable fine entre les milliers : c'est la regle
+   francaise, et sur un chiffre a cinq positions ca change
+   vraiment la lecture d'un coup d'oeil. « 22 000 » se voit,
+   « 22000 » se compte. */
+const nbfr = x => Number(x || 0).toLocaleString('fr-FR');
 const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 let C = null, PACK = null, share = null, qrData = null;
 
@@ -886,9 +1294,25 @@ window.liaison.on('progress', p => {
 renderScanInfo();
 async function renderSources(){
   const list = await window.liaison.librarySources();
-  $('#srcTable').querySelector('tbody').innerHTML = list.length
-    ? list.map(x => '<tr><td class="mono">' + esc(x.path) + '</td><td><span class="pill ok">' + esc(x.kind) + '</span></td></tr>').join('')
-    : '<tr><td colspan="2" style="color:#8A9099">Recherche en cours — lance ton logiciel de mix au moins une fois pour qu\'il ecrive sa base.</td></tr>';
+  /* ------------------------------------------------------------
+     Les sources, en tuiles plutot qu'en tableau.
+
+     C'etait un tableau a deux colonnes dont la seconde s'appelait
+     « TYPE » et repetait, en pastille verte, ce que le chemin
+     disait deja. Une colonne d'en-tete, une pastille et une bordure
+     pour porter le mot « rekordbox » — que le DJ cherche des yeux
+     en premier, et qui etait donc le plus petit texte de la ligne.
+
+     Le nom du logiciel passe donc devant, en capitales, et le
+     chemin sous lui en petit : c'est l'ordre dans lequel on les
+     lit. La colonne TYPE disparait avec le tableau.
+     ------------------------------------------------------------ */
+  $('#srcTable').innerHTML = list.length
+    ? '<div class="srcs">' + list.map(x =>
+        '<div class="src"><b>' + esc(x.label || x.kind) + '</b>' +
+        '<span class="pth">' + esc(x.path) + '</span></div>').join('') + '</div>'
+    : '<p class="vide">Aucune base trouvee pour l\'instant. Lance ton logiciel de mix ' +
+      'au moins une fois : c\'est en s\'ouvrant qu\'il ecrit sa base.</p>';
 }
 async function renderApps(){
   const apps = await window.liaison.runningApps();
@@ -1200,8 +1624,288 @@ window.liaison.on('progress', p => {
   $('#bar').style.width = p.total ? (p.done / p.total * 100) + '%' : '0';
   $('#libState').textContent = p.phase + ' : ' + p.done + ' / ' + p.total;
 });
-window.liaison.on('library', l => { $('#libState').innerHTML = '<b>' + l.n + '</b> titres prets'; $('#bar').style.width = '100%'; });
+window.liaison.on('library', l => { $('#libState').innerHTML = '<b>' + nbfr(l.n) + '</b> titres prets'; $('#bar').style.width = '100%'; });
 window.liaison.on('status', s => { $('#srcState').textContent = (s.ok ? '● ' : '○ ') + (s.msg || ''); });
+/* ============================================================
+   LE THEME, PARTAGE AVEC LE WIDGET.
+
+   Une seule bascule pour les deux fenetres : c'est le meme
+   reglage (config.theme), donc passer la cabine en mode nuit
+   passe aussi la preparation, et l'inverse. Deux interrupteurs
+   pour une seule lumiere, c'est un interrupteur de trop.
+   ============================================================ */
+function appliquerTheme(t) {
+  const nuit = t === 'nuit';
+  document.documentElement.setAttribute('data-theme', nuit ? 'nuit' : 'jour');
+  const b = $('#btnTheme');
+  if (!b) return;
+  /* le soleil propose le jour, la lune propose la nuit :
+     l'icone montre ce qu'on obtient en cliquant */
+  b.textContent = nuit ? '☀' : '☾';
+  b.title = nuit ? 'Passer en mode jour' : 'Passer en mode nuit';
+}
+$('#btnTheme').onclick = () => {
+  const t = document.documentElement.getAttribute('data-theme') === 'nuit' ? 'jour' : 'nuit';
+  appliquerTheme(t);
+  window.liaison.setConfig({ theme: t });
+};
+
+/* ------------------------------------------------------------
+   LA BANDE D'ETAT.
+
+   Elle ne fabrique aucune donnee : elle rappelle les memes appels
+   que les rubriques et n'affiche que ce qui en revient. Si un
+   appel echoue, la tuile reste sur son tiret plutot que
+   d'inventer — une tuile qui ment sur l'etat de la licence ou de
+   la bibliotheque est pire que pas de tuile du tout.
+   ------------------------------------------------------------ */
+async function bandeau() {
+  const set = (id, val, sub, etat) => {
+    const b = $(id); if (!b) return;
+    b.textContent = val;
+    const t = b.closest('.tuile');
+    if (sub != null) t.querySelector('.ts').textContent = sub;
+    if (etat) t.setAttribute('data-etat', etat); else t.removeAttribute('data-etat');
+  };
+
+  try {
+    const [an, src] = await Promise.all([
+      window.liaison.analysisState(), window.liaison.librarySources()
+    ]);
+    const n = (an && an.library) || 0;
+    const noms = (src || []).map(x => x.label || x.kind).filter(Boolean);
+    /* On nomme les logiciels lus : « rekordbox · iTunes » dit ou
+       Liaison est alle chercher, la ou « 2 sources » ne dit rien. */
+    set('#bTitres', n ? nbfr(n) : 'aucune',
+        noms.length ? noms.slice(0, 3).join(' · ') : 'aucune base trouvée',
+        n ? null : 'att');
+  } catch (e) {}
+
+  try {
+    const apps = await window.liaison.runningApps();
+    const ouvert = (apps || [])[0];
+    set('#bApp', ouvert ? (ouvert.label || ouvert.id) : 'aucun',
+        ouvert ? 'détecté maintenant' : 'lance ton logiciel',
+        ouvert ? 'ok' : null);
+  } catch (e) {}
+
+  try {
+    const l = await window.liaison.licenseStatus();
+    if (l) {
+      const essai = l.tier === 'trial';
+      set('#bLic', essai ? (l.trialLeft + ' j') : (l.label || l.tier),
+          essai ? 'essai en cours' : 'activée sur cette machine',
+          essai ? (l.trialLeft <= 3 ? 'att' : 'info') : 'ok');
+    }
+  } catch (e) {}
+
+  try {
+    const r = await window.liaison.soireesListe();
+    const a = r && r.active;
+    set('#bSoir', a ? a.nom : 'aucune',
+        a ? [a.date, a.lieu].filter(Boolean).join(' · ') : 'aucune fiche armée',
+        a ? 'ok' : null);
+  } catch (e) {}
+}
+
+document.querySelectorAll('.tuile').forEach(t => {
+  t.onclick = () => {
+    const n = document.querySelector('.rnav[data-pan="' + t.dataset.va + '"]');
+    if (n) n.click();
+  };
+});
+
+window.liaison.on('library', () => bandeau());
+window.liaison.on('app', () => bandeau());
+window.liaison.on('license', () => bandeau());
+
+/* ============================================================
+   TITRES A AVOIR.
+
+   Le rendu ne calcule rien : main.js a deja fait le rapprochement
+   avec la bibliotheque, le comptage par soiree et les liens
+   d'achat. Ici on met en forme, et surtout on explique les vides —
+   un bloc muet envoie chercher une panne qui n'existe pas.
+   ============================================================ */
+function aaLigne(x, opt) {
+  const o = opt || {};
+  const cpt = o.rang ? ('#' + x.rang) : String(x.n || 1);
+  /* « 4 fois · 3 soirees » : c'est le nombre de SOIREES qui fait
+     la difference entre un trou dans la bibliotheque et une table
+     de huit personnes un samedi soir. */
+  const sous = o.rang
+    ? (x.artist || '')
+    : [x.artist || '',
+       (x.soirees > 1 ? '<em>' + x.soirees + ' soirées</em>' : null),
+       (x.deja && x.deja.length ? 'proche de « ' + esc(x.deja[0].title || '') + ' » que tu as déjà' : null)
+      ].filter(Boolean).join(' · ');
+  const achats = (x.achats || []).slice(0, 2).map(a =>
+    '<a data-url="' + esc(a.url || a.href || '') + '">' + esc(a.nom || a.label || 'acheter') + '</a>').join('');
+  return '<div class="aal' + ((x.soirees > 1 || x.poids >= 6) ? ' fort' : '') + '">'
+       + '<span class="cpt">' + esc(cpt) + '</span>'
+       + '<span class="nom"><b>' + esc(x.title || '') + '</b><s>' + sous + '</s></span>'
+       + '<span class="go">' + achats
+       + (o.oubliable ? '<button class="x" data-oublier="1" data-a="' + esc(x.artist || '')
+            + '" data-t="' + esc(x.title || '') + '" title="Je ne veux pas l\'acheter">×</button>' : '')
+       + '</span></div>';
+}
+
+function aaVide(txt) { return '<p class="aavide">' + txt + '</p>'; }
+
+/* ------------------------------------------------------------
+   LA DATE DU RELEVE.
+
+   Le classement est garde sur le disque et ne se rafraichit pas
+   tout seul : il faut donc dire QUAND il a ete releve. Un
+   « classement du moment » sans date est une affirmation
+   invérifiable, et au bout de quelques semaines c'est carrement
+   faux. Passe dix jours, la mention vire au rouge et invite a
+   rafraichir — on ne cache jamais l'age de la donnee.
+   ------------------------------------------------------------ */
+function aaReleve(k) {
+  if (!k.depuis) return '';
+  const d = new Date(k.depuis);
+  const quand = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
+              + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const bout = k.horsLigne
+    ? ' — impossible de joindre le service, c’est la dernière liste connue.'
+    : (k.tiede ? ' — il commence à dater, rafraîchis-le.' : '');
+  return '<p class="aadate' + ((k.tiede || k.horsLigne) ? ' vieux' : '') + '">Relevé le '
+       + esc(quand) + esc(bout) + '</p>';
+}
+
+/* `avecClassement` vaut false uniquement pour un rafraichissement
+   de la liste locale — sinon le classement se charge tout seul,
+   parce que le DJ qui ouvre cette rubrique est venu pour ca. */
+async function aavoirRendre(avecClassement, forcer) {
+  let r;
+  try { r = await window.liaison.aAvoir({ classement: avecClassement !== false,
+                                          forcer: !!forcer }); }
+  catch (e) { return; }
+
+  /* --- 1. la salle --- */
+  const s = r.salle || [];
+  $('#aaSalleN').textContent = s.length ? s.length + ' titre' + (s.length > 1 ? 's' : '') : '';
+  $('#aaSalleL').innerHTML = s.length
+    ? s.map(x => aaLigne(x, { oubliable: true })).join('')
+    : aaVide(r.soirees
+        ? 'Personne n\'a encore rien demandé. Ouvre une session invités pendant une soirée : '
+          + 'chaque titre réclamé que tu n\'as pas viendra se noter ici, tout seul.'
+        : '<b>Rien ne manque.</b> Tout ce qu\'on t\'a demandé, tu l\'avais.');
+
+  /* --- 2. le client --- */
+  const c = r.client || [];
+  $('#aaClientN').textContent = c.length ? c.length + ' introuvable' + (c.length > 1 ? 's' : '') : '';
+  $('#aaClientL').innerHTML = c.length
+    ? c.map(x => aaLigne(x, { oubliable: false })).join('')
+    : aaVide('Aucun titre imposé ne manque. Colle la liste du client dans <b>Le client</b> '
+             + 'pour que Liaison vérifie ce que tu n\'as pas.');
+
+  /* --- 3. le classement --- */
+  /* Le menu des pays, rempli une fois : main.js dit la liste, le
+     pays force, et celui que le contexte donnerait. « Suivre la
+     soiree » reste le premier choix et le defaut. */
+  const sel = $('#aaPays');
+  if (r.pays && r.pays.liste && !sel.dataset.pret) {
+    const dft = r.pays.liste.find(x => x.code === r.pays.parDefaut);
+    sel.innerHTML = '<option value="">Suivre la soirée'
+      + (dft ? ' · ' + esc(dft.nom) : '') + '</option>'
+      + r.pays.liste.map(x => '<option value="' + esc(x.code) + '">' + esc(x.nom) + '</option>').join('');
+    sel.value = r.pays.choisi || '';
+    sel.dataset.pret = '1';
+  }
+
+  const k = r.classement || {};
+  const boite = $('#aaChartsL'), cpt = $('#aaChartsN');
+  if (k.etat === 'ok') {
+    cpt.textContent = (k.source || '') + (k.zone ? ' · ' + k.zone : '');
+    boite.innerHTML = k.titres.length
+      ? k.titres.map(x => aaLigne(x, { rang: true })).join('')
+        /* On dit combien on a ecarte : sans ce chiffre, une liste
+           courte ressemble a une panne alors que c'est une bonne
+           nouvelle. Et ce compte est recalcule a chaque ouverture :
+           un morceau telecharge depuis hier se voit tout de suite. */
+        + aaVide('Sur ' + k.vus + ' titres du classement, <b>tu en as déjà ' + k.deja + '</b>.')
+        + aaReleve(k)
+      : aaVide('<b>Tu as déjà tout le classement.</b> Les ' + k.vus + ' titres sont dans ta bibliothèque.')
+        + aaReleve(k);
+  } else {
+    cpt.textContent = '';
+    const dit = {
+      'non-demande': 'Chargement…',
+      'non-configure': 'Aucun fournisseur de classements n\'est configuré.',
+      'sans-cle': 'Cette version a été construite sans clé Last.fm : le classement reste '
+                + 'éteint. Liaison n\'affiche rien plutôt que d\'inventer.',
+      'refus': 'Le service a refusé : ' + esc(k.note || '') + ' Vérifie la clé.',
+      'injoignable': 'Service injoignable. Vérifie ta connexion — le reste de cet écran marche sans.',
+      'muet': 'Pas de réponse utilisable. Réessaie plus tard.'
+    };
+    boite.innerHTML = aaVide(dit[k.etat] || esc(k.note || 'Indisponible.'));
+  }
+
+  const n = (r.total || 0);
+  const pill = $('#aaPill');
+  pill.textContent = n ? n + ' à trouver' : 'rien ne manque';
+  pill.className = 'pill' + (n ? ' att' : '');
+  /* La pastille de la nav : un point bleu quand il y a des courses
+     a faire, pour qu'on le voie sans ouvrir la rubrique. */
+  const nav = document.querySelector('.rnav[data-pan][data-aavoir]');
+  if (nav) nav.setAttribute('data-alerte', n ? '1' : '0');
+}
+
+/* Changer de pays recharge le classement, et lui seul : la liste
+   locale n'a aucune raison d'etre relue. */
+/* Le seul chemin qui rappelle le service exterieur. Le bouton se
+   verrouille pendant l'appel : deux clics impatients, c'est deux
+   appels sur un quota partage par tous les DJ. */
+$('#aaRefresh').onclick = async () => {
+  const b = $('#aaRefresh');
+  if (b.disabled) return;
+  b.disabled = true; b.classList.add('tourne');
+  try { await aavoirRendre(true, true); }
+  finally { b.disabled = false; b.classList.remove('tourne'); }
+};
+
+/* ------------------------------------------------------------
+   Une bibliotheque qui bouge refait la confrontation.
+
+   « par contre si il telecharge un son, il faut bien que ca se
+     mette a jour »
+
+   C'est le cas sans rien rappeler a l'exterieur : la liste brute
+   dort sur le disque, et « tu l'as / tu ne l'as pas » se recalcule
+   a chaque lecture. Il suffit donc de relire quand la
+   bibliotheque change — import, relecture, ajout de morceaux.
+   ------------------------------------------------------------ */
+window.liaison.on('library', () => {
+  /* Le drapeau est pose par l'autre bloc de script, qui vit dans sa
+     propre portee : on passe donc par window plutot que de parier
+     sur une variable partagee qui n'existe pas. Et on ne relit que
+     si la rubrique a ete ouverte — sinon on ferait le travail pour
+     un ecran que personne ne regarde. */
+  if (window.__aavoirOuvert) aavoirRendre();
+});
+
+$('#aaPays').onchange = () => {
+  const v = $('#aaPays').value || '';
+  window.liaison.setConfig({ chartsPays: v });
+  aavoirRendre();
+};
+$('#aaVider').onclick = async () => {
+  await window.liaison.aAvoirVider();
+  /* false : on vient de vider la liste locale, le service exterieur
+     n'a rien a voir la-dedans et n'a pas a etre rappele. */
+  aavoirRendre(false);
+};
+$('#aavoirCard').addEventListener('click', async e => {
+  const x = e.target.closest('[data-oublier]');
+  if (x) {
+    await window.liaison.aAvoirOublier({ artist: x.dataset.a, title: x.dataset.t });
+    return aavoirRendre(false);
+  }
+  const a = e.target.closest('a[data-url]');
+  if (a && a.dataset.url) window.liaison.openExternal(a.dataset.url);
+});
 window.liaison.on('requests', () => refreshReq());
 window.liaison.on('app', () => renderApps());
 
@@ -1219,7 +1923,14 @@ window.liaison.on('app', () => renderApps());
   $('#sessName').value = C.config.sessionName || '';
   $('#gw').value = Math.round((C.config.guestWeight || 0.5) * 100); $('#gwv').textContent = $('#gw').value + ' %';
   $('#banned').value = (C.config.banned || []).join('; ');
-  if (C.libraryCount) $('#libState').innerHTML = '<b>' + C.libraryCount + '</b> titres prets — ' + esc(C.config.libraryPath || '');
+  appliquerTheme((C.config && C.config.theme) || 'jour');
+  /* La liste locale au demarrage, sans appel exterieur : le
+     classement part quand la rubrique s'ouvre, pas quand la
+     fenetre s'ouvre. */
+  aavoirRendre(false);
+  bandeau();
+  if (C.libraryCount) $('#libState').innerHTML = '<b>' + nbfr(C.libraryCount) + '</b> titres prets' +
+    (C.config.libraryPath ? ' <span class="oz">' + esc(C.config.libraryPath) + '</span>' : '');
   renderLic(C.license);
   $('#optWidget').checked = C.config.autoWidget !== false;
   $('#optLogin').checked = C.config.launchAtLogin !== false;
@@ -1329,41 +2040,120 @@ window.liaison.clientGet().then(st => {
   /* Le nom court de chaque rubrique et un mot d'introduction. Le
      titre complet de la carte reste la source : on n'invente rien,
      on abrege ce qui l'est trop pour une colonne. */
-  var NOMS = {
-    licCard:  ['Licence', 'Ton essai et ta cle',
-      'Quatorze jours, toutes fonctions ouvertes, sans compte a creer. Ensuite le widget continue de proposer un enchainement, mais <b>les sessions invites et le rejeu de set se ferment</b>. Une cle libere la machine ou tu l\'actives.'],
-    default:  [null, null]
+  /* ============================================================
+     CE QU'UNE RUBRIQUE DIT AVANT QU'ON LA LISE.
+
+     « la bas on a trop de blabla et sincerement les dj ne
+       prennent meme pas le temps de lire. il faut que ce soit
+       visuel (logo) mots cles, etc »
+
+     C'etait vrai et mesurable : 1 416 mots dans le balisage, et
+     sur l'ecran « Bibliotheque » le contenu utile — deux sources,
+     un chiffre, deux boutons — occupait un cinquieme des pixels.
+     Le reste etait de la prose, dont un paragraphe qui repetait
+     mot pour mot l'encadre juste au-dessus.
+
+     Chaque rubrique porte donc maintenant trois choses, dans cet
+     ordre de lecture :
+
+       un PICTOGRAMME — reconnu avant d'etre lu, dans la nav
+                        comme en tete du panneau ;
+       une PHRASE     — dix mots, ce que fait la rubrique ;
+       des MOTS-CLES  — les noms propres et les chiffres qu'un DJ
+                        cherche : rekordbox, Serato, 14 jours,
+                        SACEM, 90 secondes.
+
+     La prose n'est pas supprimee — elle est juste, et un DJ qui
+     veut comprendre doit pouvoir la lire. Elle passe sous
+     « en detail », repliee. Celui qui sait ne la voit jamais,
+     celui qui doute la deplie.
+     ============================================================ */
+
+  /* Les pictogrammes. Trait seul, 16 x 16, aucune surface pleine :
+     ils vivent aussi bien sur la nav claire que sur un bouton
+     actif sombre, sans avoir a exister en deux versions. */
+  var PICTOS = {
+    licence:  '<path d="M10.5 6.2a3.3 3.3 0 1 0-3.1 3.3L6 11l-1.6.4L4 13.8l1.9.4.5-1.7 1.3-.3.3-1.4 1-.9a3.3 3.3 0 0 0 1.5-2.7Z"/><circle cx="11.6" cy="5.2" r="1.1"/>',
+    biblio:   '<rect x="2.6" y="4" width="10.8" height="8.4" rx="1.4"/><path d="M2.6 6.6h10.8M5.6 4V2.4M10.4 4V2.4"/>',
+    gout:     '<path d="M2.6 12.2 6 8.4l2.5 2.1 4.9-6"/><path d="M10.6 4.5h2.8v2.8"/>',
+    mix:      '<path d="M4.5 2.6v4.2M4.5 9.4v4M11.5 2.6v4M11.5 8.6v4.8"/><rect x="3" y="6.8" width="3" height="2.6" rx=".7"/><rect x="10" y="6" width="3" height="2.6" rx=".7"/>',
+    soirees:  '<rect x="2.6" y="3.4" width="10.8" height="10" rx="1.4"/><path d="M2.6 6.4h10.8M5.4 2.2v2.4M10.6 2.2v2.4"/>',
+    contexte: '<circle cx="8" cy="8" r="5.4"/><path d="M2.6 8h10.8M8 2.6c1.4 1.6 2.1 3.4 2.1 5.4S9.4 12.4 8 13.4C6.6 12.4 5.9 10 5.9 8s.7-3.8 2.1-5.4Z"/>',
+    client:   '<rect x="3.4" y="2.8" width="9.2" height="10.4" rx="1.3"/><path d="M6 2.2h4v1.8H6zM5.9 7h4.2M5.9 9.8h2.8"/>',
+    invites:  '<rect x="2.6" y="2.6" width="4.4" height="4.4" rx="1"/><rect x="9" y="2.6" width="4.4" height="4.4" rx="1"/><rect x="2.6" y="9" width="4.4" height="4.4" rx="1"/><path d="M9 9h2v2H9zM12.4 12.4h1M9 13.4h1.6"/>',
+    sante:    '<path d="M1.8 8h2.9l1.4-3.4L8.6 12l1.5-4h3.9"/>',
+    preparer: '<path d="M2.6 5.6h10.8v7.2a1 1 0 0 1-1 1H3.6a1 1 0 0 1-1-1z"/><path d="M5.8 5.6V3.9a1 1 0 0 1 1-1h2.4a1 1 0 0 1 1 1v1.7M8 8v3.4M6.6 9.4 8 8l1.4 1.4"/>',
+    debrief:  '<path d="M2.6 13.4h10.8"/><rect x="3.4" y="8" width="2.4" height="4" rx=".6"/><rect x="6.8" y="4.6" width="2.4" height="7.4" rx=".6"/><rect x="10.2" y="6.6" width="2.4" height="5.4" rx=".6"/>',
+    tracklist:'<path d="M3.2 2.6h6.6l3 3v8a.8.8 0 0 1-.8.8H3.2a.8.8 0 0 1-.8-.8V3.4a.8.8 0 0 1 .8-.8Z"/><path d="M9.6 2.6v3.2h3.2M5 8.4h6M5 10.8h4"/>',
+    rejouer:  '<path d="M13 8a5 5 0 1 1-1.6-3.6"/><path d="M13.4 2.6v3h-3"/>',
+    avoir:    '<path d="M1.9 2.6h1.9l1.9 7.6h6.1l1.6-5.3H4.6"/><circle cx="6.4" cy="13" r="1.1"/><circle cx="11.6" cy="13" r="1.1"/>'
   };
+
+  /* Chaque rubrique : [nom court, sous-titre, picto, phrase, mots-cles, la prose]. */
+  var NOMS = {
+    aavoirCard: ['A avoir', 'Ce qui te manque', 'avoir',
+      'Ce que ta salle t\'a reclame et que tu n\'as pas.',
+      ['demandes sans reponse', 'liste du client', 'classement du moment', 'liens d\'achat'],
+      'Une demande d\'invite pour un titre absent etait jetee — « le DJ ne l\'a pas, rien a proposer ». C\'est vrai pour la nuit en cours et faux pour tout le reste. Elle est desormais notee, soiree apres soiree : <b>ce qui revient dans plusieurs soirees differentes est un trou dans ta bibliotheque</b>, pas une tablee insistante. Le classement du moment arrive en dernier, et il est annonce comme exterieur : il ne sait rien de ta salle.'],
+    licCard: ['Licence', 'Ton essai et ta cle', 'licence',
+      'Quatorze jours, toutes fonctions ouvertes, sans compte a creer.',
+      ['14 jours', 'sans compte', '1 cle = 1 machine'],
+      'Ensuite le widget continue de proposer un enchainement, mais <b>les sessions invites et le rejeu de set se ferment</b>. Une cle libere la machine ou tu l\'actives.'],
+    default: [null, null]
+  };
+
   /* L'ordre compte : « Sante de ta bibliotheque » contient
      « ta bibliotheque ». Le motif le plus precis passe donc en
      premier, sinon deux rubriques portent le meme nom — ce qui
      etait exactement le cas au premier essai. */
-  /* Chaque rubrique dit : ce que c'est, a quoi ca sert, et ce que
-     tu as a faire. Trois lignes, pas une notice. */
   var COURTS = [
-    [/ton debrief/i,                   'Le debrief', 'Ce que tu viens de jouer',
+    [/ton debrief/i, 'Le debrief', 'Ce que tu viens de jouer', 'debrief',
+      'La courbe que tu as reellement jouee. Des mesures, aucun conseil.',
+      ['energie', '3 meilleurs enchainements', 'part des genres'],
       'Personne ne donne jamais de retour a un DJ sur ce qu\'il vient de jouer. Liaison a note l\'heure, la duree reelle, le tempo, la tonalite, l\'energie et les genres de chaque morceau : il te rend la courbe reellement jouee, tes trois meilleurs enchainements et la part de chaque famille de genres. <b>Des mesures, aucun conseil.</b>'],
-    [/tes soirees/i,                   'Tes soirees', 'Une fiche par date',
+    [/tes soirees/i, 'Tes soirees', 'Une fiche par date', 'soirees',
+      'Une fiche par date. Tu l\'actives en arrivant, tout bascule d\'un coup.',
+      ['lieu', 'duree', 'titres imposes', 'titres refuses'],
       'Une soiree se prepare la semaine d\'avant, pas a 21 h dans une cabine mal eclairee. Une fiche retient le lieu, la duree, les genres voulus, les titres imposes et ceux qui sont refuses. <b>Tu l\'actives en arrivant et tout bascule d\'un coup</b> — contexte, listes du client, et le QR des invites, propre a cette soiree.'],
-    [/sante de ta bibliotheque|^\s*\d*\s*[—-]?\s*sante/i, 'Sante', 'Le controle qualite',
+    [/sante de ta bibliotheque|^\s*\d*\s*[—-]?\s*sante/i, 'Sante', 'Le controle qualite', 'sante',
+      'Ce que dit ta base, compare a ce que Liaison mesure lui-meme.',
+      ['tempos faux', 'tonalites', 'fichiers perdus', 'ne corrige rien'],
       'Sur des milliers de morceaux accumules pendant des annees, il y a forcement des tempos faux, des tonalites qui ne collent pas et des fichiers disparus. Liaison compare ce que dit ta base a ce qu\'il mesure lui-meme, et te montre l\'ecart. <b>Il ne corrige rien tout seul</b> : c\'est ta bibliotheque.'],
-    [/bibliotheque$|ta bibliotheque/i, 'Bibliotheque', 'D\'ou viennent tes morceaux',
-      'Liaison lit la base de ton logiciel la ou elle se trouve — Serato, Traktor, VirtualDJ, rekordbox, iTunes. <b>Rien a importer, rien a exporter.</b> Ce qui a deja ete lu est garde d\'une session a l\'autre : au deuxieme lancement, c\'est instantane.'],
-    [/appris de toi/i,                 'Ce qu\'il apprend', 'Ton gout, mesure',
+    [/bibliotheque$|ta bibliotheque/i, 'Bibliotheque', 'D\'ou viennent tes morceaux', 'biblio',
+      'Liaison lit la base de ton logiciel la ou elle se trouve.',
+      ['rekordbox', 'Serato', 'Traktor', 'VirtualDJ', 'iTunes', 'rien a importer'],
+      'Rien a importer, rien a exporter, rien a pointer : tu ajoutes un morceau dans ton logiciel, il est la. Ce qui a deja ete lu est garde d\'une session a l\'autre — au deuxieme lancement, c\'est instantane. Ce qui n\'est pas encore analyse l\'est en local, sans qu\'aucun fichier ne quitte la machine.'],
+    [/appris de toi/i, 'Ce qu\'il apprend', 'Ton gout, mesure', 'gout',
+      'Il regarde ce que tu prends, et surtout ce que tu ignores.',
+      ['12 enchainements minimum', 'borne', 'effacable'],
       'Liaison regarde ce que tu joues apres chaque suggestion — celles que tu prends, et surtout celles que tu ignores — et deplace ses criteres vers les tiens. <b>Rien n\'est modifie avant douze enchainements</b>, tout est borne, et tu peux tout effacer.'],
-    [/logiciel de mix/i,               'Logiciel de mix', 'Comment il voit tes decks',
+    [/logiciel de mix/i, 'Logiciel de mix', 'Comment il voit tes decks', 'mix',
+      'Le widget s\'ouvre quand ton logiciel s\'ouvre, et se ferme avec lui.',
+      ['Serato', 'Traktor', 'VirtualDJ', 'rekordbox : CDJ requis'],
       'Liaison surveille les logiciels ouverts : le widget apparait quand tu lances le tien, disparait quand tu le fermes. <b>Serato, Traktor et VirtualDJ</b> sont lus sans materiel. <b>rekordbox</b> demande un CDJ, un XDJ ou un DJM sur le reseau — sinon, la loupe du widget.'],
-    [/contexte/i,                      'Contexte', 'Le pays et le type de soiree',
-      'Un mariage a Lille et un club a Berlin n\'appellent pas les memes titres. Le contexte oriente les genres proposes et la courbe d\'energie attendue. <b>C\'est le reglage qui change le plus les suggestions</b> — deux menus, trente secondes.'],
-    [/soiree du client/i,              'Le client', 'Ce qu\'il veut, ce qu\'il refuse',
+    [/contexte/i, 'Contexte', 'Le pays et le type de soiree', 'contexte',
+      'Un mariage a Lille et un club a Berlin n\'appellent pas les memes titres.',
+      ['pays', 'type de soiree', '30 secondes'],
+      'Le contexte oriente les genres proposes et la courbe d\'energie attendue. <b>C\'est le reglage qui change le plus les suggestions</b> — deux menus, trente secondes.'],
+    [/soiree du client/i, 'Le client', 'Ce qu\'il veut, ce qu\'il refuse', 'client',
+      'Ce qu\'il veut passe devant. Ce qu\'il refuse sort du moteur.',
+      ['liste collee', 'lien Spotify', 'sans discussion'],
       'Colle sa liste ou un lien de playlist Spotify : les titres voulus passent devant dans le widget et tirent l\'ambiance vers leurs genres. <b>Les titres refuses sortent du moteur</b>, sans discussion.'],
-    [/demandes des invites/i,          'Les invites', 'La salle demande, tu decides',
+    [/demandes des invites/i, 'Les invites', 'La salle demande, tu decides', 'invites',
+      'Un QR, aucune appli a installer, cinq demandes par personne.',
+      ['reseau local', 'sans compte', '90 s entre deux'],
       'Liaison ouvre une page sur ton reseau local. Les invites scannent un QR et deposent une demande — <b>aucun compte, aucune appli a installer</b>. Cinq demandes par personne, quatre-vingt-dix secondes entre deux.'],
-    [/preparer une soiree/i,           'Preparer', 'Le vivier, avant de partir',
+    [/preparer une soiree/i, 'Preparer', 'Le vivier, avant de partir', 'preparer',
+      'Le vivier que tu aurais joue, construit chez toi avant de partir.',
+      ['ordre mixable', 'export playlist', 'pour la cle USB'],
       'Beaucoup de soirees se jouent sur CDJ, sans ordinateur en cabine. Liaison construit chez toi le vivier que tu aurais joue : un ordre mixable, cale sur la courbe du contexte. <b>Tu l\'exportes en playlist</b>, ton logiciel l\'ouvre, tu la mets sur ta cle.'],
-    [/tracklists/i,                    'Tracklists', 'Ce qui a ete joue, a la minute',
-      'Liaison note tout ce qui est passe, avec l\'heure et la duree reelle de chaque morceau. De quoi repondre a « tu peux m\'envoyer ta tracklist ? » sans rien retaper, et <b>remplir une declaration SACEM</b> sans reconstruire la soiree de memoire.'],
-    [/rejouer un set/i,                'Rejouer', 'La meme soiree, autrement',
+    [/tracklists/i, 'Tracklists', 'Ce qui a ete joue, a la minute', 'tracklist',
+      'Tout ce qui est passe, avec l\'heure et la duree reelle.',
+      ['heure', 'duree reelle', 'SACEM'],
+      'De quoi repondre a « tu peux m\'envoyer ta tracklist ? » sans rien retaper, et <b>remplir une declaration SACEM</b> sans reconstruire la soiree de memoire.'],
+    [/rejouer un set/i, 'Rejouer', 'La meme soiree, autrement', 'rejouer',
+      'Les memes morceaux, jamais le meme ordre.',
+      ['vivier garde', 'ordre refait', 'mixabilite tenue'],
       'Reprends le vivier d\'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l\'ordre : <b>jamais le meme enchainement deux fois</b>, et la mixabilite tient toujours.']
   ];
 
@@ -1389,19 +2179,39 @@ window.liaison.clientGet().then(st => {
   cartes.forEach(function (carte, i) {
     var titreComplet = carte.querySelector('h2');
     var brut = titreComplet ? titreComplet.textContent.trim() : 'Rubrique ' + (i + 1);
-    var court = null, sous = null, intro = null;
-    if (NOMS[carte.id] && NOMS[carte.id][0]) { court = NOMS[carte.id][0]; sous = NOMS[carte.id][1]; intro = NOMS[carte.id][2]; }
+    var court = null, sous = null, picto = null, phrase = null, mots = null, detail = null;
+    if (NOMS[carte.id] && NOMS[carte.id][0]) {
+      court = NOMS[carte.id][0]; sous = NOMS[carte.id][1]; picto = NOMS[carte.id][2];
+      phrase = NOMS[carte.id][3]; mots = NOMS[carte.id][4]; detail = NOMS[carte.id][5];
+    }
     if (!court) for (var k = 0; k < COURTS.length; k++)
-      if (COURTS[k][0].test(brut)) { court = COURTS[k][1]; sous = COURTS[k][2]; intro = COURTS[k][3]; break; }
+      if (COURTS[k][0].test(brut)) {
+        court = COURTS[k][1]; sous = COURTS[k][2]; picto = COURTS[k][3];
+        phrase = COURTS[k][4]; mots = COURTS[k][5]; detail = COURTS[k][6];
+        break;
+      }
     if (!court) court = brut.replace(/^\d+\s*[—-]\s*/, '').slice(0, 22);
+    var svg = picto && PICTOS[picto]
+      ? '<svg class="pic" viewBox="0 0 16 16" aria-hidden="true">' + PICTOS[picto] + '</svg>' : '';
 
     var pan = document.createElement('section');
     pan.className = 'pan'; pan.id = 'pan-' + i;
     var h = document.createElement('div'); h.className = 'panh';
     var pill = titreComplet ? titreComplet.querySelector('.pill') : null;
-    h.innerHTML = '<span class="paneb">' + String(i + 1).padStart(2, '0') + ' · ' + (sous || court) + '</span>'
-                + '<h2>' + court + '</h2>'
-                + (intro ? '<div class="panintro"><span class="k">A quoi ca sert</span>' + intro + '</div>' : '');
+    /* En tete : le pictogramme et le nom sur la meme ligne, la
+       phrase en dessous, les mots-cles en dessous encore. La prose
+       ne sort que si on la demande — « en detail » est un bouton,
+       pas un paragraphe. */
+    h.innerHTML = '<span class="paneb">' + (sous || court) + '</span>'
+                + '<h2>' + svg + '<span class="hn">' + court + '</span></h2>'
+                + (phrase ? '<p class="phrase">' + phrase + '</p>' : '')
+                + (mots && mots.length
+                    ? '<div class="mots">' + mots.map(function (m) {
+                        return '<span class="mot">' + m + '</span>'; }).join('') + '</div>'
+                    : '')
+                + (detail
+                    ? '<details class="detail"><summary>En détail</summary><div>' + detail + '</div></details>'
+                    : '');
     if (pill) h.querySelector('h2').appendChild(pill);
     pan.appendChild(h);
     pan.appendChild(carte);
@@ -1409,7 +2219,11 @@ window.liaison.clientGet().then(st => {
 
     var b = document.createElement('button');
     b.className = 'rnav'; b.type = 'button'; b.dataset.pan = pan.id;
-    b.innerHTML = '<span class="rn">' + String(i + 1).padStart(2, '0') + '</span><span>' + court + '</span><span class="rdot"></span>';
+    /* La nav porte le meme pictogramme que le panneau : on
+       reconnait la rubrique avant de lire son nom, et les numeros
+       01..13 — qui ne disaient rien — disparaissent. */
+    b.innerHTML = (svg || '<span class="rn">' + String(i + 1).padStart(2, '0') + '</span>')
+                + '<span>' + court + '</span><span class="rdot"></span>';
     b.onclick = function () { montrer(pan.id); };
     boutons.push(b);
   });
@@ -1432,8 +2246,56 @@ window.liaison.clientGet().then(st => {
   aRetirer.forEach(function (n) { if (n.parentElement === wrap) wrap.removeChild(n); });
   wrap.appendChild(shell);
 
+  /* ------------------------------------------------------------
+     Les .tips passent derriere un « ? », a l'endroit exact ou ils
+     etaient. On ne les deplace pas et on ne les reecrit pas : on
+     les enveloppe. Aucune de leurs regles de style ne bouge, et
+     le jour ou on voudra tout rouvrir, il suffit de retirer ces
+     douze lignes.
+
+     Exception : un .tips VIDE au chargement est rempli plus tard
+     par le script principal (etat de licence, info de scan). En
+     replier un qui ne dit encore rien poserait un « ? » qui
+     n'ouvre sur rien — on les laisse tranquilles.
+     ------------------------------------------------------------ */
+  [].forEach.call(pans.querySelectorAll('p.tips'), function (t) {
+    if (!t.textContent.trim()) return;
+    if (t.closest('details')) return;
+    var d = document.createElement('details');
+    d.className = 'aide';
+    var sum = document.createElement('summary');
+    sum.textContent = '?';
+    sum.title = 'Comment ca marche';
+    d.appendChild(sum);
+    t.parentNode.insertBefore(d, t);
+    d.appendChild(t);
+  });
+
   function montrer(id) {
     [].forEach.call(pans.children, function (p) { p.classList.toggle('on', p.id === id); });
+    /* ------------------------------------------------------------
+       Le classement part quand la rubrique s'ouvre.
+
+       Pas au demarrage de la fenetre : ouvrir les reglages pour
+       changer une case a cocher ne doit pas declencher un appel
+       reseau. Pas sur un bouton non plus — c'etait demander au DJ
+       de reclamer l'information qu'il venait chercher. Ici, au
+       moment exact ou il regarde le bloc.
+
+       Une seule fois par ouverture de fenetre : main.js garde le
+       classement trois heures en memoire, et cette garde evite
+       meme de le lui redemander a chaque aller-retour entre deux
+       rubriques.
+       ------------------------------------------------------------ */
+    try {
+      var carte = document.getElementById('aavoirCard');
+      if (carte && carte.closest('.pan') && carte.closest('.pan').id === id
+          && !montrer._aavoir && typeof aavoirRendre === 'function') {
+        montrer._aavoir = true;
+        window.__aavoirOuvert = true;
+        aavoirRendre();
+      }
+    } catch (e) {}
     boutons.forEach(function (b) { b.setAttribute('aria-current', b.dataset.pan === id ? 'true' : 'false'); });
     try { localStorage.setItem('liaison.reglages.pan', id); } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'auto' });

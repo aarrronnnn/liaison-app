@@ -764,6 +764,124 @@ function elaguerDisparus(tracks) {
   return { gardes: gardes, disparus: disparus, horsLigne: horsLigne };
 }
 
+/* ============================================================
+   LE MEME MORCEAU, DEUX FOIS DANS LA LISTE.
+
+   « Si un son est a la fois dans la bibliotheque iTunes et dans la
+     bibliotheque rekordbox, il faut pas le proposer deux fois. »
+
+   La fusion des sources dedoublonne DEJA — mais par CHEMIN. Elle
+   attrape donc le cas ou les deux logiciels pointent le meme
+   fichier, ce qui est le cas le plus frequent et le plus facile.
+
+   Elle ne peut rien contre l'autre : deux FICHIERS differents qui
+   portent la meme chanson. Et celui-la est partout :
+
+     — iTunes copie les morceaux dans son propre dossier media,
+       pendant que rekordbox garde l'original dans Telechargements ;
+     — le DJ a racheté un titre en meilleure qualite sans effacer
+       l'ancien ;
+     — un fichier vit sur le disque interne et sa copie sur le SSD.
+
+   Deux chemins, deux entrees, et la meme chanson proposee deux
+   fois de suite — ce qui, en cabine, ressemble a un bug et rien
+   d'autre.
+
+   On regroupe donc par ARTISTE + TITRE mis a plat ET par DUREE, la
+   meme regle que l'ecran de sante. La duree est ce qui protege du
+   faux positif : un radio edit et une version longue portent le
+   meme nom et ne durent pas pareil, et ils doivent rester deux
+   morceaux distincts.
+
+   Dans chaque groupe on garde UN morceau, et on lui donne le
+   meilleur de tous : la source la plus fiable pour le tempo et la
+   tonalite, l'annee de qui en a une, le chemin du fichier qui
+   existe vraiment. On note combien de copies ont ete repliees —
+   l'ecran de sante s'en sert pour proposer le menage.
+   ============================================================ */
+function normaliserNom(s) {
+  return String(s || '')
+    .toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+    .replace(/\b(feat|ft|featuring|avec)\b.*$/, ' ')
+    .replace(/[\[(][^\])]*[\])]/g, ' ')
+    .replace(/[^a-z0-9]+/g, ' ')
+    .trim();
+}
+
+/* Ecart tolere : 4 secondes, ou 2 % pour les morceaux longs. Un meme
+   enregistrement encode deux fois varie de quelques dixiemes ; un
+   edit ou un remix, de bien plus. Meme regle que health.js. */
+function memeDuree(a, b) {
+  if (!(a > 0) || !(b > 0)) return false;   /* duree inconnue : on NE replie PAS */
+  return Math.abs(a - b) <= Math.max(4, Math.min(a, b) * 0.02);
+}
+
+/**
+ * Replie les copies d'un meme morceau en une seule entree.
+ * @returns {{tracks:Array, replies:number}}
+ */
+function dedoublonner(tracks) {
+  const parNom = new Map();
+  const sansNom = [];
+  for (const t of tracks || []) {
+    const n = normaliserNom((t.artist || '') + ' ' + (t.title || ''));
+    if (n.length < 4) { sansNom.push(t); continue; }
+    if (!parNom.has(n)) parNom.set(n, []);
+    parNom.get(n).push(t);
+  }
+
+  const out = [];
+  let replies = 0;
+  for (const [, memeNom] of parNom) {
+    if (memeNom.length === 1) { out.push(memeNom[0]); continue; }
+    /* Meme nom ne suffit pas : on redecoupe par duree. */
+    const groupes = [];
+    for (const t of memeNom) {
+      const g = groupes.find(x => memeDuree(x[0].duration, t.duration));
+      if (g) g.push(t); else groupes.push([t]);
+    }
+    for (const g of groupes) {
+      if (g.length === 1) { out.push(g[0]); continue; }
+      /* ------------------------------------------------------------
+         Lequel on garde : celui dont le FICHIER EXISTE. Une entree
+         iTunes qui pointe un fichier efface ne doit jamais l'emporter
+         sur l'entree rekordbox du meme morceau, sinon on aurait
+         dedoublonne pour ne garder que la copie morte.
+         ------------------------------------------------------------ */
+      const vivants = g.filter(t => t.path && !t.disparu);
+      const candidats = vivants.length ? vivants : g;
+      /* A egalite, la source la plus fiable pour le tempo. */
+      let garde = candidats[0];
+      for (const t of candidats) {
+        if (fiabilite(t.bpmSrc) > fiabilite(garde.bpmSrc)) garde = t;
+      }
+      /* Et on ramasse le meilleur de tous les autres. */
+      for (const t of g) {
+        if (t === garde) continue;
+        if (t.bpm > 0 && (!(garde.bpm > 0) || fiabilite(t.bpmSrc) > fiabilite(garde.bpmSrc))) {
+          garde.bpm = t.bpm; garde.bpmSrc = t.bpmSrc;
+        }
+        if (t.key && (!garde.key || fiabilite(t.keySrc) > fiabilite(garde.keySrc))) {
+          garde.key = t.key; garde.keySrc = t.keySrc;
+        }
+        if (!garde.genre && t.genre) garde.genre = t.genre;
+        if (!anneeTag(garde.year) && anneeTag(t.year)) garde.year = t.year;
+        if (garde.rbId == null && t.rbId != null) garde.rbId = t.rbId;
+        if (garde.itId == null && t.itId != null) garde.itId = t.itId;
+        /* La notoriete d'iTunes — nombre de lectures, note — est une
+           information que les logiciels DJ n'ont pas : on prend la
+           plus haute plutot que celle du hasard. */
+        if ((t.pop || 0) > (garde.pop || 0)) garde.pop = t.pop;
+      }
+      garde.copies = g.length;
+      replies += g.length - 1;
+      out.push(garde);
+    }
+  }
+  return { tracks: out.concat(sansNom), replies: replies };
+}
+
 /* Un morceau est utilisable des que le logiciel de mix nous a
    donne son titre, son artiste, son BPM et sa tonalite. L'energie
    et le timbre affinent le classement mais ne le conditionnent
@@ -831,4 +949,4 @@ function finalize(tracks) {
 }
 
 module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath,
-                   FIABILITE, fiabilite, elaguerDisparus, AUDIO };
+                   FIABILITE, fiabilite, elaguerDisparus, dedoublonner, normaliserNom, AUDIO };

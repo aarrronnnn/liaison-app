@@ -95,7 +95,7 @@ const SOS = [
        ------------------------------------------------------------ */
     const SURFACE = ('analysisState autoImport bilan bulleBasculer bulleGet bulleRecentrer ' +
       'clientClear clientGet clientImport clientRemove clientShopping closeLicence copy ' +
-      'copySet crates dragPossible dragTrack exportSet filters getConfig goutEtat goutOublier ' +
+      'copySet crates dragPossible dragTrack exportSet filterGenres filters getConfig goutEtat goutOublier ' +
       'healthReveal healthScan hideWidget iconDataUrl landingClear landingGet landingPlan ' +
       'librarySources licenseActivate licenseBuy licenseRefresh licenseRelease licenseStatus ' +
       'listSets loadTrack majEtat majIgnorer majOuvrir nowPlaying on openExternal openLicence ' +
@@ -113,7 +113,17 @@ const SOS = [
       on: (k, f) => { ecoute[k] = f; },
       loadTrack: async () => ({ ok: true, copied: 'titre' }),
       rescue: async () => [],
-      filters: async () => ({ n: 0 }),
+      filters: async () => ({ crates: [{ id: 'c1', name: 'Mariage', n: 312 }],
+        etat: { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0,
+                genres: [], marge: 0, energyMin: 0, energyMax: 0 },
+        restants: 22000, total: 22000, vide: false, active: false, bpm: 128 }),
+      setFilters: async () => ({ restants: 4120, total: 22000, vide: false, active: true,
+        etat: { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0,
+                genres: ['Disco'], marge: 0, energyMin: 0, energyMax: 0 } }),
+      /* Les etiquettes de style, telles que main.js les lit dans la
+         bibliotheque du DJ : son orthographe, ses habitudes. */
+      filterGenres: async () => ([{ tag: 'Variété française', n: 2840 }, { tag: 'Disco', n: 1620 },
+                                  { tag: 'Techno', n: 770 }]),
       analysisState: async () => ({ library: 22000, analyses: 12000, offline: 0,
                                     restants: 10000, total: 22000, conseils: [] }),
       licenseStatus: async () => ({ tier: 'pro', label: 'Pro', limit: 5 }),
@@ -295,6 +305,131 @@ const SOS = [
     verifier('7. a 320 px de large, rien ne deborde encore',
              r.debord <= 320 && r.n === 3, r.debord + ' px');
     verifier('7bis. et toujours aucune erreur', errs.length === 0, errs[0] || '');
+  }
+
+  /* ============================================================
+     9. LA DENSITE : le widget doit vraiment RETRECIR.
+
+     « le design du widget est mauvais : bien trop gros, ca cache
+       tout quand on mixe »
+
+     Le widget se disait deja « epousant son contenu » et ne l'a
+     jamais fait : le corps etait a 100 % de la hauteur de la
+     fenetre, donc la mesure rendait la hauteur de la fenetre
+     elle-meme et l'ajustement ne se declenchait jamais. On mesure
+     donc ici ce que le DJ voit : la somme des blocs empiles, cran
+     par cran. S'ils cessent de decroitre, la promesse est cassee
+     et cet essai doit tomber.
+     ============================================================ */
+  {
+    await p.setViewportSize({ width: LARGEUR, height: 760 });
+    const h = {};
+    for (const d of ['grand', 'cabine', 'barre']) {
+      h[d] = await p.evaluate((d) => {
+        poserDensite(d, false);
+        let t = 2;
+        for (const el of document.body.children) {
+          if (getComputedStyle(el).position === 'fixed') continue;
+          t += el.getBoundingClientRect().height;
+        }
+        return Math.ceil(t);
+      }, d);
+    }
+    verifier('9. chaque cran est plus court que le precedent',
+             h.barre < h.cabine && h.cabine < h.grand,
+             'barre ' + h.barre + ' / cabine ' + h.cabine + ' / grand ' + h.grand + ' px');
+    /* L'ancienne fenetre etait figee a 548 px. Le cran le plus
+       serre doit tenir largement en dessous, sinon on n'a rien
+       gagne la ou le DJ en a besoin. */
+    verifier('9bis. la barre tient sous 340 px', h.barre <= 340, h.barre + ' px');
+    verifier('9ter. et SOS garde ses trois lettres meme en barre',
+             await p.evaluate(() => {
+               poserDensite('barre', false);
+               return getComputedStyle(document.querySelector('#btnSos .w')).display !== 'none';
+             }));
+    /* Le pied tient sur UNE rangee : SOS relegue en deuxieme ligne,
+       c'est le bouton d'urgence a l'endroit ou on le cherche le
+       plus tard. */
+    const rangees = await p.evaluate(() => {
+      poserDensite('cabine', false);
+      const btns = [...document.querySelectorAll('.foot > .seg, .foot > .chip')];
+      return new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size;
+    });
+    verifier('9quater. le pied tient sur une seule rangee', rangees === 1, rangees + ' rangee(s)');
+    await p.evaluate(() => poserDensite('cabine', false));
+  }
+
+  /* ============================================================
+     10. LES FILTRES : visibles sans etre ouverts, et effacables.
+
+     « on ne voit pas que l'on a les filtres pour chercher des sons
+       plus particulier »
+     ============================================================ */
+  {
+    errs.length = 0;
+    const vu = await p.evaluate(() => {
+      const r = document.querySelector('#rail');
+      return { affiche: getComputedStyle(r).display !== 'none',
+               pastilles: r.querySelectorAll('.p').length,
+               tiroir: document.querySelector('#tiroir').classList.contains('on') };
+    });
+    verifier('10. le rail de filtres est visible sans rien ouvrir',
+             vu.affiche && vu.pastilles === 4, vu.pastilles + ' pastilles');
+    verifier('10bis. et son tiroir reste replie', vu.tiroir === false);
+
+    /* Les styles viennent de la bibliotheque du DJ, pas d'une liste
+       maison : « prend ceux de la bibliotheque du dj (itunes,
+       rekordbox, etc.. car chaque dj a son habitude) ». */
+    await p.click('#pGenre');
+    await p.waitForTimeout(150);
+    const g = await p.evaluate(() => [...document.querySelectorAll('#gWrap button[data-g]')]
+                                       .map(b => b.dataset.g));
+    verifier('10ter. le tiroir sert les styles du DJ',
+             g.includes('Variété française') && g.includes('Techno'), g.join(' · '));
+
+    /* Une pastille allumee dit SUR QUOI elle est allumee : sinon il
+       faut rouvrir le tiroir pour savoir ce qu'on a demande. */
+    const pastille = await p.evaluate(() => {
+      fEtat.genres = ['Disco', 'Techno']; fEtat.marge = 3;
+      fEtat.energyMin = 6; fEtat.energyMax = 9;
+      paintRail();
+      return { g: document.querySelector('#pGenre b').textContent,
+               t: document.querySelector('#pTempo b').textContent,
+               e: document.querySelector('#pEnergie b').textContent,
+               allume: document.querySelector('#pGenre').getAttribute('aria-pressed'),
+               vider: document.querySelector('#railRaz').classList.contains('on') };
+    });
+    verifier('10quater. allumee, elle affiche sa valeur',
+             pastille.allume === 'true' && /Disco/.test(pastille.g) &&
+             /3/.test(pastille.t) && /6-9/.test(pastille.e),
+             pastille.g + ' | ' + pastille.t + ' | ' + pastille.e);
+    verifier('10quinquies. et « vider » apparait', pastille.vider === true);
+
+    /* ------------------------------------------------------------
+       Le coeur du reglage : « une fois que le son est joue, les
+       filtres retournent par defaut ».
+
+       C'est main.js qui efface et qui renvoie l'etat ; le widget
+       doit CROIRE cet etat plutot que le sien. Sans ca, le rail
+       resterait allume sur des filtres qui ne s'appliquent plus —
+       le pire des deux mondes.
+       ------------------------------------------------------------ */
+    const apres = await p.evaluate(() => {
+      window.__ecoute.filters({
+        etat: { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0,
+                genres: [], marge: 0, energyMin: 0, energyMax: 0 },
+        restants: 22000, total: 22000, vide: false, active: false });
+      return { g: document.querySelector('#pGenre').getAttribute('aria-pressed'),
+               t: document.querySelector('#pTempo').getAttribute('aria-pressed'),
+               e: document.querySelector('#pEnergie').getAttribute('aria-pressed'),
+               mot: document.querySelector('#pGenre b').textContent,
+               vider: document.querySelector('#railRaz').classList.contains('on') };
+    });
+    verifier('10sexies. au morceau suivant, le rail s\'eteint tout seul',
+             apres.g === 'false' && apres.t === 'false' && apres.e === 'false' &&
+             apres.vider === false, apres.mot);
+    verifier('10septies. sans rien jeter au passage', errs.length === 0, errs[0] || '');
+    await p.evaluate(() => { if (panOuvert) ouvrirPan(panOuvert); });
   }
 
   await b.close();

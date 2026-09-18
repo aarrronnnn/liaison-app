@@ -21,6 +21,9 @@ const prepare = require('./prepare');
 const clientlist = require('./clientlist');
 const cratesmod = require('./crates');
 const filtersmod = require('./filters');
+const genresmod = require('./genres');
+const aavoir = require('./aavoir');
+const charts = require('./charts');
 const landing = require('./landing');
 const acquire = require('./acquire');
 const ecrire = require('./ecrire');
@@ -37,6 +40,9 @@ const DIR = () => app.getPath('userData');
 const CFG = () => path.join(DIR(), 'config.json');
 const CACHE = () => path.join(DIR(), 'analysis-cache.json');
 const SETS = () => path.join(DIR(), 'sets.json');
+/* Le journal des titres reclames et absents. Il survit aux
+   soirees : c'est tout son interet. */
+const AAVOIR = () => path.join(DIR(), 'a-avoir.json');
 const LIC = () => path.join(DIR(), 'license.json');
 const STRUCT = () => path.join(DIR(), 'structure-cache.json');
 /* Ce que Liaison a appris de CE DJ. Un fichier a part : on peut
@@ -64,8 +70,32 @@ const DEFAULTS = {
   spotifyId: '', spotifySecret: '',
   /* les filtres de cabine — l'etat des quatre interrupteurs */
   fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0,
+  /* Les filtres d'instant. Ils ne sont PAS sauvegardes : ils vivent
+     le temps d'un morceau et retombent quand le suivant part. Les
+     mettre dans le fichier de configuration reviendrait a les
+     retrouver le lendemain soir sans savoir d'ou ils sortent. */
+  fGenres: [], fMarge: 0, fEnergyMin: 0, fEnergyMax: 0,
+  /* ------------------------------------------------------------
+     Les classements exterieurs.
+
+     Eteints tant qu'aucune cle n'est saisie : Liaison n'invente
+     jamais un classement, et une liste codee en dur serait fausse
+     en trois semaines. Voir charts.js pour l'accord Last.fm.
+     ------------------------------------------------------------ */
+  /* « liaison » : le relais liaisondj.app, qui garde la cle et
+     mutualise le cache. « lastfm » et « deezer » restent pour le
+     depannage depuis une machine de developpement. */
+  chartsFournisseur: 'liaison', chartsCle: '',
+  /* Le pays du classement. Vide = suivre le contexte de la soiree,
+     ce qui est le bon defaut ; un code pays le force, pour la date
+     a l'etranger. */
+  chartsPays: '',
   /* nuit par defaut : une cabine est sombre */
-  theme: 'nuit'
+  theme: 'nuit',
+  /* La hauteur du widget, au choix du DJ : barre / cabine / grand.
+     C'est un reglage de meuble, pas un filtre — celui qui mixe en
+     plein ecran doit retrouver sa reglette le lendemain soir. */
+  densite: 'cabine'
 };
 
 let config = Object.assign({}, DEFAULTS);
@@ -102,6 +132,99 @@ let dernieresPropositions = [];
    c'est un signal ; huit, c'est un ordre.
    ------------------------------------------------------------ */
 let trends = new Map();
+/* ------------------------------------------------------------
+   Le journal des manques.
+
+   Charge une fois au demarrage, reecrit quand il change. Il est
+   volontairement separe de sets.json : les tracklists sont
+   l'histoire des soirees, ce journal est une liste de courses.
+   ------------------------------------------------------------ */
+/* ------------------------------------------------------------
+   Le classement, garde en memoire quelques heures.
+
+   Il se charge desormais tout seul a l'ouverture de la rubrique —
+   le DJ ne doit pas avoir a cliquer pour voir ce qui manque. Mais
+   « tout seul » ne veut pas dire « a chaque fois » : un classement
+   national ne bouge pas entre deux clics, et appeler le service a
+   chaque aller-retour dans les reglages serait gaspiller un quota
+   qui est celui de l'accord commercial.
+
+   Trois heures, et une entree par pays : le DJ qui compare France
+   et Belgique ne repaie pas la France au retour.
+   ------------------------------------------------------------ */
+/* ------------------------------------------------------------
+   LE CLASSEMENT DORT SUR LE DISQUE, PAS EN MEMOIRE.
+
+   Premiere version : une carte en memoire, trois heures. Elle
+   mourait a chaque fermeture de l'application — donc chaque
+   ouverture des reglages redemandait le classement au relais,
+   donc au quota de l'accord Last.fm. Et un DJ hors connexion — un
+   train, une cave, une salle sans wifi, c'est-a-dire la moitie
+   des lieux ou on prepare une soiree — voyait un bloc vide.
+
+   Le classement est donc ECRIT SUR LE DISQUE, une entree par
+   pays, et servi de la sans aucun appel. Il n'expire pas tout
+   seul : il reste affiche jusqu'a ce que le DJ demande un autre
+   pays sans cache, ou qu'il rafraichisse lui-meme.
+
+   LA DISTINCTION QUI FAIT TOUT MARCHER : ce qu'on garde, c'est la
+   LISTE BRUTE des titres, pas le resultat. La confrontation avec
+   la bibliotheque — « celui-la tu l'as, celui-la non » — est
+   refaite a CHAQUE lecture, par aavoir.tamiser(). Un morceau
+   telecharge entre deux ouvertures disparait donc de la liste des
+   manques immediatement, sans qu'on ait rappele Last.fm une seule
+   fois. C'est exactement ce qu'on veut : la donnee exterieure est
+   figee, la donnee locale est vivante.
+   ------------------------------------------------------------ */
+const CLASSEMENTS = () => path.join(DIR(), 'classements.json');
+/* Au-dela de dix jours, on ne cache pas que le releve date : le
+   panneau le dit et propose de rafraichir. Un « classement du
+   moment » vieux de six mois serait un mensonge, meme affiche de
+   bonne foi. */
+const CHARTS_TIEDE = 10 * 24 * 3600 * 1000;
+let chartsDisque = null;
+
+function chargerClassements() {
+  if (chartsDisque) return chartsDisque;
+  const lu = ecrire.lireJSON(CLASSEMENTS(), null);
+  chartsDisque = (lu && typeof lu === 'object') ? lu : {};
+  return chartsDisque;
+}
+function enregistrerClassements() {
+  try { ecrire.ecrireJSON(CLASSEMENTS(), chargerClassements()); } catch (e) {}
+}
+
+let journalManques = null;
+/* Le journal s'ecrit APRES coup, pas a chaque demande : a 1 h du
+   matin les telephones arrivent en rafale, et reecrire un fichier
+   a chaque validation est exactement le genre de detail qui fait
+   ramer le widget au pire moment. */
+let journalSale = false;
+/* .unref() : sans lui, ce minuteur tient l'evenement en vie a lui
+   tout seul. Le banc de demarrage, qui se contente de charger
+   main.js et de rendre la main, ne s'arretait plus — il a fallu
+   l'interrompre au bout de deux minutes. Un minuteur d'entretien
+   ne doit jamais empecher un processus de finir. */
+const _minuteurJournal = setInterval(() => {
+  if (journalSale) { journalSale = false; enregistrerJournal(); }
+}, 20000);
+if (_minuteurJournal.unref) _minuteurJournal.unref();
+
+/* L'identifiant de la fiche de soiree armee, quand il y en a une :
+   c'est ce qui permet de dire « demande dans trois soirees
+   differentes » plutot que « demande trois fois ». */
+function soireeActiveId() {
+  try { const a = lesSoirees().active(); return a ? a.id : null; } catch (e) { return null; }
+}
+function chargerJournal() {
+  if (journalManques) return journalManques;
+  const lu = ecrire.lireJSON(AAVOIR(), null);
+  journalManques = (lu && typeof lu === 'object') ? lu : {};
+  return journalManques;
+}
+function enregistrerJournal() {
+  try { ecrire.ecrireJSON(AAVOIR(), aavoir.elaguer(chargerJournal(), {})); } catch (e) {}
+}
 
 /* Recalculee a chaque nouvelle demande, pas a chaque suggestion :
    c'est une douzaine de rapprochements flous, pas gratuits. */
@@ -115,7 +238,29 @@ function majTendances() {
   const haut = Math.max(1, dem[0].n);
   for (const r of dem.slice(0, 20)) {
     const m = engine.match((r.artist ? r.artist + ' ' : '') + r.title, library, 0.5);
-    if (!m) continue;                       /* le DJ ne l'a pas : rien a proposer */
+    if (!m) {
+      /* ------------------------------------------------------------
+         Rien a proposer CE SOIR — mais tout a dire apres.
+
+         Cette ligne se contentait de « continue », avec le
+         commentaire « le DJ ne l'a pas : rien a proposer ». C'est
+         vrai pour la nuit en cours et faux pour tout le reste :
+         une salle qui reclame un titre absent est l'information la
+         plus utile qu'un DJ puisse recevoir, et elle etait
+         detruite a chaque demande depuis le premier jour.
+
+         Elle part donc au journal, avec l'identifiant de la soiree
+         — c'est le nombre de SOIREES distinctes, plus que le
+         nombre de demandes, qui distingue un trou dans la
+         bibliotheque d'une tablee insistante.
+         ------------------------------------------------------------ */
+      aavoir.noter(chargerJournal(), {
+        artist: r.artist, title: r.title, n: r.n, at: r.at,
+        soiree: (setlog && setlog.current && setlog.current.id) || soireeActiveId() || 'hors-soiree'
+      });
+      journalSale = true;
+      continue;
+    }
     const cle = ((m.track.artist || '') + ' - ' + (m.track.title || ''))
       .toLowerCase().replace(/\s+/g, ' ').trim();
     t.set(cle, Math.round(35 + (r.n / haut) * 65));
@@ -168,12 +313,43 @@ const feat = () => (license ? license.features() : TIERS.trial);
 function loadConfig() {
   const lu = ecrire.lireJSON(CFG(), null);
   if (lu && typeof lu === 'object') config = Object.assign({}, DEFAULTS, lu);
+  /* Les versions d'avant ecrivaient les filtres d'instant dans le
+     fichier. Un DJ qui met Liaison a jour ne doit pas demarrer avec
+     un filtre pose il y a trois semaines et qu'il a oublie. */
+  config.fGenres = [];
+  config.fMarge = 0;
+  config.fEnergyMin = 0;
+  config.fEnergyMax = 0;
 }
+/* Les quatre filtres d'instant, nommes une seule fois. Ils sont
+   exclus de l'ecriture disque ici, et remis a zero au chargement :
+   deux endroits, une seule liste. */
+const FILTRES_INSTANT = ['fGenres', 'fMarge', 'fEnergyMin', 'fEnergyMax'];
+
 function saveConfig() {
   /* Ecriture atomique : ce fichier porte les listes du client, saisies
      a la main avant la soiree. Les perdre a cause d'une coupure, c'est
      retaper cent quatre-vingts titres. */
-  ecrire.ecrireJSON(CFG(), config);
+  /* ------------------------------------------------------------
+     Ce qui ne doit JAMAIS survivre a la soiree.
+
+     Les filtres d'instant — un genre, une marge de tempo, une
+     plage d'energie — sont poses en cours de morceau et retombent
+     au morceau suivant. Le commentaire a cote de DEFAULTS le
+     promettait deja ; le code ne le tenait pas : saveConfig
+     ecrivait `config` en entier, donc un « techno » pose a 1 h du
+     matin se retrouvait dans le fichier et revenait le samedi
+     suivant. Le DJ ouvre Liaison, ne voit aucune pastille
+     allumee — elles sont bien remises a zero a l'affichage — et
+     ne comprend pas pourquoi la moitie de sa bibliotheque a
+     disparu des propositions.
+
+     On ecrit donc une copie sans eux. C'est le seul endroit ou le
+     fichier de configuration s'ecrit : il n'y a pas d'autre porte.
+     ------------------------------------------------------------ */
+  const surDisque = Object.assign({}, config);
+  for (const k of FILTRES_INSTANT) delete surDisque[k];
+  ecrire.ecrireJSON(CFG(), surDisque);
 }
 const send = (ch, payload) => {
   for (const w of [widget, settings]) if (w && !w.isDestroyed()) w.webContents.send(ch, payload);
@@ -225,7 +401,14 @@ function createWidget() {
   const d = screen.getPrimaryDisplay().workArea;
   const mac = process.platform === 'darwin';
   widget = new BrowserWindow({
-    width: 344, height: 548,
+    /* 548 px etait la hauteur de depart ET la hauteur definitive :
+       l'ajustement automatique ne s'est jamais declenche (le corps
+       de la page mesurait la fenetre au lieu de son contenu, voir
+       widget.html). Maintenant qu'il fonctionne, cette valeur n'est
+       plus qu'un point de depart — on part du cran par defaut pour
+       eviter que le widget s'ouvre grand puis se retracte sous les
+       yeux du DJ. */
+    width: 344, height: 400,
     x: d.x + d.width - 372, y: d.y + 40,
     frame: false, resizable: false, maximizable: false, fullscreenable: false,
     /* « panel » : le seul type de fenetre qui flotte au-dessus d'une
@@ -294,7 +477,8 @@ async function importLibrary(mode, p) {
   else tracks = await lib.scanFolder(p, onProgress, { cache: SCAN() });
   /* Meme regle qu'a la detection automatique : ce qui n'est plus sur
      le disque ne doit pas se retrouver dans une proposition. */
-  const elague = lib.elaguerDisparus(tracks);
+  const sansDbl = lib.dedoublonner(tracks);
+  const elague = lib.elaguerDisparus(sansDbl.tracks);
   library = lib.finalize(elague.gardes);
   repCentre = repertoire.centre(library);
   elaguerStructures();
@@ -318,7 +502,12 @@ async function autoImport(preferKind) {
     /* Ce qui manque pour aller vite — typiquement rekordbox
        installe sans export XML. On le dit avant le scan, pas
        apres deux heures. */
-    const avis = autolib.conseils(librarySources);
+    /* Quels logiciels tournent vraiment : c'est ce qui permet de dire
+       « Serato est ouvert et je n'ai pas sa bibliotheque » au lieu de
+       se taire. */
+    let tournent = [];
+    try { tournent = watcher.current().map(a => a.id); } catch (e) {}
+    const avis = autolib.conseils(librarySources, { tournent: tournent });
     if (avis.length) send('conseils', avis);
     if (!librarySources.length) {
       send('status', { ok: false, msg: 'Aucune bibliotheque trouvee — ouvre les reglages' });
@@ -351,7 +540,21 @@ async function autoImport(preferKind) {
        voit « 340 titres retires » comprend tout de suite que son
        export date ; s'il n'en voyait rien, il croirait a un bug.
        ------------------------------------------------------------ */
-    const elagage = libmod.elaguerDisparus(merged);
+    /* ------------------------------------------------------------
+       Le meme morceau dans deux bibliotheques.
+
+       merge() a deja replie ce qui partage un chemin. Ici on replie
+       ce qui partage une chanson : deux FICHIERS differents, meme
+       artiste, meme titre, meme duree. C'est le cas du DJ qui a
+       iTunes ET rekordbox — iTunes copie dans son dossier media
+       pendant que rekordbox garde l'original.
+       ------------------------------------------------------------ */
+    const sansDoublons = libmod.dedoublonner(merged);
+    if (sansDoublons.replies)
+      send('status', { ok: true, msg: sansDoublons.replies +
+        ' doublon' + (sansDoublons.replies > 1 ? 's' : '') + ' replie' +
+        (sansDoublons.replies > 1 ? 's' : '') + ' (meme morceau dans deux bibliotheques)' });
+    const elagage = libmod.elaguerDisparus(sansDoublons.tracks);
     if (elagage.disparus.length)
       send('status', { ok: true, msg: elagage.disparus.length +
         ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retire' +
@@ -374,6 +577,7 @@ async function autoImport(preferKind) {
     send('library', { n: library.length, crates: crateList.length,
                       conseils: avis,
                       retires: elagage.disparus.length,
+                      doublons: sansDoublons.replies,
                       horsLigne: elagage.horsLigne,
                       sources: ordered.map(s => ({ kind: s.kind, path: s.path })) });
     startAnalysis();
@@ -793,6 +997,59 @@ function requestList() {
    le classement change. Le tamis est reconstruit a chaque appel
    parce que « deja joue ce soir » bouge a chaque morceau.
    ------------------------------------------------------------ */
+/* Y a-t-il quelque chose a remettre a zero ? Sans ce test, chaque
+   changement de morceau renverrait un message de filtres au widget
+   pour rien, toute la nuit. */
+function filtresInstantActifs() {
+  return !!((config.fGenres && config.fGenres.length) || config.fMarge > 0 ||
+            config.fEnergyMin > 0 || config.fEnergyMax > 0);
+}
+
+function razFiltresInstant() {
+  config.fGenres = [];
+  config.fMarge = 0;
+  config.fEnergyMin = 0;
+  config.fEnergyMax = 0;
+  /* Pas de saveConfig() : ces filtres ne sont volontairement jamais
+     ecrits sur le disque — voir FILTRES_INSTANT et saveConfig. */
+}
+
+/* ------------------------------------------------------------
+   L'etat des filtres, construit a un seul endroit.
+
+   Le widget le demande a l'ouverture (filters:get), le recoit
+   apres chaque reglage (filters:set), et le recoit encore quand
+   Liaison remet les filtres d'instant a zero tout seul au morceau
+   suivant. Trois chemins pour un meme objet : construit trois
+   fois, il finirait par differer trois fois, et le widget
+   afficherait des pastilles eteintes sur un tamis encore serre —
+   c'est-a-dire le pire des deux mondes, des propositions filtrees
+   sans que rien a l'ecran ne dise qu'un filtre tourne.
+   ------------------------------------------------------------ */
+function etatFiltres() {
+  const tam = currentFilter();
+  return {
+    crates: crateList.map(c => ({ id: c.id, name: c.name, source: c.source, n: c.n })),
+    etat: {
+      /* les filtres de soiree : ils tiennent jusqu'a ce qu'on les retire */
+      crate: config.fCrate, skipPlayed: !!config.fSkipPlayed,
+      noExplicit: !!config.fNoExplicit,
+      bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0,
+      /* les filtres d'instant : poses pendant un morceau, effaces au suivant */
+      genres: (config.fGenres || []).slice(),
+      marge: config.fMarge || 0,
+      energyMin: config.fEnergyMin || 0, energyMax: config.fEnergyMax || 0
+    },
+    /* combien de morceaux le tamis laisse passer, et s'il etouffe */
+    restants: tam.tracks.tracks.length,
+    total: library.length,
+    vide: tam.tracks.vide,
+    active: tam.tracks.active,
+    /* le tempo joue, pour proposer une plage sensee en un clic */
+    bpm: current ? current.bpm : null
+  };
+}
+
 function currentFilter() {
   const crate = config.fCrate ? crateList.find(c => c.id === config.fCrate) : null;
   const f = {
@@ -800,7 +1057,9 @@ function currentFilter() {
     skipPlayed: !!config.fSkipPlayed,
     playedIds: setlog ? setlog.playedIds() : new Set(),
     noExplicit: !!config.fNoExplicit,
-    bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0
+    bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0,
+    genres: config.fGenres || [],
+    energyMin: config.fEnergyMin || 0, energyMax: config.fEnergyMax || 0
   };
   /* la cloture reservee sort des suggestions jusqu'a son heure */
   const ph = landingNow();
@@ -1136,7 +1395,10 @@ function computeSuggestions(limit) {
        apres avoir verifie qu'elle est encore mixable depuis ce qui
        tourne, et en la remplacant si elle ne l'est plus */
     epingle: clotureEpinglee(vivier, ph),
-    repertoire: repCentre ? { centre: repCentre, ouvertes: repOuvertes } : null
+    repertoire: repCentre ? { centre: repCentre, ouvertes: repOuvertes } : null,
+    /* La marge demandee a la main passe devant celle qu'on a apprise :
+       quand le DJ dit « a deux pour cent », il ne demande pas un avis. */
+    marge: config.fMarge > 0 ? config.fMarge / 100 : g.marge
   });
 
   /* On garde les propositions BRUTES : ce sont elles qui portent
@@ -1333,6 +1595,33 @@ function setCurrent(track, how) {
       });
     }
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
+
+  /* ------------------------------------------------------------
+     LES FILTRES D'INSTANT RETOMBENT ICI.
+
+     « Une fois que le son est joue, les filtres retournent par
+       defaut. »
+
+     C'est exactement le bon endroit : un filtre d'instant repond a
+     la question « qu'est-ce que je passe MAINTENANT ». Des que ce
+     maintenant est passe sur un deck, la question est resolue et le
+     filtre n'a plus de raison d'exister.
+
+     On ne touche PAS aux filtres de soiree — le crate, « sans
+     paroles explicites », « pas ce qui est deja passe ». Ceux-la, le
+     DJ les a poses en arrivant, et les effacer tout seuls le ferait
+     jouer un titre explicite devant la famille sans qu'il ait rien
+     demande.
+
+     Et on ne les efface pas quand c'est LUI qui declare le morceau a
+     la loupe : dans ce cas il est en train de chercher, pas de
+     jouer — lui retirer son filtre au milieu de sa recherche serait
+     absurde.
+     ------------------------------------------------------------ */
+  if (how !== 'manuel' && filtresInstantActifs()) {
+    razFiltresInstant();
+    send('filters', etatFiltres());
+  }
 
   current = track;
   /* Il vient d'en jouer un : cette ecriture et cette famille cessent
@@ -1562,10 +1851,20 @@ ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(),
   license: license ? license.status() : null,
   sets: setlog ? setlog.list() : [], guestUrl: guests.port ? guests.url() : null }));
 
+/* Les reglages qui ne changent que l'apparence. Ils passaient par
+   le meme chemin que les autres, donc chaque bascule de theme —
+   et desormais chaque changement de hauteur — relancait un calcul
+   complet de suggestions sur toute la bibliotheque. Sur 22 000
+   titres, ca se sent au doigt. */
+const DECOR = ['theme', 'densite', 'opacity'];
+
 ipcMain.handle('config:set', (e, patch) => {
-  Object.assign(config, patch); saveConfig();
-  if (patch.source) now.start(config.source, config.sourceOpts);
-  send('suggestions', computeSuggestions(config.suggestCount));
+  const p = patch || {};
+  Object.assign(config, p); saveConfig();
+  if (p.source) now.start(config.source, config.sourceOpts);
+  const clefs = Object.keys(p);
+  if (!clefs.length || !clefs.every(k => DECOR.includes(k)))
+    send('suggestions', computeSuggestions(config.suggestCount));
   return config;
 });
 
@@ -1980,33 +2279,204 @@ ipcMain.handle('qr:save', async (e, dataUrl) => {
 /* ============================================================
    Les filtres de cabine
    ============================================================ */
-ipcMain.handle('filters:get', () => {
-  const tam = currentFilter();
+ipcMain.handle('filters:get', () => etatFiltres());
+
+ipcMain.handle('filters:set', (e, patch) => {
+  const p = patch || {};
+  const a = k => Object.prototype.hasOwnProperty.call(p, k);
+
+  /* Les filtres de soiree. Ils tiennent jusqu'a ce que le DJ les
+     retire lui-meme, donc ils vont sur le disque. */
+  for (const k of ['fCrate', 'fSkipPlayed', 'fNoExplicit', 'fBpmMin', 'fBpmMax'])
+    if (a(k)) config[k] = p[k];
+
+  /* ------------------------------------------------------------
+     Les filtres d'instant.
+
+     « Genre faudrait qu'on puisse acceder aux filtres pour dire
+       "okay fait moi des propositions de sons avec tel genre, avec
+       tel marge de BPM, etc". Une fois que le son est joue, les
+       filtres retournent par defaut. »
+
+     Ils sont bornes ici et nulle part ailleurs, parce que c'est la
+     seule porte d'entree : le widget peut envoyer une marge a 400
+     ou une energie a -3, le moteur ne les verra jamais. Une marge
+     au-dela de 12 % n'est plus un filtre de tempo — a ce compte-la
+     tout passe, et le DJ croit avoir regle quelque chose.
+     ------------------------------------------------------------ */
+  if (a('fGenres'))
+    config.fGenres = Array.isArray(p.fGenres)
+      ? p.fGenres.map(x => String(x || '').trim()).filter(Boolean).slice(0, 12)
+      : [];
+  if (a('fMarge'))    config.fMarge     = Math.max(0, Math.min(12, Math.round(Number(p.fMarge) || 0)));
+  if (a('fEnergyMin')) config.fEnergyMin = Math.max(0, Math.min(10, Math.round(Number(p.fEnergyMin) || 0)));
+  if (a('fEnergyMax')) config.fEnergyMax = Math.max(0, Math.min(10, Math.round(Number(p.fEnergyMax) || 0)));
+  /* Une plage a l'envers (min 8, max 3) ne laisse rien passer et
+     ressemble a une panne. On la remet a l'endroit plutot que de
+     vider le widget. */
+  if (config.fEnergyMin && config.fEnergyMax && config.fEnergyMin > config.fEnergyMax) {
+    const t = config.fEnergyMin; config.fEnergyMin = config.fEnergyMax; config.fEnergyMax = t;
+  }
+
+  saveConfig();
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
+  /* On renvoie l'etat COMPLET, pas seulement les compteurs : apres
+     une correction de bornes comme celle du dessus, le widget doit
+     repeindre ce que Liaison a vraiment retenu, et non ce qu'il
+     croyait avoir envoye. */
+  const et = etatFiltres();
+  send('filters', et);
+  return et;
+});
+
+/* ------------------------------------------------------------
+   Les styles proposes au DJ sont les SIENS.
+
+   « pour les styles, prend ceux de la bibliotheque du dj (itunes,
+     rekordbox, etc.. car chaque dj a son habitude) »
+
+   Une liste maison — « House / Techno / Disco / Funk » — se serait
+   trompee deux fois : elle aurait propose des cases vides chez un
+   DJ mariage, et elle aurait rate « Variete francaise », « Zouk »,
+   « Afro », « Rai » chez celui qui en vit. Les etiquettes viennent
+   donc de la bibliotheque lue, dans l'orthographe du DJ, triees
+   par nombre de morceaux : ce qu'il voit en haut de la liste est
+   ce qu'il joue le plus.
+   ------------------------------------------------------------ */
+ipcMain.handle('filters:genres', () => genresmod.genresDuDJ(library, 18));
+
+/* ============================================================
+   TITRES A AVOIR.
+
+   Trois blocs qui ne se melangent jamais : ce que TA salle a
+   reclame, ce que le client impose, et ce que le monde ecoute.
+   Les deux premiers sont verifiables sur cette machine ; le
+   troisieme vient de l'exterieur et est annonce comme tel.
+
+   Le classement n'est demande que si on le veut (le panneau le
+   demande explicitement) : ouvrir la rubrique ne doit pas
+   declencher un appel reseau a chaque fois.
+   ============================================================ */
+ipcMain.handle('aavoir:get', async (e, opt) => {
+  const o = opt || {};
+  const j = chargerJournal();
+
+  /* 1. La salle. */
+  const salle = aavoir.manques(j, {
+    library: library, match: engine.match,
+    buyLinks: acquire.buyLinks, nearMisses: acquire.nearMisses,
+    limite: 40
+  });
+
+  /* 2. Le client : ses titres imposes qui ne matchent rien. On
+     reutilise le calcul existant plutot que d'en refaire un —
+     deux chemins pour un meme chiffre finissent par diverger. */
+  let client = [];
+  try { client = (clientSet && clientSet.stats && clientSet.stats.manquants) || []; }
+  catch (err) { client = []; }
+
+  /* ------------------------------------------------------------
+     3. Le classement.
+
+     Il se charge par defaut : le bouton « voir le classement »
+     demandait au DJ de reclamer une information qu'il etait venu
+     chercher. On passe `classement: false` seulement quand on
+     rafraichit la liste locale apres un oubli, pour ne pas
+     rappeler le service pour rien.
+     ------------------------------------------------------------ */
+  let classement = { etat: 'non-demande', titres: [] };
+  if (o.classement !== false) {
+    /* Le pays force par le DJ gagne sur celui du contexte. */
+    const pays = String(o.pays || config.chartsPays || '').toLowerCase()
+              || charts.paysDe(config.pack);
+    const garde = chargerClassements();
+    const eu = garde[pays];
+    let brut = null, depuis = 0, horsLigne = false;
+
+    if (eu && eu.valeur && !o.forcer) {
+      /* Servi du disque, sans toucher au reseau. C'est le cas
+         normal : on n'appelle le relais que la premiere fois pour
+         un pays, ou quand le DJ le demande. */
+      brut = eu.valeur;
+      depuis = eu.quand || 0;
+    } else {
+      const neuf = await charts.charger({
+        fournisseur: config.chartsFournisseur,
+        cle: config.chartsCle,
+        pack: config.pack,
+        pays: pays,
+        limite: 50
+      });
+      if (neuf && neuf.etat === 'ok') {
+        garde[pays] = { quand: Date.now(), valeur: neuf };
+        enregistrerClassements();
+        brut = neuf;
+        depuis = garde[pays].quand;
+      } else if (eu && eu.valeur) {
+        /* L'appel a echoue mais on avait quelque chose : on le sert
+           plutot que de vider l'ecran. Un DJ dans un train doit
+           continuer a voir ce qui lui manque — c'est justement la
+           que la liste sert. */
+        brut = eu.valeur;
+        depuis = eu.quand || 0;
+        horsLigne = true;
+      } else {
+        brut = neuf;
+      }
+    }
+
+    /* LA CONFRONTATION, ELLE, EST TOUJOURS REFAITE.
+       C'est ce qui fait qu'un morceau telecharge depuis la
+       derniere ouverture sort de la liste des manques sans qu'on
+       ait redemande quoi que ce soit a l'exterieur. */
+    classement = aavoir.tamiser(brut, {
+      library: library, match: engine.match,
+      buyLinks: acquire.buyLinks, limite: 25
+    });
+    classement.depuis = depuis || null;
+    classement.tiede = !!(depuis && (Date.now() - depuis) > CHARTS_TIEDE);
+    classement.horsLigne = horsLigne;
+  }
+
   return {
-    crates: crateList.map(c => ({ id: c.id, name: c.name, source: c.source, n: c.n })),
-    etat: {
-      crate: config.fCrate, skipPlayed: !!config.fSkipPlayed,
-      noExplicit: !!config.fNoExplicit,
-      bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0
-    },
-    /* combien de morceaux le tamis laisse passer, et s'il etouffe */
-    restants: tam.tracks.tracks.length,
-    total: library.length,
-    vide: tam.tracks.vide,
-    active: tam.tracks.active,
-    /* le tempo joue, pour proposer une plage sensee en un clic */
-    bpm: current ? current.bpm : null
+    salle: salle, client: client, classement: classement,
+    total: salle.length + client.length,
+    /* De quoi expliquer un panneau vide sans faire chercher une
+       panne : zero manque quand personne n'a encore rien demande
+       n'est pas la meme chose que zero manque apres dix soirees. */
+    soirees: Object.keys(j).length ? null : 'aucune demande enregistree pour l\'instant',
+    /* De quoi remplir le menu des pays, et dire lequel est
+       actuellement servi — force a la main ou deduit du contexte. */
+    pays: {
+       liste: charts.listePays(),
+       choisi: String(config.chartsPays || '').toLowerCase(),
+       parDefaut: charts.paysDe(config.pack)
+    }
   };
 });
 
-ipcMain.handle('filters:set', (e, patch) => {
-  for (const k of ['fCrate', 'fSkipPlayed', 'fNoExplicit', 'fBpmMin', 'fBpmMax'])
-    if (Object.prototype.hasOwnProperty.call(patch || {}, k)) config[k] = patch[k];
-  saveConfig();
-  if (current) send('suggestions', computeSuggestions(config.suggestCount));
-  const tam = currentFilter();
-  send('filters', { restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active });
-  return { ok: true, restants: tam.tracks.tracks.length, vide: tam.tracks.vide, active: tam.tracks.active };
+/* Oublier un titre : le DJ ne veut pas l'acheter, point. Sans ce
+   bouton, une liste de courses devient une liste de reproches. */
+ipcMain.handle('aavoir:oublier', (e, entree) => {
+  const j = chargerJournal();
+  const cle = aavoir.cleDe(entree && entree.artist, entree && entree.title);
+  if (j[cle]) { delete j[cle]; enregistrerJournal(); }
+  return { ok: true, restants: Object.keys(j).length };
+});
+
+/* Oublier le classement garde d'un pays, pour forcer une relecture
+   propre. Rarement utile, mais le seul moyen de repartir de zero
+   sans supprimer un fichier a la main. */
+ipcMain.handle('aavoir:oublierClassements', () => {
+  chartsDisque = {};
+  enregistrerClassements();
+  return { ok: true };
+});
+
+ipcMain.handle('aavoir:vider', () => {
+  journalManques = {};
+  enregistrerJournal();
+  return { ok: true };
 });
 
 ipcMain.handle('filters:crates', () => {
@@ -2280,7 +2750,10 @@ ipcMain.handle('widget:close', () => { if (widget) widget.hide(); });
 ipcMain.handle('widget:height', (e, h) => {
   const from = BrowserWindow.fromWebContents(e.sender);
   const win = from || widget;
-  if (win && !win.isDestroyed()) win.setBounds(Object.assign(win.getBounds(), { height: Math.max(220, Math.min(900, Math.round(h))) }));
+  /* Plancher a 120 px : au cran BARRE le widget n'est plus qu'une
+     reglette posee au-dessus des decks, et 220 px l'auraient
+     rallonge d'une centaine de pixels de vide noir. */
+  if (win && !win.isDestroyed()) win.setBounds(Object.assign(win.getBounds(), { height: Math.max(120, Math.min(900, Math.round(h))) }));
 });
 
 /* ---------------- barre de menus ---------------- */

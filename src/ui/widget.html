@@ -3,7 +3,30 @@
 <link rel="stylesheet" href="./da.css">
 <style>
 *{box-sizing:border-box}
-html,body{margin:0;height:100%}
+/* ============================================================
+   LA HAUTEUR DU CORPS, ET POURQUOI LE WIDGET EST TOUJOURS RESTE
+   AUSSI GRAND.
+
+   Le widget se voulait « epousant son contenu » : fitHeight mesure
+   le corps et demande a la fenetre de s'y ajuster. Ce code est en
+   place depuis le debut. Il n'a JAMAIS rien ajuste.
+
+   La raison tient en quatre caracteres : « height:100% ». Un
+   corps a 100 % de la hauteur de la fenetre mesure exactement la
+   hauteur de la fenetre, quoi qu'il contienne. fitHeight mesurait
+   donc la fenetre, redemandait la hauteur qu'elle avait deja, et
+   la condition « si l'ecart depasse 3 px » n'etait jamais vraie.
+   Resultat : 548 px de haut, en permanence, avec trois
+   propositions comme avec aucune. C'est la cause reelle de « bien
+   trop gros, ca cache tout quand on mixe » — pas la mise en page,
+   la mesure.
+
+   « min-height » garde le fond plein quand il y a peu de contenu,
+   et laisse le corps grandir au-dela. La mesure devient vraie, et
+   les trois crans de densite ont enfin un effet sur la fenetre.
+   ============================================================ */
+html{height:100%}
+body{margin:0;min-height:100%}
 body{background:var(--deep);color:var(--cream);font-family:var(--b);font-size:13px;
 user-select:none;overflow:hidden;border:1px solid var(--wire2);border-radius:6px}
 button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
@@ -55,6 +78,10 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ref .m{font-family:var(--m);font-size:10px;color:var(--cream2);margin-top:9px;display:flex;gap:13px}
 .ref .m i{font-style:normal;color:var(--cream3)}
+/* Les libelles KEY / BPM / ENERGIE sont enveloppes pour pouvoir
+   tomber au cran BARRE. <em> penche par defaut : on le redresse,
+   une etiquette de cabine ne s'ecrit pas en italique. */
+.ref .m em{font-style:normal}
 
 /* ---------- ruban de structure ---------- */
 .strip{margin-top:10px;height:16px;position:relative;background:var(--deep3);border-radius:2px;overflow:hidden}
@@ -122,7 +149,13 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
    puis l'artiste. L'artiste part le premier, les faits ne partent
    jamais. */
 .mm .bd{flex:0 0 auto}
-.mm .fx{flex:0 0 auto}
+/* Le groupe des faits de mix ne retrograde jamais derriere
+   l'artiste, mais quand il est a lui seul plus large que la ligne
+   — « 8B · Enchainement · TENDANCE · RELANCE » —, il se coupe
+   entre deux mots plutot que d'etre tronque au milieu du dernier.
+   Une etiquette a moitie affichee (« RELAI ») est pire qu'une
+   etiquette sur la ligne suivante. */
+.mm .fx{flex:0 1 auto;white-space:normal}
 .mm .up{color:var(--blueLit)}
 .mm .ask{color:var(--redLit);font-weight:700}
 /* Deja joue : ce soir en rouge (une faute), une autre fois en gris
@@ -332,14 +365,14 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
    passe a 0,08 em, et le rembourrage a 6 px. Le tout tient, et SOS
    reste a droite, toujours au meme endroit.
    ------------------------------------------------------------ */
-.foot{display:flex;align-items:center;gap:4px;padding:7px 8px;border-top:1px solid var(--wire);flex-wrap:wrap}
+.foot{display:flex;align-items:center;gap:3px;padding:7px 7px;border-top:1px solid var(--wire);flex-wrap:wrap}
 .seg{display:flex;flex:none}
 .seg .chip{border-radius:0;margin-left:-1px}
 .seg .chip:first-child{border-radius:2px 0 0 2px;margin-left:0}
 .seg .chip:last-child{border-radius:0 2px 2px 0}
 .seg .chip[aria-pressed=true]{position:relative;z-index:1}
 .chip{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
-padding:6px 6px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
+padding:6px 5px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
 .chip:hover{color:var(--cream);border-color:var(--wire2)}
 .chip[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
 .chip.sos{border-color:#4A2119;color:var(--redLit);margin-left:auto}
@@ -349,9 +382,37 @@ padding:6px 6px;border-radius:2px;border:1px solid var(--wire);color:var(--cream
    lecture. Le nom reste dans l'infobulle et pour les lecteurs
    d'ecran. */
 .chip.fl{font-size:12px;line-height:1;padding:4px 8px;letter-spacing:0}
+.chip{display:inline-flex;align-items:center;gap:5px}
+/* ------------------------------------------------------------
+   Ce qui tient dans 344 px, et ce qui n'y tient pas.
+
+   Cinq boutons ecrits en toutes lettres font 447 px : SOS
+   retombait sur une deuxieme rangee, c'est-a-dire le bouton
+   d'urgence a l'endroit ou on le cherche le plus tard.
+
+   Deux d'entre eux passent donc en pictogramme seul : FIN et
+   DEMANDES. Ce sont les deux dont le dessin se comprend sans
+   apprentissage — une horloge, un coeur — et les deux qu'on
+   n'ouvre pas dans l'urgence. Leur mot revient des qu'ils sont
+   ALLUMES : on doit toujours pouvoir lire ce qu'on a enclenche,
+   meme si on ne l'a pas lu pour l'enclencher.
+
+   BULLE garde son mot parce qu'aucun dessin n'apprend ce qu'est
+   une bulle, et SOS garde le sien parce qu'a 2 h du matin on
+   cherche trois lettres, pas un triangle.
+   ------------------------------------------------------------ */
+.chip.mini .w{display:none}
+.chip.mini[aria-pressed=true] .w{display:inline}
+.chip svg{width:11px;height:11px;flex:none;display:block;stroke:currentColor;fill:none;
+stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.chip.fl{display:inline-block}
 .chip.sos:hover{background:var(--red);border-color:var(--red);color:#fff}
 .foot .st{flex:1 0 100%;order:9;margin-top:3px;font-family:var(--m);font-size:8.5px;color:var(--cream3);
 overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Une ligne d'etat vide prenait quand meme sa rangee : douze
+   pixels de noir sous les boutons, en permanence, pour ne rien
+   dire. Elle n'existe que lorsqu'elle a quelque chose a dire. */
+.foot .st:empty{display:none;margin:0}
 .licbar{display:none;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--wire)}
 .licbar.on{display:flex}
 .toast{position:fixed;left:8px;right:8px;bottom:8px;background:var(--blue);color:#fff;font-family:var(--m);
@@ -361,6 +422,14 @@ transition:.18s;pointer-events:none}
 .toast.red{background:var(--red)}
 /* Le glisser-deposer. La poignee ne s'affiche qu'au survol : en cabine,
    une ligne couverte d'icones est une ligne qu'on ne lit plus. */
+/* Les barres de defilement du systeme font 15 px de large et
+   tranchent en clair sur le fond : dans un widget de 344 px, c'est
+   une entaille. Quatre pixels dans le ton du cadre suffisent. */
+::-webkit-scrollbar{width:4px;height:4px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--wire2);border-radius:2px}
+::-webkit-scrollbar-thumb:hover{background:var(--cream3)}
+
 .row[data-drag]{cursor:grab}
 .row[data-drag]:active{cursor:grabbing}
 .row[data-drag]::after{content:"⠿";position:absolute;left:3px;top:50%;transform:translateY(-50%);
@@ -369,6 +438,225 @@ transition:.18s;pointer-events:none}
 .row.glisse{outline:1.5px solid var(--blueLit);outline-offset:-1px}
 .row.sansFichier{cursor:default}
 .row.sansFichier::after{display:none}
+
+/* ============================================================
+   LA DENSITE, ou ce que le widget accepte de ne pas montrer.
+
+   « le design du widget est mauvais : bien trop gros, ca cache
+     tout quand on mixe »
+
+   Le reproche est exact et il est structurel : le widget
+   affichait TOUT, TOUT LE TEMPS. Titre en 21 px, artiste, ruban
+   de structure, trois propositions avec leur plan de mix complet,
+   sept boutons et une ligne d'etat — environ 400 px de haut
+   posees par-dessus un rekordbox plein ecran, c'est-a-dire
+   par-dessus les formes d'onde. Or les formes d'onde sont
+   exactement ce qu'on regarde quand on cale un morceau.
+
+   On ne retire aucune fonction : on rend la hauteur choisissable,
+   comme on choisit la hauteur d'un rack. Un seul bouton, trois
+   crans, et l'etat est retenu.
+
+     BARRE  — une reglette. Ce qui tourne sur une ligne, chaque
+              proposition sur une ligne. Rien d'autre. Elle se
+              pose au-dessus des decks sans rien couvrir.
+     CABINE — le cran par defaut. Ce qui sert a enchainer, rien
+              de ce qui sert a comprendre apres coup.
+     GRAND  — tout, ruban de structure et plans de mix compris.
+              Pour la preparation, pas pour la nuit.
+
+   La regle de decoupe n'est jamais « couper ce qui depasse » mais
+   « garder ce qui decide ». A chaque cran, ce qui reste est ce
+   sans quoi on ne peut pas choisir le morceau suivant : le tempo,
+   la tonalite, le titre. L'artiste, le ruban, le detail du plan
+   de mix et les libelles des boutons sont, dans cet ordre, ce
+   qu'on accepte de perdre.
+   ============================================================ */
+
+/* ---- BARRE ---- */
+body[data-densite="barre"] .ref{padding:7px 10px 8px}
+body[data-densite="barre"] .ref .top{display:none}
+body[data-densite="barre"] .ref .t{font-size:13.5px;margin-top:0;letter-spacing:.01em}
+body[data-densite="barre"] .ref .a{display:none}
+body[data-densite="barre"] .ref .m{margin-top:5px;gap:10px;font-size:9.5px}
+body[data-densite="barre"] .ref .m em{display:none}
+body[data-densite="barre"] .ref .m span:nth-child(2) i{font-size:14px}
+body[data-densite="barre"] .strip,
+body[data-densite="barre"] .striplbl{display:none}
+body[data-densite="barre"] .list{max-height:none;padding:2px 3px 3px}
+body[data-densite="barre"] .row{padding:5px 6px 6px;gap:8px}
+body[data-densite="barre"] .row + .row{border-top:1px solid var(--wire)}
+body[data-densite="barre"] .sc{font-size:18px}
+body[data-densite="barre"] .bpmc b{font-size:15px}
+body[data-densite="barre"] .bpmc s{margin-top:2px;font-size:7.5px}
+body[data-densite="barre"] .n{font-size:11.5px}
+body[data-densite="barre"] .mm{margin-top:2px;font-size:9px}
+body[data-densite="barre"] .mm .ar{display:none}
+body[data-densite="barre"] .plan{display:none}
+body[data-densite="barre"] .foot .st{display:none}
+/* Les libelles des boutons tombent : a ce cran, le pictogramme et
+   l'infobulle suffisent, et c'est la reponse directe a « il y a
+   enormement de texte ». */
+body[data-densite="barre"] .chip .w{display:none}
+/* Sauf SOS. C'est le bouton qu'on cherche quand la piste se vide,
+   et a ce moment-la on cherche trois lettres, pas un triangle. */
+body[data-densite="barre"] .chip.sos .w{display:inline}
+body[data-densite="barre"] .rail .p .w{display:none}
+
+/* ---- CABINE ---- */
+/* Le ruban reste, reduit a un filet : savoir OU on en est dans le
+   morceau vaut huit pixels. Ses legendes, elles, se lisent au
+   cran du dessus. */
+body[data-densite="cabine"] .strip{height:8px;margin-top:8px}
+body[data-densite="cabine"] .striplbl{display:none}
+body[data-densite="cabine"] .ref{padding:9px 11px 10px}
+body[data-densite="cabine"] .ref .t{font-size:17px}
+body[data-densite="cabine"] .list{max-height:252px}
+body[data-densite="cabine"] .row{padding:7px 8px 8px}
+body[data-densite="cabine"] .sc{font-size:22px}
+
+/* ============================================================
+   LES FILTRES, SORTIS DE LEUR TIROIR.
+
+   « on ne voit pas que l'on a les filtres pour chercher des sons
+     plus particulier »
+
+   Ils existaient pourtant. Un bouton FILTRES, sixieme d'une
+   rangee de sept, en bas du widget, qui depliait une barre. Un
+   filtre qu'il faut savoir chercher est un filtre qui n'existe
+   pas : les DJ en test ne l'avaient jamais ouvert.
+
+   Il remonte donc sous le morceau en cours, en permanence, sous
+   forme de pastilles : un pictogramme, un mot-cle, et la valeur
+   des qu'elle est posee. Eteintes, ce sont des contours discrets
+   qu'on ignore ; allumees, elles sont pleines — creme sur fond
+   sombre — et on voit de l'autre bout de la cabine qu'un filtre
+   tourne. C'est la moitie du probleme : ne pas voir qu'un filtre
+   est pose coute plus cher que ne pas trouver les filtres.
+   ============================================================ */
+.rail{display:flex;align-items:center;gap:4px;padding:6px 8px;flex-wrap:wrap;
+border-bottom:1px solid var(--wire);background:var(--deep2)}
+.rail .p{display:inline-flex;align-items:center;gap:5px;flex:0 0 auto;
+font-family:var(--m);font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;
+padding:5px 7px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream3);
+white-space:nowrap;transition:background .12s,border-color .12s,color .12s}
+.rail .p svg{width:11px;height:11px;flex:none;display:block;stroke:currentColor;fill:none;
+stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.rail .p:hover{color:var(--cream);border-color:var(--cream3)}
+/* Allume : plein, sans demi-mesure. Une pastille active doit se
+   voir avant qu'on ait lu quoi que ce soit. */
+.rail .p[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+.rail .p[aria-pressed=true] b{font-weight:700}
+.rail .p.ouvert{border-color:var(--blueLit);color:var(--blueLit)}
+.rail .p.ouvert[aria-pressed=true]{background:var(--blueLit);border-color:var(--blueLit);color:#fff}
+.rail .p b{font-weight:400;letter-spacing:.04em}
+.rail .n{margin-left:auto;font-family:var(--m);font-size:8.5px;letter-spacing:.06em;
+color:var(--cream3);white-space:nowrap;padding-left:4px}
+/* Quand le rail passe a la ligne — ce qui n'arrive que si des
+   filtres sont poses —, « vider » et le compte restent ensemble a
+   droite plutot que de s'ecarter aux deux bouts. */
+.rail .raz.on + .n{margin-left:4px}
+.rail .raz.on{margin-left:auto}
+.rail .n.warn{color:var(--redLit)}
+/* Le bouton qui rend la bibliotheque entiere. Il n'apparait que
+   lorsqu'il y a quelque chose a rendre. */
+.rail .raz{display:none;flex:0 0 auto;font-family:var(--m);font-size:8.5px;letter-spacing:.09em;
+text-transform:uppercase;color:var(--cream3);border:1px solid transparent;padding:5px 5px}
+.rail .raz.on{display:inline-block}
+.rail .raz:hover{color:var(--redLit)}
+
+/* ---- le tiroir ---- */
+.tiroir{display:none;padding:10px 11px 12px;border-bottom:1px solid var(--wire);background:var(--deep)}
+.tiroir.on{display:block}
+.tiroir .pan{display:none}
+.tiroir .pan.on{display:block}
+.tiroir .tt{display:flex;align-items:center;gap:8px;font-family:var(--m);font-size:8px;
+letter-spacing:.18em;text-transform:uppercase;color:var(--cream3);margin-bottom:9px}
+.tiroir .tt i{font-style:normal;margin-left:auto;color:var(--cream2);letter-spacing:.06em}
+/* Les etiquettes de style du DJ. Elles viennent de SA bibliotheque,
+   dans SON orthographe : « Variete francaise » s'affiche comme il
+   l'a tapee, pas normalise en « pop ». */
+.gwrap{display:flex;flex-wrap:wrap;gap:4px;max-height:96px;overflow:auto}
+.gwrap button{font-family:var(--m);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
+padding:5px 7px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream2);white-space:nowrap}
+.gwrap button:hover{border-color:var(--cream3);color:var(--cream)}
+.gwrap button[aria-pressed=true]{background:var(--blueLit);border-color:var(--blueLit);color:#fff}
+.gwrap button s{text-decoration:none;opacity:.55;margin-left:4px}
+.gwrap .vide{font-family:var(--b);font-size:11px;color:var(--cream3);text-transform:none;
+letter-spacing:0;border:0;padding:2px 0;cursor:default}
+/* La marge de tempo. Un reglet, pas un champ : on le pousse du
+   pouce entre deux morceaux, on ne tape pas un nombre a 2 h du
+   matin. Le cran zero rend la main a Liaison, qui apprend la marge
+   que le DJ tient reellement. */
+.regle{display:flex;align-items:center;gap:9px}
+.regle input[type=range]{flex:1;-webkit-appearance:none;appearance:none;height:3px;
+background:var(--wire2);border-radius:2px;outline:none}
+.regle input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+width:13px;height:13px;border-radius:50%;background:var(--cream);cursor:pointer;
+border:2px solid var(--deep);box-shadow:0 0 0 1px var(--cream)}
+.regle input[type=range]:focus::-webkit-slider-thumb{background:var(--blueLit);box-shadow:0 0 0 1px var(--blueLit)}
+.regle .v{font-family:var(--d);font-size:17px;line-height:1;min-width:58px;text-align:right;color:var(--cream)}
+.regle .v.auto{font-family:var(--m);font-size:9px;letter-spacing:.1em;color:var(--cream3);text-transform:uppercase}
+.hint2{font-size:10.5px;color:var(--cream3);line-height:1.45;margin-top:8px}
+/* L'energie : dix cases, pas deux champs. On clique le debut, on
+   clique la fin, c'est lu d'un coup d'oeil et ca se regle sans
+   viser. */
+.ecells{display:flex;gap:3px}
+.ecells button{flex:1;height:22px;border:1px solid var(--wire2);border-radius:2px;
+font-family:var(--m);font-size:8px;color:var(--cream3);padding:0}
+.ecells button:hover{border-color:var(--cream3);color:var(--cream)}
+.ecells button[aria-pressed=true]{background:var(--blueLit);border-color:var(--blueLit);color:#fff}
+.ecells button.bout[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep);font-weight:700}
+/* Les filtres de soiree : ils vivent dans le meme tiroir mais ils
+   ne retombent pas au morceau suivant. La mention le dit. */
+.tiroir .lignes{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
+.tiroir select{font-family:var(--m);font-size:8.5px;letter-spacing:.06em;text-transform:uppercase;
+background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;
+padding:5px 5px;max-width:100%;flex:1 1 100%;cursor:pointer}
+.tiroir .lignes .f{font-family:var(--m);font-size:8.5px;letter-spacing:.09em;text-transform:uppercase;
+padding:5px 7px;border:1px solid var(--wire2);border-radius:2px;color:var(--cream3);white-space:nowrap}
+.tiroir .lignes .f:hover{color:var(--cream);border-color:var(--cream3)}
+.tiroir .lignes .f[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+.tiroir .lignes input{font-family:var(--m);font-size:9px;width:44px;text-align:center;
+background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-radius:2px;padding:5px 3px}
+
+/* ============================================================
+   LA FINITION.
+
+   « faut que ce soit sexy, luxieux, que ca donne envie »
+
+   Le luxe, dans une direction artistique editoriale, n'est pas
+   une couleur de plus : c'est de la precision. Trois choses, et
+   aucun effet decoratif.
+
+   1. Un filet clair d'un pixel en haut du cadre. C'est ce qui
+      separe une fenetre d'un rectangle noir : la lumiere accroche
+      l'arete, comme sur un boitier metallique.
+   2. Le bloc de reference gagne un degrade vertical imperceptible
+      et son filet bleu s'eteint vers le bas au lieu de s'arreter
+      net. Un a-plat parfaitement uni sonne « capture d'ecran » ;
+      une tres legere variation sonne « objet ».
+   3. La ligne en tete perd son trait de separation au profit
+      d'un lavis bleu. Un trait dit « il y en a d'autres » ; un
+      lavis dit « c'est celle-la ».
+   ============================================================ */
+body{box-shadow:inset 0 1px 0 rgba(255,255,255,.055)}
+[data-theme="jour"] body{box-shadow:inset 0 1px 0 rgba(255,255,255,.9)}
+.ref{background:linear-gradient(180deg,var(--deep3) 0%,var(--deep2) 62%)}
+.ref::before{background:linear-gradient(180deg,var(--blueLit) 0%,var(--blueLit) 45%,transparent 100%)}
+.row.best{background:linear-gradient(90deg,rgba(68,89,255,.085),rgba(68,89,255,0) 72%)}
+.row.best::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:2px;
+background:var(--blueLit);border-radius:2px}
+.row.best + .row{border-top-color:transparent}
+.row:hover{background:var(--deep2);border-color:var(--wire2)}
+.row.best:hover{background:linear-gradient(90deg,rgba(68,89,255,.14),rgba(68,89,255,0) 72%)}
+/* Un anneau de focus visible : le widget se pilote aussi au clavier,
+   et sans lui on ne sait jamais ou on est. */
+button:focus-visible,select:focus-visible,input:focus-visible{outline:1px solid var(--blueLit);outline-offset:1px}
+/* Le bouton de densite, dans la poignee : trois barres qui disent
+   la hauteur du widget, et qui se lisent sans texte. */
+.grip .act button.dens svg{width:13px;height:13px;display:block;margin:0 auto;stroke:currentColor;
+fill:none;stroke-width:1.7;stroke-linecap:round}
 </style></head><body>
 
 <div class="grip">
@@ -386,6 +674,11 @@ transition:.18s;pointer-events:none}
     <span class="vr" id="ver"></span>
   </span>
   <span class="act">
+    <!-- Trois crans de hauteur. Le pictogramme montre ce qu'on
+         obtient : une barre, deux, trois. -->
+    <button class="dens" id="btnDens" title="Hauteur du widget : barre / cabine / grand">
+      <svg viewBox="0 0 16 16" aria-hidden="true" id="densIcon"><path d="M2.5 5h11M2.5 8h11M2.5 11h11"/></svg>
+    </button>
     <button id="btnSearch" title="Declarer le morceau en cours">⌕</button>
     <button id="btnTheme" title="Mode jour / mode nuit">☾</button>
     <button id="btnSettings" title="Reglages">≡</button>
@@ -398,13 +691,78 @@ transition:.18s;pointer-events:none}
   <div class="t" id="refT">—</div>
   <div class="a" id="refA">—</div>
   <div class="m">
-    <span>KEY <i id="refK">—</i></span>
-    <span>BPM <i id="refB">—</i></span>
-    <span>ÉNERGIE <i id="refE">—</i></span>
+    <span><em>KEY</em> <i id="refK">—</i></span>
+    <span><em>BPM</em> <i id="refB">—</i></span>
+    <span><em>ÉNERGIE</em> <i id="refE">—</i></span>
     <span id="refD"></span>
   </div>
   <div class="strip" id="strip"></div>
   <div class="striplbl" id="striplbl"><span>—</span><span>—</span></div>
+</div>
+
+<!-- ============================================================
+     Le rail de filtres. Toujours la, jamais deplie par defaut.
+     Quatre pastilles : les trois premieres sont les filtres
+     d'INSTANT (style, marge de tempo, energie) — Liaison les
+     efface tout seul des que le morceau suivant part sur un deck.
+     La quatrieme porte les filtres de SOIREE, qui tiennent.
+     ============================================================ -->
+<div class="rail" id="rail">
+  <button class="p" id="pGenre" aria-pressed="false" title="Ne proposer que ces styles — remis a zero au morceau suivant">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg>
+    <b class="w">Style</b>
+  </button>
+  <button class="p" id="pTempo" aria-pressed="false" title="Serrer la marge de tempo autour du morceau qui tourne">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M4.5 5.5 2 8l2.5 2.5M11.5 5.5 14 8l-2.5 2.5"/></svg>
+    <b class="w">Tempo</b>
+  </button>
+  <button class="p" id="pEnergie" aria-pressed="false" title="Ne proposer que cette plage d'energie">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg>
+    <b class="w">Énergie</b>
+  </button>
+  <button class="p" id="pListe" aria-pressed="false" title="Liste, deja joue, gros mots — ces filtres-la tiennent toute la soiree">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v9h-11zM2.5 6.5h11M6 6.5v6"/></svg>
+    <b class="w">Liste</b>
+  </button>
+  <button class="raz" id="railRaz" title="Tout rendre : toute la bibliotheque redevient proposable">Vider</button>
+  <span class="n" id="fN"></span>
+</div>
+
+<div class="tiroir" id="tiroir">
+  <!-- Les styles du DJ, lus dans SA bibliotheque. -->
+  <div class="pan" id="tGenre">
+    <div class="tt">Styles de ta bibliothèque<i id="gInfo"></i></div>
+    <div class="gwrap" id="gWrap"><span class="vide">Lecture…</span></div>
+    <div class="hint2">Ces styles retombent tout seuls dès que le morceau suivant démarre.</div>
+  </div>
+  <!-- La marge de tempo, au reglet. -->
+  <div class="pan" id="tTempo">
+    <div class="tt">Marge de tempo acceptée<i id="mInfo"></i></div>
+    <div class="regle">
+      <input type="range" id="mRange" min="0" max="12" step="1" value="0">
+      <span class="v auto" id="mOut">Auto</span>
+    </div>
+    <div class="hint2" id="mHint">Liaison choisit la marge d’après ce que tu cales vraiment.</div>
+  </div>
+  <!-- L'energie, en dix cases. -->
+  <div class="pan" id="tEnergie">
+    <div class="tt">Plage d’énergie<i id="eInfo"></i></div>
+    <div class="ecells" id="eCells"></div>
+    <div class="hint2">Clique le début puis la fin. Re-clique dedans pour tout rouvrir.</div>
+  </div>
+  <!-- Les filtres de soiree. Memes commandes qu'avant : les
+       identifiants n'ont pas bouge, seul le rangement a change. -->
+  <div class="pan" id="tListe">
+    <div class="tt">Filtres de soirée<i>ils tiennent jusqu’à ce que tu les retires</i></div>
+    <div class="lignes">
+      <select id="fCrate" title="Ne proposer que depuis cette liste"><option value="">Toute la bibliothèque</option></select>
+      <button class="f" id="fPlayed" aria-pressed="false" title="Ne plus proposer ce qui est déjà passé ce soir">Pas déjà joué</button>
+      <button class="f" id="fExpl" aria-pressed="false" title="Écarter ce qui est annoncé comme explicite">Sans gros mots</button>
+      <button class="f" id="fBpm" aria-pressed="false" title="Verrouiller une plage de tempo fixe">BPM fixe</button>
+      <input id="fMin" type="number" min="60" max="200" placeholder="min" style="display:none">
+      <input id="fMax" type="number" min="60" max="200" placeholder="max" style="display:none">
+    </div>
+  </div>
 </div>
 
 <div class="reqbar" id="reqbar">
@@ -423,16 +781,6 @@ transition:.18s;pointer-events:none}
   <span class="t" id="anTxt">Analyse</span>
   <span class="hint">tu peux mixer pendant ce temps</span>
   <div class="track"><i id="anFill"></i></div>
-</div>
-
-<div class="filt" id="filt">
-  <select id="fCrate" title="Ne proposer que depuis cette liste"><option value="">Toute la bibliothèque</option></select>
-  <button class="f" id="fPlayed" aria-pressed="false" title="Ne plus proposer ce qui est déjà passé ce soir">Pas déjà joué</button>
-  <button class="f" id="fExpl" aria-pressed="false" title="Écarter ce qui est annoncé comme explicite">Sans gros mots</button>
-  <button class="f" id="fBpm" aria-pressed="false" title="Verrouiller une plage de tempo">BPM</button>
-  <input id="fMin" type="number" min="60" max="200" placeholder="min" style="display:none">
-  <input id="fMax" type="number" min="60" max="200" placeholder="max" style="display:none">
-  <span class="n" id="fN"></span>
 </div>
 
 <div class="land" id="land">
@@ -500,13 +848,30 @@ transition:.18s;pointer-events:none}
     <button class="chip fl" data-arc="hold" aria-pressed="false" aria-label="Tenir" title="Forcer : tenir le niveau">=</button>
     <button class="chip fl" data-arc="down" aria-pressed="false" aria-label="Baisser" title="Forcer : redescendre">↓</button>
   </span>
+  <!-- ============================================================
+       Le pied : un pictogramme, puis le mot.
+
+       « Il y a enormement de texte » — et c'est vrai ici plus
+       qu'ailleurs : cinq boutons ecrits en toutes lettres, en
+       monospace espace, pour des fonctions qu'on cherche en une
+       demi-seconde. Chaque bouton porte donc d'abord un dessin,
+       et le mot vient en second ; au cran BARRE le mot tombe et
+       il ne reste que le dessin.
+
+       FILTRES a disparu d'ici : les filtres sont remontes en haut,
+       visibles en permanence. C'est un bouton de moins et c'est
+       la place qui manquait.
+       ============================================================ -->
   <!-- L'idee de Peter Helliot : rester dans la meme bulle. -->
-  <button class="chip" id="btnBulle" aria-pressed="false" title="Rester dans le style du morceau qui tourne">Bulle</button>
-  <button class="chip" id="btnFilt" aria-pressed="false" title="Filtres de cabine">Filtres<span class="badge" id="filtN" style="display:none">0</span></button>
-  <button class="chip" id="btnLand" aria-pressed="false" title="Temps restant et descente">Fin</button>
-  <button class="chip req" id="btnReq" title="Demandes des invites">Demandes<span class="badge" id="reqN" style="display:none">0</span></button>
-  <button class="chip sos" id="btnSos" title="Le dancefloor se vide">SOS</button>
-  <span class="st" id="st">—</span>
+  <button class="chip" id="btnBulle" aria-pressed="false" title="Bulle — rester dans le style du morceau qui tourne">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.6"/></svg><span class="w">Bulle</span></button>
+  <button class="chip mini" id="btnLand" aria-pressed="false" title="Fin de set — temps restant et descente">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.8"/></svg><span class="w">Fin</span></button>
+  <button class="chip req mini" id="btnReq" title="Demandes des invites">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.5S2.5 10.2 2.5 6.4A3.1 3.1 0 0 1 8 4.6a3.1 3.1 0 0 1 5.5 1.8c0 3.8-5.5 7.1-5.5 7.1z"/></svg><span class="w">Demandes</span><span class="badge" id="reqN" style="display:none">0</span></button>
+  <button class="chip sos" id="btnSos" title="SOS — le dancefloor se vide">
+    <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.5 13.4h-13z"/><path d="M8 6.4v3.1M8 11.4v.1"/></svg><span class="w">SOS</span></button>
+  <span class="st" id="st"></span>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -517,7 +882,7 @@ const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;
 const fmt = p => Math.abs(p) < 0.05 ? '±0,0 %' : (p > 0 ? '+' : '−') + Math.abs(p).toFixed(1).replace('.', ',') + ' %';
 const mmss = t => { if (!isFinite(t) || t < 0) t = 0; const m = Math.floor(t / 60), s = Math.round(t % 60);
   return m + ':' + (s < 10 ? '0' : '') + (s === 60 ? 0 : s); };
-let cfg = { arc: 'up', mode: 'crowd' };
+let cfg = { arc: 'up', mode: 'crowd', densite: 'cabine' };
 
 /* La fenetre epouse son contenu : trois propositions ou une seule,
    le widget ne laisse jamais de vide noir au-dessus du logiciel. */
@@ -525,10 +890,32 @@ let hTimer = null, lastH = 0;
 function fitHeight() {
   clearTimeout(hTimer);
   hTimer = setTimeout(() => {
-    const h = Math.ceil(document.body.getBoundingClientRect().height) + 2;
+    /* ------------------------------------------------------------
+       On mesure les BLOCS, pas le corps.
+
+       Le corps est etire a la hauteur de la fenetre (min-height a
+       100 %, pour que le fond reste plein quand il y a peu a
+       montrer) : le mesurer revient a mesurer la fenetre, et donc
+       a lui redemander la hauteur qu'elle a deja. C'est ce qui
+       gelait le widget a 548 px.
+
+       On additionne donc la hauteur des blocs empiles. Ceux qui
+       flottent au-dessus — le message passager — n'occupent
+       aucune place et ne comptent pas. Deux pixels pour les
+       bordures du cadre.
+       ------------------------------------------------------------ */
+    let h = 2;
+    for (const el of document.body.children) {
+      if (getComputedStyle(el).position === 'fixed') continue;
+      h += el.getBoundingClientRect().height;
+    }
+    h = Math.ceil(h);
     if (h && Math.abs(h - lastH) > 3 && window.liaison.setHeight) {
       lastH = h;
-      window.liaison.setHeight(Math.max(180, Math.min(760, h)));
+      /* Le plancher descend a 120 px : au cran BARRE, le widget
+         n'est plus qu'une reglette et 180 px l'auraient rallonge
+         de vide noir. Le plafond ne bouge pas. */
+      window.liaison.setHeight(Math.max(120, Math.min(760, h)));
     }
   }, 60);
 }
@@ -1032,40 +1419,104 @@ document.querySelectorAll('[data-arc]').forEach(b => b.onclick = () => {
 });
 
 /* ============================================================
-   Les filtres de cabine.
+   LES FILTRES DE CABINE.
 
-   Quatre interrupteurs qui retirent des morceaux. Ils ne remontent
-   jamais rien : c'est ce qui les rend previsibles a 2 h du matin.
-   Le compte a droite dit combien de titres restent — s'il tombe
-   trop bas, on le dit en rouge plutot que de vider le widget.
+   Deux familles, et la difference entre les deux est la chose la
+   plus importante de tout ce bloc.
+
+   Les filtres de SOIREE — une liste, « pas deja joue », « sans
+   gros mots », une plage de tempo verrouillee — sont des reglages.
+   Le DJ les pose avant ou pendant, ils tiennent jusqu'a ce qu'il
+   les retire, et ils sont ecrits sur le disque.
+
+   Les filtres d'INSTANT — un style, une marge de tempo, une plage
+   d'energie — sont une PHRASE : « fais-moi des propositions de tel
+   genre, avec telle marge ». Une phrase vaut pour le morceau
+   qu'on cherche, pas pour la nuit. Des que le suivant part sur un
+   deck, main.js les efface et renvoie l'etat : le rail s'eteint
+   tout seul, sans que personne ait rien a defaire.
+
+   Ils ne remontent jamais rien, ni les uns ni les autres : un
+   filtre RETIRE des morceaux, toujours. C'est ce qui les rend
+   previsibles a 2 h du matin — la seule qualite qui compte a cette
+   heure-la.
    ============================================================ */
-let fEtat = { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0 };
+let fEtat = { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0,
+              genres: [], marge: 0, energyMin: 0, energyMax: 0 };
+let fTotal = 0, fVide = false, fBpmJoue = 0;
+let panOuvert = null;          /* quel volet du tiroir est deplie */
+let genresLus = null;          /* les etiquettes du DJ, lues une fois */
 
+const nbfr = x => Number(x || 0).toLocaleString('fr-FR');
+
+/* Combien de filtres tournent, familles confondues. C'est ce
+   chiffre qui decide si le bouton « Vider » a une raison d'etre. */
+function fActifs() {
+  return (fEtat.crate ? 1 : 0) + (fEtat.skipPlayed ? 1 : 0) + (fEtat.noExplicit ? 1 : 0) +
+         ((fEtat.bpmMin || fEtat.bpmMax) ? 1 : 0) + (fEtat.genres.length ? 1 : 0) +
+         (fEtat.marge > 0 ? 1 : 0) + ((fEtat.energyMin || fEtat.energyMax) ? 1 : 0);
+}
+
+/* ------------------------------------------------------------
+   Le rail repeint.
+
+   Chaque pastille dit DEUX choses : qu'elle est allumee, et sur
+   quoi. Une pastille « Style » allumee sans dire lequel oblige a
+   ouvrir le tiroir pour savoir ce qu'on a demande — c'est un
+   aller-retour de plus dans un moment ou on n'en a pas.
+
+   Allumee, la pastille remplace donc son mot-cle par sa valeur :
+   « TECHNO », « TECHNO +2 », « ± 3 % », « É 6-9 ». Le pictogramme
+   reste, lui, pour qu'on sache de quoi on parle.
+   ------------------------------------------------------------ */
+function paintRail() {
+  const pose = (sel, on, texte, mot) => {
+    const b = $(sel);
+    b.setAttribute('aria-pressed', on ? 'true' : 'false');
+    b.querySelector('b').textContent = on ? texte : mot;
+    b.querySelector('b').className = on ? '' : 'w';
+  };
+  const g = fEtat.genres;
+  pose('#pGenre', g.length > 0,
+       g.length === 1 ? g[0] : g[0] + ' +' + (g.length - 1), 'Style');
+  pose('#pTempo', fEtat.marge > 0, '± ' + fEtat.marge + ' %', 'Tempo');
+  const eOn = !!(fEtat.energyMin || fEtat.energyMax);
+  pose('#pEnergie', eOn,
+       'É ' + (fEtat.energyMin || 1) + '-' + (fEtat.energyMax || 10), 'Énergie');
+  const lOn = !!(fEtat.crate || fEtat.skipPlayed || fEtat.noExplicit || fEtat.bpmMin || fEtat.bpmMax);
+  pose('#pListe', lOn, 'Liste', 'Liste');
+
+  for (const [sel, pan] of [['#pGenre','tGenre'],['#pTempo','tTempo'],
+                            ['#pEnergie','tEnergie'],['#pListe','tListe']])
+    $(sel).classList.toggle('ouvert', panOuvert === pan);
+
+  $('#railRaz').classList.toggle('on', fActifs() > 0);
+}
+
+/* Le compte de ce qui reste. Il tient la promesse du moteur :
+   « trie, ne jette jamais ». Quand un tamis ne laisse plus rien,
+   main.js l'ignore et le dit — mieux vaut des propositions moins
+   serrees qu'un widget vide. */
 function renderFiltCount(r) {
-  const n = $('#fN'), badge = $('#filtN');
-  const actifs = (fEtat.crate ? 1 : 0) + (fEtat.skipPlayed ? 1 : 0) +
-                 (fEtat.noExplicit ? 1 : 0) + ((fEtat.bpmMin || fEtat.bpmMax) ? 1 : 0);
-  badge.style.display = actifs ? 'block' : 'none';
-  badge.textContent = actifs;
-  badge.style.background = r && r.vide ? 'var(--red)' : 'var(--wire2)';
+  /* main.js renvoie desormais l'etat COMPLET a chaque changement,
+     y compris quand c'est LUI qui remet les filtres d'instant a
+     zero au morceau suivant. Si l'etat est la, il fait foi. */
+  if (r && r.etat) { fEtat = Object.assign({ genres: [], marge: 0, energyMin: 0, energyMax: 0 }, r.etat);
+                     fEtat.genres = fEtat.genres || []; }
+  if (r && typeof r.total === 'number') fTotal = r.total;
+  if (r && typeof r.bpm === 'number') fBpmJoue = r.bpm;
+  if (r) fVide = !!r.vide;
+  paintRail();
+  if (panOuvert) paintPan();
+  const n = $('#fN');
   if (!r) { n.textContent = ''; return; }
-  n.classList.toggle('warn', !!r.vide);
+  n.classList.toggle('warn', fVide);
   /* Espace insecable fine entre les milliers : « 22 000 », pas
      « 22000 ». C'est la regle francaise, et sur un chiffre a cinq
      positions ca change vraiment la lecture d'un coup d'oeil. */
-  const nb = x => Number(x || 0).toLocaleString('fr-FR');
-  n.textContent = r.vide
-    ? 'Trop etroit — filtres ignores'
-    : (actifs ? nb(r.restants) + ' / ' + nb(r.total) + ' titres' : nb(r.total) + ' titres');
-}
-
-function paintFilt() {
-  $('#fPlayed').setAttribute('aria-pressed', fEtat.skipPlayed ? 'true' : 'false');
-  $('#fExpl').setAttribute('aria-pressed', fEtat.noExplicit ? 'true' : 'false');
-  const bpmOn = !!(fEtat.bpmMin || fEtat.bpmMax);
-  $('#fBpm').setAttribute('aria-pressed', bpmOn ? 'true' : 'false');
-  $('#fMin').style.display = $('#fMax').style.display = bpmOn ? 'block' : 'none';
-  $('#fCrate').value = fEtat.crate || '';
+  n.textContent = fVide
+    ? 'Trop étroit — ignoré'
+    : (fActifs() ? nbfr(r.restants) + ' / ' + nbfr(fTotal) : nbfr(fTotal) + ' titres');
 }
 
 async function pushFilt(patch) {
@@ -1074,43 +1525,206 @@ async function pushFilt(patch) {
   fitHeight();
 }
 
-async function loadFilt() {
-  const r = await window.liaison.filters();
-  fEtat = r.etat;
-  const sel = $('#fCrate');
-  sel.innerHTML = '<option value="">Toute la bibliothèque</option>' +
-    r.crates.map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${c.n}</option>`).join('');
-  if (!r.crates.length) sel.innerHTML += '<option value="" disabled>Aucune liste trouvée</option>';
-  $('#fMin').value = fEtat.bpmMin || '';
-  $('#fMax').value = fEtat.bpmMax || '';
-  paintFilt();
-  renderFiltCount(r);
+/* ------------------------------------------------------------
+   Le tiroir : un volet a la fois.
+
+   Quatre volets deplies ensemble, c'est la barre de filtres
+   d'avant — c'est-a-dire trop de choses et donc rien de lisible.
+   Un clic sur une pastille ouvre SON volet et ferme les autres ;
+   un second clic sur la meme pastille referme tout.
+   ------------------------------------------------------------ */
+function ouvrirPan(pan) {
+  panOuvert = (panOuvert === pan) ? null : pan;
+  $('#tiroir').classList.toggle('on', !!panOuvert);
+  for (const id of ['tGenre','tTempo','tEnergie','tListe'])
+    $('#' + id).classList.toggle('on', panOuvert === id);
+  paintRail();
+  if (panOuvert) paintPan();
+  fitHeight();
 }
 
-$('#btnFilt').onclick = async () => {
-  const on = !$('#filt').classList.contains('on');
-  $('#filt').classList.toggle('on', on);
-  $('#btnFilt').setAttribute('aria-pressed', on ? 'true' : 'false');
-  if (on) await loadFilt();
+function paintPan() {
+  if (panOuvert === 'tGenre')   peindreGenres();
+  if (panOuvert === 'tTempo')   peindreTempo();
+  if (panOuvert === 'tEnergie') peindreEnergie();
+  if (panOuvert === 'tListe')   peindreListe();
+}
+
+/* ------------------------------------------------------------
+   Les styles : ceux du DJ, pas ceux de Liaison.
+
+   « pour les styles, prend ceux de la bibliotheque du dj (itunes,
+     rekordbox, etc.. car chaque dj a son habitude) »
+
+   Une liste ecrite ici — House, Techno, Disco, Funk — se serait
+   trompee deux fois : des cases vides chez un DJ mariage, et rien
+   pour « Variete francaise », « Zouk », « Rai », « Afro » chez
+   celui qui en vit. Les etiquettes viennent donc de la
+   bibliotheque lue, dans l'orthographe du DJ, triees par nombre
+   de morceaux. Le compte a cote de chaque style dit ce qu'il
+   reste si on le choisit seul.
+   ------------------------------------------------------------ */
+async function chargerGenres() {
+  if (genresLus) return genresLus;
+  /* Un pont plus ancien que cette page n'expose pas filterGenres.
+     Le tiroir se replie proprement plutot que de jeter. */
+  if (!window.liaison.filterGenres) { genresLus = []; return genresLus; }
+  try { genresLus = (await window.liaison.filterGenres()) || []; }
+  catch (e) { genresLus = []; }
+  return genresLus;
+}
+
+async function peindreGenres() {
+  const box = $('#gWrap');
+  const liste = await chargerGenres();
+  if (!liste.length) {
+    box.innerHTML = '<span class="vide">Ta bibliothèque ne porte pas d’étiquette de style. ' +
+                    'Liaison se rabat sur la parenté sonore, qui marche sans elles.</span>';
+    $('#gInfo').textContent = '';
+    fitHeight();
+    return;
+  }
+  box.innerHTML = liste.map(g =>
+    '<button data-g="' + esc(g.tag) + '" aria-pressed="' +
+    (fEtat.genres.includes(g.tag) ? 'true' : 'false') + '">' +
+    esc(g.tag) + '<s>' + nbfr(g.n) + '</s></button>').join('');
+  $('#gInfo').textContent = fEtat.genres.length
+    ? fEtat.genres.length + ' retenu' + (fEtat.genres.length > 1 ? 's' : '')
+    : liste.length + ' styles';
   fitHeight();
+}
+
+$('#gWrap').addEventListener('click', e => {
+  const b = e.target.closest('button[data-g]'); if (!b) return;
+  const g = b.dataset.g;
+  const i = fEtat.genres.indexOf(g);
+  if (i >= 0) fEtat.genres.splice(i, 1); else fEtat.genres.push(g);
+  peindreGenres(); paintRail();
+  pushFilt({ fGenres: fEtat.genres.slice() });
+});
+
+/* ------------------------------------------------------------
+   La marge de tempo.
+
+   « fait moi des propositions de sons avec tel genre, avec tel
+     marge de BPM »
+
+   Zero n'est pas « aucune marge » : c'est AUTO, et c'est le bon
+   defaut. Liaison apprend la marge que le DJ tient reellement
+   — certains calent a 1 %, d'autres poussent a 6 — et la sert
+   sans qu'on lui demande. Le reglet sert au moment ou le DJ veut
+   forcer : « ce soir, rien au-dela de 2 % ».
+
+   Le rendu montre ce que ca donne en tempo, pas seulement en
+   pourcentage : « ± 3 % » ne veut rien dire a 2 h du matin,
+   « 124 - 132 » si.
+   ------------------------------------------------------------ */
+function peindreTempo() {
+  const v = fEtat.marge || 0;
+  $('#mRange').value = v;
+  const out = $('#mOut');
+  out.textContent = v ? '± ' + v + ' %' : 'Auto';
+  out.className = v ? 'v' : 'v auto';
+  const b = fBpmJoue || 0;
+  $('#mHint').textContent = !v
+    ? 'Liaison choisit la marge d’après ce que tu cales vraiment.'
+    : (b > 0
+        ? 'Rien en dehors de ' + (b * (1 - v / 100)).toFixed(0) + ' – ' +
+          (b * (1 + v / 100)).toFixed(0) + ' BPM.'
+        : 'S’appliquera autour du tempo du morceau qui tourne.');
+}
+let mT;
+$('#mRange').addEventListener('input', e => {
+  fEtat.marge = Math.max(0, Math.min(12, parseInt(e.target.value, 10) || 0));
+  peindreTempo(); paintRail();
+  clearTimeout(mT);
+  mT = setTimeout(() => pushFilt({ fMarge: fEtat.marge }), 220);
+});
+
+/* ------------------------------------------------------------
+   L'energie, en dix cases.
+
+   Deux champs numeriques auraient tenu moins de place. Mais on
+   regle ca entre deux morceaux, d'un doigt, sans viser : dix
+   cases se cliquent, deux champs se remplissent. Le premier clic
+   pose le debut, le second la fin ; cliquer dans une plage posee
+   la retire.
+   ------------------------------------------------------------ */
+function peindreEnergie() {
+  const lo = fEtat.energyMin || 0, hi = fEtat.energyMax || 0;
+  let h = '';
+  for (let i = 1; i <= 10; i++) {
+    const dans = lo && hi ? (i >= lo && i <= hi) : (lo ? i === lo : false);
+    const bout = (i === lo || i === hi);
+    h += '<button data-e="' + i + '" class="' + (bout ? 'bout' : '') + '" aria-pressed="' +
+         (dans ? 'true' : 'false') + '">' + i + '</button>';
+  }
+  $('#eCells').innerHTML = h;
+  $('#eInfo').textContent = (lo || hi) ? (lo || 1) + ' à ' + (hi || 10) : 'toutes';
+}
+$('#eCells').addEventListener('click', e => {
+  const b = e.target.closest('button[data-e]'); if (!b) return;
+  const v = Number(b.dataset.e);
+  const lo = fEtat.energyMin || 0, hi = fEtat.energyMax || 0;
+  if (lo && hi && v >= lo && v <= hi) { fEtat.energyMin = 0; fEtat.energyMax = 0; }
+  else if (lo && !hi) { fEtat.energyMin = Math.min(lo, v); fEtat.energyMax = Math.max(lo, v); }
+  else { fEtat.energyMin = v; fEtat.energyMax = 0; }
+  peindreEnergie(); paintRail();
+  pushFilt({ fEnergyMin: fEtat.energyMin, fEnergyMax: fEtat.energyMax });
+});
+
+/* ---- les filtres de soiree ---- */
+function peindreListe() {
+  $('#fPlayed').setAttribute('aria-pressed', fEtat.skipPlayed ? 'true' : 'false');
+  $('#fExpl').setAttribute('aria-pressed', fEtat.noExplicit ? 'true' : 'false');
+  const bpmOn = !!(fEtat.bpmMin || fEtat.bpmMax);
+  $('#fBpm').setAttribute('aria-pressed', bpmOn ? 'true' : 'false');
+  $('#fMin').style.display = $('#fMax').style.display = bpmOn ? 'inline-block' : 'none';
+  $('#fMin').value = fEtat.bpmMin || '';
+  $('#fMax').value = fEtat.bpmMax || '';
+  $('#fCrate').value = fEtat.crate || '';
+}
+
+async function loadFilt() {
+  const r = await window.liaison.filters();
+  const sel = $('#fCrate');
+  sel.innerHTML = '<option value="">Toute la bibliothèque</option>' +
+    (r.crates || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${c.n}</option>`).join('');
+  if (!(r.crates || []).length) sel.innerHTML += '<option value="" disabled>Aucune liste trouvée</option>';
+  renderFiltCount(r);
+  peindreListe();
+}
+
+$('#pGenre').onclick   = () => ouvrirPan('tGenre');
+$('#pTempo').onclick   = () => ouvrirPan('tTempo');
+$('#pEnergie').onclick = () => ouvrirPan('tEnergie');
+$('#pListe').onclick   = () => ouvrirPan('tListe');
+
+/* Tout rendre d'un geste. C'est le pendant du rail toujours
+   visible : si on voit en permanence qu'un filtre tourne, il faut
+   pouvoir l'eteindre en permanence aussi, sans chercher lequel. */
+$('#railRaz').onclick = () => {
+  fEtat = { crate: null, skipPlayed: false, noExplicit: false, bpmMin: 0, bpmMax: 0,
+            genres: [], marge: 0, energyMin: 0, energyMax: 0 };
+  paintRail(); if (panOuvert) paintPan();
+  pushFilt({ fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0,
+             fGenres: [], fMarge: 0, fEnergyMin: 0, fEnergyMax: 0 });
 };
-$('#fCrate').onchange = e => { fEtat.crate = e.target.value || null; paintFilt(); pushFilt({ fCrate: fEtat.crate }); };
-$('#fPlayed').onclick = () => { fEtat.skipPlayed = !fEtat.skipPlayed; paintFilt(); pushFilt({ fSkipPlayed: fEtat.skipPlayed }); };
-$('#fExpl').onclick = () => { fEtat.noExplicit = !fEtat.noExplicit; paintFilt(); pushFilt({ fNoExplicit: fEtat.noExplicit }); };
+
+$('#fCrate').onchange = e => { fEtat.crate = e.target.value || null; peindreListe(); pushFilt({ fCrate: fEtat.crate }); };
+$('#fPlayed').onclick = () => { fEtat.skipPlayed = !fEtat.skipPlayed; peindreListe(); pushFilt({ fSkipPlayed: fEtat.skipPlayed }); };
+$('#fExpl').onclick   = () => { fEtat.noExplicit = !fEtat.noExplicit; peindreListe(); pushFilt({ fNoExplicit: fEtat.noExplicit }); };
 $('#fBpm').onclick = async () => {
   if (fEtat.bpmMin || fEtat.bpmMax) { fEtat.bpmMin = 0; fEtat.bpmMax = 0; }
   else {
     /* Un clic doit donner une plage utile tout de suite. On la centre sur
        le tempo joue, a plus ou moins 6 % — au-dela, un morceau cale
        s'entend. Sans morceau charge, on ouvre grand et le DJ ajuste. */
-    const r = await window.liaison.filters();
-    const b = r.bpm || 0;
+    const b = fBpmJoue || 0;
     fEtat.bpmMin = b ? Math.round(b * 0.94) : 110;
     fEtat.bpmMax = b ? Math.round(b * 1.06) : 132;
   }
-  $('#fMin').value = fEtat.bpmMin || '';
-  $('#fMax').value = fEtat.bpmMax || '';
-  paintFilt();
+  peindreListe();
   pushFilt({ fBpmMin: fEtat.bpmMin, fBpmMax: fEtat.bpmMax });
 };
 let fT;
@@ -1123,6 +1737,40 @@ let fT;
   });
 });
 window.liaison.on('filters', renderFiltCount);
+
+/* ============================================================
+   LA HAUTEUR DU WIDGET, AU CHOIX DU DJ.
+
+   Trois crans, un bouton, et l'etat retenu d'une soiree sur
+   l'autre : celui qui mixe en plein ecran restera en BARRE, celui
+   qui prepare son set restera en GRAND. Le reglage voyage dans la
+   configuration comme le theme — c'est un reglage de meuble, pas
+   un filtre, il n'a aucune raison de retomber.
+   ============================================================ */
+const DENSITES = ['barre', 'cabine', 'grand'];
+const DENS_ICONE = {
+  barre:  'M2.5 8h11',
+  cabine: 'M2.5 5.5h11M2.5 10.5h11',
+  grand:  'M2.5 4h11M2.5 8h11M2.5 12h11'
+};
+const DENS_NOM = { barre: 'Barre', cabine: 'Cabine', grand: 'Grand' };
+
+function poserDensite(d, ecrire) {
+  if (!DENSITES.includes(d)) d = 'cabine';
+  cfg.densite = d;
+  document.body.dataset.densite = d;
+  $('#densIcon').innerHTML = '<path d="' + DENS_ICONE[d] + '"/>';
+  const suiv = DENSITES[(DENSITES.indexOf(d) + 1) % DENSITES.length];
+  $('#btnDens').title = 'Hauteur : ' + DENS_NOM[d] + ' — cliquer pour ' + DENS_NOM[suiv];
+  if (ecrire) window.liaison.setConfig({ densite: d });
+  /* La fenetre doit se refermer sur son nouveau contenu tout de
+     suite : sinon on passe en BARRE et il reste 300 px de noir. */
+  lastH = 0;
+  fitHeight();
+}
+
+$('#btnDens').onclick = () =>
+  poserDensite(DENSITES[(DENSITES.indexOf(cfg.densite || 'cabine') + 1) % DENSITES.length], true);
 
 /* ============================================================
    L'atterrissage de fin de set.
@@ -1322,8 +1970,15 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
   if (c.version) $('#ver').textContent = 'v' + c.version;
   cfg = c.config;
   appliquerTheme(cfg.theme);
+  /* La hauteur choisie la derniere fois, posee avant tout rendu :
+     sinon le widget s'ouvre en grand puis se retracte, et ce
+     sursaut se voit par-dessus le logiciel de mix. */
+  poserDensite(cfg.densite || 'cabine', false);
   refreshLand();
-  window.liaison.filters().then(renderFiltCount).catch(() => {});
+  /* Le rail est visible en permanence : son contenu se charge donc
+     au demarrage, et plus a l'ouverture d'un tiroir. Les listes
+     (crates) sont lues ici une bonne fois. */
+  loadFilt().catch(() => {});
   try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
   if (!lastSug.length) $('#list').innerHTML = etatVide();
   document.querySelectorAll('[data-arc]').forEach(o => o.setAttribute('aria-pressed', o.dataset.arc === cfg.arc ? 'true' : 'false'));

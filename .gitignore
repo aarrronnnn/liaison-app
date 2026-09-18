@@ -1,3 +1,8 @@
+# La cle des classements Last.fm. Ce depot est public : elle est
+# fabriquee a la construction depuis le secret de depot
+# LIAISON_LASTFM_CLE, et ecrite a la main en local. Jamais suivie.
+src/cle-construction.js
+
 node_modules/
 dist/
 *.log

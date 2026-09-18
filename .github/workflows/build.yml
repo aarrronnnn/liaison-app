@@ -129,6 +129,23 @@ jobs:
       # sortie dans le resume du job, qui est public. La prochaine
       # panne se lira sur la page du build, sans identifiants.
       # ------------------------------------------------------------
+      # ------------------------------------------------------------
+      # Plus aucune cle n'est posee ici.
+      #
+      # Une etape ecrivait src/cle-construction.js a partir du
+      # secret de depot LIAISON_LASTFM_CLE, pour que l'application
+      # puisse appeler Last.fm elle-meme. C'etait la mauvaise idee :
+      # une cle dans un .dmg est extractible, elle ne peut pas se
+      # changer sans republier, et mille DJ faisaient mille appels
+      # sur le quota de l'accord commercial.
+      #
+      # Les classements passent desormais par liaisondj.app
+      # (liaison-web/api/classements.js), qui garde la cle comme
+      # Vercel garde deja celle de Stripe, et qui met le resultat en
+      # cache pour tout le monde. Il n'y a donc RIEN a injecter ici,
+      # et le secret de depot n'a plus lieu d'exister.
+      # ------------------------------------------------------------
+
       - name: Construire
         shell: bash
         run: |
