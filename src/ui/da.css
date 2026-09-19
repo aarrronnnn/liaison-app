@@ -27,7 +27,12 @@
      cartes se detachent enfin, et le creme reste chaud : ce n'est
      pas devenu gris.
      ------------------------------------------------------------ */
-  --paper:#EAE5D9; --paper2:#DFDACB; --ink:#141518; --ink2:#5A5D64; --ink3:#83868D; --rule:#D3CDBE;
+  --paper:#EAE5D9; --paper2:#DFDACB; --ink:#141518; --ink2:#5A5D64;
+  /* --ink3 mesure : #83868D sur blanc ne rendait que 3,65:1, et il
+     porte les etiquettes de 9 px de la bande d'etat — le plus petit
+     texte de toute la fenetre. #74777E rend 4,48:1, ce qui passe la
+     barre pour du petit texte. */
+  --ink3:#74777E; --rule:#D3CDBE;
   /* cabine */
   --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#63666D;
   /* --dim : le ton le plus efface de la palette, pour une mention qui

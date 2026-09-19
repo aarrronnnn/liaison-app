@@ -13,7 +13,22 @@ body{margin:0;background:var(--paper);color:var(--ink);font-family:var(--b);font
 -webkit-font-smoothing:antialiased;user-select:none;overflow:hidden}
 .drag{position:fixed;top:0;left:0;right:0;height:34px;-webkit-app-region:drag;z-index:5}
 .wrap{height:100%;overflow-y:auto;padding:34px 34px 30px}
-h1{font-family:var(--d);font-weight:800;font-size:29px;letter-spacing:-.04em;margin:0 0 8px;line-height:1.05}
+/* ------------------------------------------------------------
+   L'INTERLETTRAGE DU TITRE, ET POURQUOI IL ETAIT NEGATIF.
+
+   « ENTRE TON CODE est tout serre, on a presque du mal a lire »
+
+   La regle disait « letter-spacing:-.04em ». Un interlettrage
+   NEGATIF sur de l'Anton, c'est-a-dire sur une grasse condensee
+   dont les lettres sont deja collees par dessin. A 29 px, ca
+   retire 1,16 px a chaque paire : les futs se touchent et le mot
+   devient un bloc noir qu'on dechiffre au lieu de le lire.
+
+   Le reste du produit va dans l'autre sens et le documente deja :
+   +0,03 a +0,04 em selon le corps, parce qu'Anton a besoin qu'on
+   lui RENDE de l'air, jamais qu'on lui en retire.
+   ------------------------------------------------------------ */
+h1{font-family:var(--d);font-weight:800;font-size:29px;letter-spacing:.03em;margin:0 0 10px;line-height:1.12}
 p.sub{color:var(--ink2);margin:0 0 26px;font-size:14.5px}
 .lbl{font-family:var(--m);font-size:10px;letter-spacing:.18em;text-transform:uppercase;color:var(--ink3);display:block}
 

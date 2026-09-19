@@ -9,7 +9,23 @@
    dur dans la regle des champs — donc blanc meme en mode nuit, ce
    qui aurait fait trois rectangles eblouissants au milieu d'un
    ecran sombre. */
---champ:#FFF}
+--champ:#FFF;
+/* ------------------------------------------------------------
+   DEUX BLEUS, PARCE QU'UN SEUL NE PEUT PAS FAIRE LES DEUX.
+
+   Le bleu sert a deux choses opposees : remplir un bouton sous du
+   texte blanc, et ecrire du texte sur un fond. Mesure sur le fond
+   de nuit (#15171C) :
+
+     #3549F0  texte 2,87:1 (illisible)  blanc dessus 6,25:1 (bon)
+     #6675FF  texte 4,74:1 (bon)        blanc dessus 3,78:1 (faible)
+
+   Aucune valeur ne gagne les deux. On garde donc --blue pour le
+   REMPLISSAGE et on ajoute --blueTxt pour l'ECRITURE. De jour les
+   deux coincident : sur du blanc, #1F35D8 rend 8,2:1 dans les
+   deux roles. C'est la nuit qui obligeait a trancher.
+   ------------------------------------------------------------ */
+--blueTxt:var(--blue)}
 
 /* ============================================================
    LE MODE NUIT DE LA FENETRE DE PREPARATION.
@@ -29,7 +45,10 @@
   --ink:#EFEAE0; --ink2:#9BA0A8; --ink3:#71767F;
   --rule:#272A32; --line:#272A32;
   --card:#15171C; --card2:#1B1E26; --champ:#0B0C0F;
-  --blue:#3549F0; --blue2:#5C6EFF; --rose:#FF5A42; --ok:#2E9B62;
+  --blue:#3549F0; --blue2:#5C6EFF; --blueTxt:#6675FF; --rose:#FF5A42; --ok:#2E9B62;
+  /* mesure : #888D96 sur #15171C = 5,31:1, la barre des 4,5 est
+     passee pour les etiquettes de 9 px de la bande d'etat. */
+  --ink3:#888D96;
 }
 /* Le grain s'inverse : il assombrit le papier, il eclaire la nuit. */
 :root[data-theme="nuit"] body::after{mix-blend-mode:overlay;opacity:.05}
@@ -68,7 +87,7 @@ button.g{background:transparent;color:var(--ink);border-color:var(--line)}
 button.g:hover{border-color:var(--ink)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .state{font-family:var(--m);font-size:11px;color:var(--ink2);margin-top:10px}
-.state b{color:var(--blue);font-weight:400}
+.state b{color:var(--blueTxt);font-weight:400}
 .qrbox{display:flex;gap:18px;align-items:flex-start;margin-top:14px}
 .qrbox img{width:132px;height:132px;border:1px solid var(--line);border-radius:4px;background:#fff}
 .tips{font-size:13px;color:var(--ink2);line-height:1.6;margin:10px 0 0}
@@ -236,6 +255,36 @@ padding:4px 8px;border-radius:2px;background:var(--card2);color:var(--ink2)}
 .pill.att{background:var(--rose);color:#fff}
 .pill.info{background:var(--blue);color:#fff}
 button:not(.g):hover{background:var(--blue2);border-color:var(--blue2)}
+
+/* ============================================================
+   LES BOUTONS QUI NE SONT PAS DES BOUTONS D'ACTION.
+
+   « quand on est en mode nuit, sur le hoover, on n'arrive pas a
+     lire le texte »
+
+   La regle du dessus vise le bouton bleu plein — « Enregistrer »,
+   « Activer cette machine ». Mais elle dit « tout button qui n'est
+   pas .g », et depuis, beaucoup d'autres choses sont devenues des
+   <button> : les tuiles de la bande d'etat, les rubriques de la
+   navigation, le bouton de theme, celui qui rafraichit le
+   classement, les croix qui retirent un titre.
+
+   Toutes recevaient donc un fond BLEU au survol en gardant leur
+   couleur de texte d'origine — gris sur bleu. De jour ca passait
+   de justesse ; de nuit le texte disparait.
+
+   Chacune reprend ici son propre survol. La specificite est
+   volontairement identique, et c'est l'ORDRE qui tranche : ces
+   regles sont apres, donc elles gagnent. Si quelqu'un deplace ce
+   bloc plus haut un jour, le defaut revient — d'ou ce paragraphe.
+   ============================================================ */
+button.tuile:hover{background:var(--card);border-color:var(--blue)}
+button.rnav:hover{background:var(--paper2);border-color:transparent;border-left-color:var(--line);color:var(--ink)}
+button.rnav[aria-current="true"]:hover{background:var(--ink);color:var(--paper);border-left-color:var(--rose)}
+button.theme:hover{background:var(--card);border-color:var(--blue);color:var(--blueTxt)}
+button.aarf:hover{background:var(--card);border-color:var(--blue);color:var(--blueTxt)}
+.aal .go button.x:hover{background:transparent;border-color:transparent;color:var(--rose)}
+.tiroir .lignes button.f:hover{background:transparent;border-color:var(--blue);color:var(--blueTxt)}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
 
 /* ============================================================
@@ -316,7 +365,7 @@ stroke-linecap:round;stroke-linejoin:round}
 .panh .mot{font-family:var(--m);font-size:10px;letter-spacing:.11em;text-transform:uppercase;
 padding:5px 9px;border:1px solid var(--line);border-radius:2px;color:var(--ink2);
 background:var(--card);white-space:nowrap}
-.panh .mot:first-child{border-color:var(--blue);color:var(--blue)}
+.panh .mot:first-child{border-color:var(--blue);color:var(--blueTxt)}
 
 /* « En detail » : la prose n'est pas supprimee, elle est rangee.
    Celui qui sait ne la voit jamais, celui qui doute la deplie. */
@@ -328,7 +377,7 @@ padding:5px 0;user-select:none}
 .panh .detail>summary::after{content:"";width:5px;height:5px;border-right:1.4px solid currentColor;
 border-bottom:1.4px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .16s}
 .panh .detail[open]>summary::after{transform:rotate(-135deg) translate(-2px,-2px)}
-.panh .detail>summary:hover{color:var(--blue)}
+.panh .detail>summary:hover{color:var(--blueTxt)}
 .panh .detail>div{font-size:14px;line-height:1.65;color:var(--ink2);max-width:66ch;
 padding:10px 0 2px 13px;border-left:2px solid var(--line);margin-top:2px}
 .panh{border-bottom:1.5px solid var(--line);padding-bottom:18px;margin-bottom:20px}
@@ -346,14 +395,43 @@ stroke-linecap:round;stroke-linejoin:round;opacity:.75}
    ils representaient a eux seuls trente et un blocs de prose.
    Ils se replient derriere un « ? » pose la ou ils etaient.
    ------------------------------------------------------------ */
-details.aide{margin:12px 0 0}
-details.aide>summary{display:inline-flex;align-items:center;justify-content:center;width:20px;height:20px;
-border:1px solid var(--line);border-radius:50%;cursor:pointer;list-style:none;
-font-family:var(--m);font-size:11px;color:var(--ink3);user-select:none}
+/* ============================================================
+   « COMMENT CA MARCHE » — UNE LIGNE, PAS UN POINT
+   D'INTERROGATION.
+
+   « je suis pas hyper fan des points d'interrogations, ca fait
+     hyper vide a cote et on ne sait meme pas que l'on peut
+     cliquer dessus »
+
+   C'est juste, et c'est une faute classique : un « ? » dans un
+   rond est une convention de DEVELOPPEUR. Elle suppose qu'on
+   sache deja qu'il y a quelque chose dessous. Un DJ qui ouvre
+   Liaison pour la premiere fois voit un petit rond gris flottant
+   a cote d'un bouton, ne devine pas qu'il s'ouvre, et le lit
+   comme une verrue. Le pire des deux mondes : ca prend de la
+   place ET ca ne sert a rien.
+
+   Une ligne nommee dit trois choses d'un coup — qu'il y a une
+   explication, de quoi elle parle, et qu'on peut l'ouvrir. Le
+   chevron qui pivote confirme. Et elle occupe sa propre ligne,
+   donc elle ne flotte plus a cote du texte.
+   ============================================================ */
+details.aide{margin:14px 0 0}
+details.aide>summary{display:inline-flex;align-items:center;gap:7px;cursor:pointer;list-style:none;
+font-family:var(--m);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);
+padding:6px 0;user-select:none;width:auto}
 details.aide>summary::-webkit-details-marker{display:none}
-details.aide>summary:hover{border-color:var(--blue);color:var(--blue)}
-details.aide[open]>summary{background:var(--blue);border-color:var(--blue);color:#fff}
-details.aide .tips{margin-top:10px;padding-left:13px;border-left:2px solid var(--line);max-width:66ch}
+details.aide>summary .rd{display:inline-flex;align-items:center;justify-content:center;
+width:15px;height:15px;border:1px solid currentColor;border-radius:50%;font-size:9px;
+line-height:1;flex:none;font-weight:700}
+details.aide>summary .ch{width:5px;height:5px;border-right:1.3px solid currentColor;
+border-bottom:1.3px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .16s}
+details.aide[open]>summary .ch{transform:rotate(-135deg) translate(-2px,-2px)}
+details.aide>summary:hover{color:var(--blueTxt)}
+details.aide[open]>summary{color:var(--ink2)}
+details.aide .tips{margin-top:8px;padding-left:14px;border-left:2px solid var(--line);max-width:66ch}
+details.aide .tips + .tips{margin-top:10px}
+@media(prefers-reduced-motion:reduce){details.aide>summary .ch{transition:none}}
 
 /* ------------------------------------------------------------
    LE CHIFFRE QUI COMPTE, A LA TAILLE DE CE QU'IL DIT.
@@ -410,7 +488,7 @@ border-top:1px solid var(--line)}
 .aah select{font-family:var(--m);font-size:9.5px;letter-spacing:.1em;text-transform:uppercase;
 background:var(--champ);color:var(--ink);border:1px solid var(--line);border-radius:2px;
 padding:4px 6px;width:auto;max-width:200px;cursor:pointer}
-.aah select:hover{border-color:var(--blue)}
+.aah select:hover{border-color:var(--blueTxt)}
 .aarf{display:inline-flex;align-items:center;justify-content:center;width:26px;height:24px;padding:0;
 border:1px solid var(--line);border-radius:2px;background:var(--card);color:var(--ink3);cursor:pointer}
 .aarf svg{width:13px;height:13px;stroke:currentColor;fill:none;stroke-width:1.6;
@@ -440,11 +518,11 @@ color:var(--ink3);font-variant-numeric:tabular-nums}
 .aal .nom b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .aal .nom s{display:block;text-decoration:none;font-family:var(--m);font-size:10px;color:var(--ink3);
 margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.aal .nom s em{font-style:normal;color:var(--blue)}
+.aal .nom s em{font-style:normal;color:var(--blueTxt)}
 .aal .go{display:flex;gap:5px;align-items:center;flex:none}
 .aal .go a{font-family:var(--m);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
 padding:5px 8px;border:1px solid var(--line);border-radius:2px;color:var(--ink2);text-decoration:none;cursor:pointer}
-.aal .go a:hover{border-color:var(--blue);color:var(--blue)}
+.aal .go a:hover{border-color:var(--blue);color:var(--blueTxt)}
 .aal .go .x{border:0;background:none;color:var(--ink3);font-size:15px;line-height:1;padding:2px 5px;cursor:pointer}
 .aal .go .x:hover{color:var(--rose)}
 /* L'etat du bloc quand il n'a rien a dire : une phrase qui
@@ -1767,10 +1845,21 @@ function aaReleve(k) {
   const d = new Date(k.depuis);
   const quand = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
               + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-  const bout = k.horsLigne
-    ? ' — impossible de joindre le service, c’est la dernière liste connue.'
-    : (k.tiede ? ' — il commence à dater, rafraîchis-le.' : '');
-  return '<p class="aadate' + ((k.tiede || k.horsLigne) ? ' vieux' : '') + '">Relevé le '
+  /* La phrase dit TOUJOURS ou en est la garde. « Gardé sur cet
+     ordinateur » est la confirmation qu'on peut fermer l'app sans
+     rien perdre ; si l'écriture a échoué, on le dit franchement
+     plutôt que de laisser croire à une fonction absente. */
+  let bout;
+  if (k.garde === 'echec')
+    bout = ' — impossible de le garder sur cet ordinateur, il repartira à zéro.';
+  else if (k.horsLigne)
+    bout = ' — service injoignable, c’est la dernière liste connue.';
+  else if (k.tiede)
+    bout = ' — il commence à dater, rafraîchis-le.';
+  else
+    bout = ' — gardé sur cet ordinateur.';
+  const alerte = (k.tiede || k.horsLigne || k.garde === 'echec');
+  return '<p class="aadate' + (alerte ? ' vieux' : '') + '">Relevé le '
        + esc(quand) + esc(bout) + '</p>';
 }
 
@@ -2261,14 +2350,29 @@ window.liaison.clientGet().then(st => {
   [].forEach.call(pans.querySelectorAll('p.tips'), function (t) {
     if (!t.textContent.trim()) return;
     if (t.closest('details')) return;
+    /* ------------------------------------------------------------
+       Des explications qui se suivent n'ouvrent qu'une seule fois.
+
+       La carte des tracklists en portait deux a la queue leu leu :
+       ca donnait deux « ? » empiles, puis deux lignes identiques
+       l'une sous l'autre. On absorbe donc les .tips voisins dans
+       le meme repli — un bouton, tout ce qu'il y a a dire dessous.
+       ------------------------------------------------------------ */
     var d = document.createElement('details');
     d.className = 'aide';
     var sum = document.createElement('summary');
-    sum.textContent = '?';
-    sum.title = 'Comment ca marche';
+    sum.innerHTML = '<span class="rd">i</span>Comment \u00e7a marche<span class="ch"></span>';
     d.appendChild(sum);
     t.parentNode.insertBefore(d, t);
     d.appendChild(t);
+
+    var suiv = d.nextElementSibling;
+    while (suiv && suiv.tagName === 'P' && suiv.classList.contains('tips')
+           && suiv.textContent.trim()) {
+      var apres = suiv.nextElementSibling;
+      d.appendChild(suiv);
+      suiv = apres;
+    }
   });
 
   function montrer(id) {

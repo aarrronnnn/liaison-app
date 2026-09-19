@@ -190,8 +190,32 @@ function chargerClassements() {
   chartsDisque = (lu && typeof lu === 'object') ? lu : {};
   return chartsDisque;
 }
+/* ------------------------------------------------------------
+   UNE ECRITURE QUI ECHOUE DOIT SE VOIR.
+
+   Ce « catch (e) {}  » etait un piege parfait : si l'ecriture
+   echoue — disque plein, dossier en lecture seule, antivirus qui
+   verrouille — le classement n'est jamais garde, et le symptome
+   est exactement celui d'une fonction qui n'existe pas. Le DJ
+   relance, la liste a disparu, et rien nulle part ne dit
+   pourquoi. C'est la pire categorie de defaut : silencieux et
+   indiscernable d'une absence de fonctionnalite.
+
+   On retient donc la panne et on la fait remonter jusqu'au
+   panneau, qui la dit en francais.
+   ------------------------------------------------------------ */
+let classementsEcritKO = null;
+
 function enregistrerClassements() {
-  try { ecrire.ecrireJSON(CLASSEMENTS(), chargerClassements()); } catch (e) {}
+  try {
+    ecrire.ecrireJSON(CLASSEMENTS(), chargerClassements());
+    classementsEcritKO = null;
+    return true;
+  } catch (e) {
+    classementsEcritKO = String((e && e.message) || e);
+    console.warn('[liaison] impossible de garder le classement sur le disque :', classementsEcritKO);
+    return false;
+  }
 }
 
 let journalManques = null;
@@ -2436,6 +2460,11 @@ ipcMain.handle('aavoir:get', async (e, opt) => {
     classement.depuis = depuis || null;
     classement.tiede = !!(depuis && (Date.now() - depuis) > CHARTS_TIEDE);
     classement.horsLigne = horsLigne;
+    /* D'ou vient ce qu'on affiche, et si on a reussi a le garder.
+       Sans ca, « la liste n'est pas restee » et « la liste n'a
+       jamais ete ecrite » se ressemblent trop. */
+    classement.garde = classementsEcritKO ? 'echec' : (brut === (eu && eu.valeur) ? 'disque' : 'reseau');
+    classement.gardeNote = classementsEcritKO;
   }
 
   return {
@@ -2747,13 +2776,79 @@ ipcMain.handle('library:sources', () => autolib.detect());
 ipcMain.handle('apps:running', () => watcher.current().map(a => ({ id: a.id, label: a.label, nowSource: a.nowSource })));
 ipcMain.handle('widget:settings', () => openSettings());
 ipcMain.handle('widget:close', () => { if (widget) widget.hide(); });
+/* ============================================================
+   LA FENETRE CHANGE DE TAILLE EN DOUCEUR.
+
+   « j'adore le fait que si on ouvre le filtre, le widget
+     s'agrandit ou retrecit, mais j'ajouterais une sorte
+     d'animation hyper smooth »
+
+   Une feuille de style ne peut pas animer la taille d'une
+   FENETRE : c'est le systeme qui la dessine, pas la page. Le
+   widget sautait donc de 396 a 563 px d'un coup, ce qui se lit
+   comme un a-coup meme quand tout le reste glisse.
+
+   On interpole donc les bornes nous-memes, sur douze images. La
+   courbe est celle du CSS d'en face (cubic-bezier .16 1 .3 1,
+   sortie rapide, arrivee posee) pour que le contenu et le cadre
+   fassent UN seul geste et pas deux.
+
+   Trois garde-fous, tous appris a la dure :
+
+     — un saut de moins de 8 px n'est pas anime : le widget se
+       reajuste de deux ou trois pixels a chaque changement de
+       morceau, et animer ca donnerait une fenetre qui respire en
+       permanence ;
+     — une nouvelle demande annule la precedente, sinon deux
+       animations se disputent les memes bornes et la fenetre
+       tremble ;
+     — le minuteur est arrete des que la fenetre disparait. Une
+       animation sur une fenetre detruite, c'est un plantage.
+   ============================================================ */
+let tweenHauteur = null;
+const HAUTEUR_IMAGES = 12;          /* ~180 ms a 60 images/seconde */
+const HAUTEUR_SEUIL = 8;            /* en deca, on ne bouge pas en douceur */
+
+function douceur(t) {
+  /* cubic-bezier(.16, 1, .3, 1), approchee : meme depart nerveux,
+     meme arrivee amortie que l'animation du tiroir. */
+  return 1 - Math.pow(1 - t, 3);
+}
+
+function poserHauteur(win, cible) {
+  if (!win || win.isDestroyed()) return;
+  const b = win.getBounds();
+  const h = Math.max(120, Math.min(900, Math.round(cible)));
+  if (Math.abs(b.height - h) < 1) return;
+
+  if (tweenHauteur) { clearInterval(tweenHauteur); tweenHauteur = null; }
+
+  /* Un petit reajustement se fait sec : c'est imperceptible, et
+     l'animer ferait vibrer le widget a chaque morceau. */
+  if (Math.abs(b.height - h) < HAUTEUR_SEUIL || !win.isVisible()) {
+    win.setBounds(Object.assign(b, { height: h }));
+    return;
+  }
+
+  const depart = b.height;
+  let i = 0;
+  tweenHauteur = setInterval(() => {
+    if (!win || win.isDestroyed()) { clearInterval(tweenHauteur); tweenHauteur = null; return; }
+    i++;
+    const t = Math.min(1, i / HAUTEUR_IMAGES);
+    const v = Math.round(depart + (h - depart) * douceur(t));
+    try { win.setBounds(Object.assign(win.getBounds(), { height: v })); } catch (err) {}
+    if (t >= 1) { clearInterval(tweenHauteur); tweenHauteur = null; }
+  }, 16);
+  if (tweenHauteur.unref) tweenHauteur.unref();
+}
+
 ipcMain.handle('widget:height', (e, h) => {
   const from = BrowserWindow.fromWebContents(e.sender);
-  const win = from || widget;
   /* Plancher a 120 px : au cran BARRE le widget n'est plus qu'une
      reglette posee au-dessus des decks, et 220 px l'auraient
      rallonge d'une centaine de pixels de vide noir. */
-  if (win && !win.isDestroyed()) win.setBounds(Object.assign(win.getBounds(), { height: Math.max(120, Math.min(900, Math.round(h))) }));
+  poserHauteur(from || widget, h);
 });
 
 /* ---------------- barre de menus ---------------- */

@@ -34,12 +34,31 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .vr{font-family:var(--m);font-size:8.5px;letter-spacing:.06em;color:var(--cream3);margin-left:7px;opacity:.75}
 
 /* ---------- barre ---------- */
-.grip{display:flex;align-items:center;gap:9px;padding:9px 10px;border-bottom:1px solid var(--wire);-webkit-app-region:drag}
+.grip{display:flex;align-items:center;gap:9px;padding:7px 8px 7px 10px;border-bottom:1px solid var(--wire);-webkit-app-region:drag}
 .grip .mk{display:flex;align-items:center;gap:8px}
 .grip .mk svg{width:17px;height:17px;display:block}
 .grip .nm{font-family:var(--m);font-weight:700;font-size:9.5px;letter-spacing:.3em}
 .grip .act{margin-left:auto;display:flex;gap:1px;-webkit-app-region:no-drag}
-.grip .act button{width:24px;height:22px;border-radius:2px;color:var(--cream3);font-family:var(--m);font-size:12px;line-height:1}
+/* ------------------------------------------------------------
+   Les boutons de la poignee, a la taille d'un doigt.
+
+   24 x 22 px avec un glyphe de 12 px : c'est la taille d'une icone
+   de barre de menus, pas d'un bouton qu'on vise a 2 h du matin en
+   regardant ailleurs. Les recommandations d'accessibilite parlent
+   de 24 px de cible MINIMUM ; on etait dessous une fois le
+   rembourrage retire.
+
+   30 x 28 px, glyphe a 16 px : ils restent discrets dans la
+   poignee mais deviennent cliquables sans viser. Le survol garde
+   son fond, qui dit ou on est. */
+/* « je ferais un peu plus gros les icones genre la croix, les 3
+   traits, la loupe, pour que vraiment on sache qu'ils sont la. »
+   34 x 30 avec un glyphe de 18 px : ils cessent d'etre des icones
+   de barre de menus et deviennent des boutons. Le survol garde son
+   fond, qui dit ou on est. */
+.grip .act button{width:34px;height:30px;border-radius:4px;color:var(--cream2);font-family:var(--m);
+font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
+.grip .act button:hover{background:var(--deep3);color:var(--cream)}
 .grip .act button:hover{background:var(--deep3);color:var(--cream)}
 
 /* ============================================================
@@ -97,7 +116,28 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 letter-spacing:.1em;color:var(--cream3);margin-top:4px;text-transform:uppercase}
 
 /* ---------- liste ---------- */
-.list{overflow:auto;max-height:334px;padding:4px}
+/* ------------------------------------------------------------
+   LA LISTE DEFILE, LE WIDGET NE GRANDIT PAS.
+
+   « on est d'accord que pour chaque son, ca nous propose 5
+     propositions, mais que le widget reste petit et qu'on scroll »
+
+   Oui — et c'est deja le cas pour deux crans sur trois. Au cran
+   BARRE, en revanche, la hauteur n'etait pas bornee : cinq ou sept
+   propositions (le nombre depend de la licence) faisaient grandir
+   la reglette jusqu'a manger l'ecran, ce qui est exactement ce
+   qu'on cherchait a eviter en la creant.
+
+   Chaque cran a donc un plafond, cale sur un nombre entier de
+   lignes, et un degrade en bas qui dit qu'il y a la suite — une
+   barre de defilement de quatre pixels ne se voit pas dans le
+   noir, et une liste coupee net ressemble a une liste finie.
+   ------------------------------------------------------------ */
+.list{overflow:auto;max-height:334px;padding:4px;position:relative}
+.listwrap{position:relative}
+.listwrap::after{content:"";position:absolute;left:0;right:0;bottom:0;height:22px;pointer-events:none;
+background:linear-gradient(to bottom,transparent,var(--carte));opacity:0;transition:opacity .18s}
+.listwrap.plus::after{opacity:1}
 .row{position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:start;
 padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
 .row + .row{border-top:1px solid var(--wire)}
@@ -371,6 +411,8 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg .chip:first-child{border-radius:2px 0 0 2px;margin-left:0}
 .seg .chip:last-child{border-radius:0 2px 2px 0}
 .seg .chip[aria-pressed=true]{position:relative;z-index:1}
+/* Le pied ne doit jamais monter au-dessus du message passager. */
+.foot{position:relative;z-index:2}
 .chip{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
 padding:6px 5px;border-radius:2px;border:1px solid var(--wire);color:var(--cream3);white-space:nowrap}
 .chip:hover{color:var(--cream);border-color:var(--wire2)}
@@ -415,7 +457,22 @@ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .foot .st:empty{display:none;margin:0}
 .licbar{display:none;align-items:center;gap:8px;padding:8px 10px;border-top:1px solid var(--wire)}
 .licbar.on{display:flex}
-.toast{position:fixed;left:8px;right:8px;bottom:8px;background:var(--blue);color:#fff;font-family:var(--m);
+/* ------------------------------------------------------------
+   LE MESSAGE PASSAGER PASSE AU-DESSUS. DE TOUT.
+
+   « quand ca m'affiche un message rouge, j'ai toujours un icone
+     qui se met par dessus le texte »
+
+   Le message n'avait aucun rang d'empilement. Les fleches du pied
+   — qui en ont un, pour que la touche active montre sa bordure —
+   passaient donc PAR-DESSUS lui, et le grain ajoute depuis se
+   posait dessus a son tour.
+
+   Un message d'erreur recouvert par un bouton, c'est un message
+   qui n'existe pas. Il monte au-dessus du grain, et le pied
+   redescend sous lui.
+   ------------------------------------------------------------ */
+.toast{position:fixed;left:8px;right:8px;bottom:8px;z-index:60;background:var(--blue);color:#fff;font-family:var(--m);
 font-size:9.5px;letter-spacing:.06em;padding:9px 11px;border-radius:2px;opacity:0;transform:translateY(6px);
 transition:.18s;pointer-events:none}
 .toast.on{opacity:1;transform:none}
@@ -483,7 +540,7 @@ body[data-densite="barre"] .ref .m em{display:none}
 body[data-densite="barre"] .ref .m span:nth-child(2) i{font-size:14px}
 body[data-densite="barre"] .strip,
 body[data-densite="barre"] .striplbl{display:none}
-body[data-densite="barre"] .list{max-height:none;padding:2px 3px 3px}
+body[data-densite="barre"] .list{max-height:132px;padding:2px 3px 3px}
 body[data-densite="barre"] .row{padding:5px 6px 6px;gap:8px}
 body[data-densite="barre"] .row + .row{border-top:1px solid var(--wire)}
 body[data-densite="barre"] .sc{font-size:18px}
@@ -511,7 +568,21 @@ body[data-densite="cabine"] .strip{height:8px;margin-top:8px}
 body[data-densite="cabine"] .striplbl{display:none}
 body[data-densite="cabine"] .ref{padding:9px 11px 10px}
 body[data-densite="cabine"] .ref .t{font-size:17px}
-body[data-densite="cabine"] .list{max-height:252px}
+/* ------------------------------------------------------------
+   Trois lignes et demie, pas cinq.
+
+   A 252 px, cinq propositions tenaient tout juste — donc aucune
+   ne defilait, et la fenetre repassait a 473 px. C'est-a-dire
+   qu'en passant de trois a cinq suggestions (ce que la licence
+   Resident ouvre), le widget regrossissait de 77 px et annulait
+   tout le travail sur la densite.
+
+   Le plafond est donc cale sur trois lignes ET DEMIE. La demi-
+   ligne coupee en bas est le meilleur signal qui existe pour dire
+   « ca continue » : mieux qu'un degrade, mieux qu'une barre de
+   defilement de quatre pixels qu'on ne voit pas dans le noir.
+   ------------------------------------------------------------ */
+body[data-densite="cabine"] .list{max-height:186px}
 body[data-densite="cabine"] .row{padding:7px 8px 8px}
 body[data-densite="cabine"] .sc{font-size:22px}
 
@@ -545,10 +616,27 @@ stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 .rail .p:hover{color:var(--cream);border-color:var(--cream3)}
 /* Allume : plein, sans demi-mesure. Une pastille active doit se
    voir avant qu'on ait lu quoi que ce soit. */
-.rail .p[aria-pressed=true]{background:var(--cream);border-color:var(--cream);color:var(--deep)}
+/* ------------------------------------------------------------
+   Une pastille allumee est BLEUE, pas noire.
+
+   Elle etait remplie de creme — ce qui, de jour, donne du noir
+   plein. Quatre pastilles allumees cote a cote faisaient quatre
+   barres de censure en haut du widget : lourd, et pire, muet. Le
+   noir ne dit rien d'autre que « rempli ».
+
+   Le bleu du drapeau dit « c'est Liaison qui tient ca », comme le
+   filet de la reference et l'arete de la ligne en tete. Et il
+   laisse le noir plein au pied du widget, pour les MODES (auto,
+   bulle) — deux familles de commandes, deux couleurs, on ne les
+   confond plus.
+   ------------------------------------------------------------ */
+.rail .p[aria-pressed=true]{background:var(--blueLit);border-color:var(--blueLit);color:#fff}
 .rail .p[aria-pressed=true] b{font-weight:700}
-.rail .p.ouvert{border-color:var(--blueLit);color:var(--blueLit)}
-.rail .p.ouvert[aria-pressed=true]{background:var(--blueLit);border-color:var(--blueLit);color:#fff}
+/* Le volet ouvert : un anneau, pas un remplissage — l'etat
+   « ouvert » et l'etat « pose » sont deux choses differentes et
+   se cumulent. */
+.rail .p.ouvert{border-color:var(--blueLit);color:var(--blueLit);box-shadow:0 0 0 1px var(--blueLit)}
+.rail .p.ouvert[aria-pressed=true]{color:#fff}
 .rail .p b{font-weight:400;letter-spacing:.04em}
 .rail .n{margin-left:auto;font-family:var(--m);font-size:8.5px;letter-spacing:.06em;
 color:var(--cream3);white-space:nowrap;padding-left:4px}
@@ -566,8 +654,28 @@ text-transform:uppercase;color:var(--cream3);border:1px solid transparent;paddin
 .rail .raz:hover{color:var(--redLit)}
 
 /* ---- le tiroir ---- */
-.tiroir{display:none;padding:10px 11px 12px;border-bottom:1px solid var(--wire);background:var(--deep)}
-.tiroir.on{display:block}
+/* ------------------------------------------------------------
+   L'OUVERTURE DU TIROIR.
+
+   « j'ajouterais une sorte d'animation hyper smooth »
+
+   Deux mouvements, et ils ne font pas la meme chose. Le contenu
+   glisse et se revele ici, en CSS. La FENETRE, elle, est redimen-
+   sionnee par le systeme : c'est main.js qui l'anime, parce qu'une
+   feuille de style ne peut pas toucher a la taille d'une fenetre.
+
+   La courbe est la meme des deux cotes — sortie rapide, arrivee
+   posee — sinon on verrait deux animations distinctes au lieu d'un
+   seul geste.
+   ------------------------------------------------------------ */
+.tiroir{display:none;padding:10px 11px 12px;border-bottom:1px solid var(--wire);background:var(--deep);
+overflow:hidden}
+.tiroir.on{display:block;animation:tiroirOuvre .22s cubic-bezier(.16,1,.3,1)}
+@keyframes tiroirOuvre{
+  from{opacity:0;transform:translateY(-6px)}
+  to{opacity:1;transform:none}
+}
+@media(prefers-reduced-motion:reduce){.tiroir.on{animation:none}}
 .tiroir .pan{display:none}
 .tiroir .pan.on{display:block}
 .tiroir .tt{display:flex;align-items:center;gap:8px;font-family:var(--m);font-size:8px;
@@ -645,8 +753,6 @@ body{box-shadow:inset 0 1px 0 rgba(255,255,255,.055)}
 .ref{background:linear-gradient(180deg,var(--deep3) 0%,var(--deep2) 62%)}
 .ref::before{background:linear-gradient(180deg,var(--blueLit) 0%,var(--blueLit) 45%,transparent 100%)}
 .row.best{background:linear-gradient(90deg,rgba(68,89,255,.085),rgba(68,89,255,0) 72%)}
-.row.best::before{content:"";position:absolute;left:0;top:4px;bottom:4px;width:2px;
-background:var(--blueLit);border-radius:2px}
 .row.best + .row{border-top-color:transparent}
 .row:hover{background:var(--deep2);border-color:var(--wire2)}
 .row.best:hover{background:linear-gradient(90deg,rgba(68,89,255,.14),rgba(68,89,255,0) 72%)}
@@ -655,8 +761,113 @@ background:var(--blueLit);border-radius:2px}
 button:focus-visible,select:focus-visible,input:focus-visible{outline:1px solid var(--blueLit);outline-offset:1px}
 /* Le bouton de densite, dans la poignee : trois barres qui disent
    la hauteur du widget, et qui se lisent sans texte. */
-.grip .act button.dens svg{width:13px;height:13px;display:block;margin:0 auto;stroke:currentColor;
-fill:none;stroke-width:1.7;stroke-linecap:round}
+.grip .act button.dens svg{width:18px;height:18px;display:block;stroke:currentColor;
+fill:none;stroke-width:1.8;stroke-linecap:round}
+
+/* ============================================================
+   LA MATIERE.
+
+   « j'aime bien le style du widget en noir, mais en beige je
+     trouve qu'il manque vraiment quelque chose »
+
+   Ce qui manque n'est pas une couleur de plus : c'est de la
+   MATIERE et du RELIEF. Le mode nuit s'en sortait tout seul parce
+   que le noir profond donne du volume gratuitement — l'oeil lit
+   des plans rien qu'a la difference de luminosite. Le beige, lui,
+   n'a aucun volume : trois valeurs proches d'un meme sable, aucune
+   ombre, aucun grain, et le tout retombe en aplat. On obtient un
+   formulaire imprime, pas un objet.
+
+   Six ajouts, tous reversibles un par un, et tous appliques AUX
+   DEUX THEMES — ce qui donne de la matiere au papier donne du
+   cinema au noir.
+   ============================================================ */
+
+/* ------------------------------------------------------------
+   1. LE GRAIN.
+
+   C'est celui qui fait le plus de travail pour le moins de code.
+   Un aplat CSS est parfaitement uniforme, et rien dans le monde
+   reel ne l'est : c'est exactement ce que l'oeil lit comme
+   « ecran » plutot que « matiere ». Un bruit a 5 % transforme le
+   beige en papier et le noir en pellicule.
+
+   En multiplication le jour (le bruit assombrit : ce sont les
+   fibres du papier), en superposition la nuit (il eclaire : c'est
+   le grain argentique). Il ne capte aucun clic et se recalcule
+   jamais — c'est une image, pas un filtre vivant.
+   ------------------------------------------------------------ */
+body::after{content:"";position:fixed;inset:0;z-index:50;pointer-events:none;
+background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='180' height='180' filter='url(%23n)'/%3E%3C/svg%3E");
+opacity:.045;mix-blend-mode:overlay}
+[data-theme="jour"] body::after{opacity:.075;mix-blend-mode:multiply}
+
+/* ------------------------------------------------------------
+   2. LE FILET DE SIGNATURE.
+
+   Le logo est un X bleu et rouge. Deux pixels de ce bleu vers ce
+   rouge en haut du cadre, et la fenetre porte sa marque avant
+   qu'on ait lu un seul mot. C'est ce que fait une tranche de
+   livre ou un lisere sur une boite : on reconnait l'objet de
+   loin, sans lire.
+   ------------------------------------------------------------ */
+.grip{position:relative}
+.grip::before{content:"";position:absolute;left:0;right:0;top:0;height:2px;
+background:linear-gradient(90deg,var(--blue) 0%,var(--blueLit) 34%,var(--redLit) 66%,var(--red) 100%)}
+
+/* ------------------------------------------------------------
+   3. LE RELIEF.
+
+   Chaque bloc pose une ombre courte sur celui d'en dessous. Elles
+   sont volontairement tres douces et tres etalees (le rayon vaut
+   le double du decalage, l'opacite ne depasse pas 10 %) : une
+   ombre qu'on remarque est une ombre ratee. Ce qu'on doit
+   remarquer, c'est que les blocs sont EMPILES et non juxtaposes.
+   ------------------------------------------------------------ */
+.ref{box-shadow:var(--ombre)}
+.rail{box-shadow:var(--ombre)}
+.tiroir{box-shadow:inset 0 6px 12px -12px rgba(0,0,0,.7)}
+.list{background:var(--carte)}
+
+/* ------------------------------------------------------------
+   4. LA LIGNE EN TETE DEVIENT UNE CARTE.
+
+   Elle n'avait qu'un lavis bleu. De nuit il fonctionne ; de jour,
+   8,5 % de bleu sur du beige ne se voit tout simplement pas — la
+   proposition numero un se lisait comme les autres. Elle recoit
+   donc un fond a elle (jeton --best : lavis la nuit, carte
+   blanche le jour), une ombre portee teintee de bleu, et son
+   filet bleu a gauche.
+   ------------------------------------------------------------ */
+.row.best{background:var(--best);box-shadow:var(--ombreCarte);border-radius:4px}
+
+/* ------------------------------------------------------------
+   5. LES CHIFFRES ALIGNES.
+
+   91 / 78 / 66 et 128,0 / 130,0 / 124,0 sont lus en colonne, du
+   coin de l'oeil, pendant qu'on cale. En chasse proportionnelle
+   le 1 est etroit et la colonne ondule d'un pixel a l'autre — ce
+   qui suffit a obliger a LIRE au lieu de VOIR. En chasse fixe,
+   les unites tombent les unes sous les autres et l'ecart se
+   percoit sans lecture.
+   ------------------------------------------------------------ */
+.sc,.bpmc b,.bpmc s,.ref .m i,.regle .v,.rail .n{font-variant-numeric:tabular-nums;
+font-feature-settings:"tnum" 1}
+
+/* ------------------------------------------------------------
+   6. LE SURVOL PREND UNE ARETE.
+
+   Un changement de fond tout seul est mou. Un filet qui pousse a
+   gauche dit quelle ligne est sous le doigt, sans rien deplacer —
+   et c'est la meme arete que porte la ligne en tete, donc le
+   langage reste le meme : a gauche, un filet, ca veut dire
+   « celle-la ».
+   ------------------------------------------------------------ */
+.row::before{content:"";position:absolute;left:0;top:50%;bottom:50%;width:2px;
+background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s ease}
+.row:hover::before{top:5px;bottom:5px}
+.row.best::before{content:"";top:4px;bottom:4px;background:var(--blueLit)}
+@media(prefers-reduced-motion:reduce){.row::before{transition:none}}
 </style></head><body>
 
 <div class="grip">
@@ -677,7 +888,7 @@ fill:none;stroke-width:1.7;stroke-linecap:round}
     <!-- Trois crans de hauteur. Le pictogramme montre ce qu'on
          obtient : une barre, deux, trois. -->
     <button class="dens" id="btnDens" title="Hauteur du widget : barre / cabine / grand">
-      <svg viewBox="0 0 16 16" aria-hidden="true" id="densIcon"><path d="M2.5 5h11M2.5 8h11M2.5 11h11"/></svg>
+      <svg viewBox="0 0 16 16" aria-hidden="true" id="densIcon"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.6"/><rect x="4.4" y="7.2" width="7.2" height="4.4" rx="0.6" fill="currentColor" stroke="none"/></svg>
     </button>
     <button id="btnSearch" title="Declarer le morceau en cours">⌕</button>
     <button id="btnTheme" title="Mode jour / mode nuit">☾</button>
@@ -803,8 +1014,10 @@ fill:none;stroke-width:1.7;stroke-linecap:round}
   </div>
 </div>
 
-<div class="list" id="list">
-  <div class="empty"><b>Demarrage</b>Liaison cherche ta bibliotheque<br>et ton logiciel de mix.</div>
+<div class="listwrap" id="listwrap">
+  <div class="list" id="list">
+    <div class="empty"><b>Demarrage</b>Liaison cherche ta bibliotheque<br>et ton logiciel de mix.</div>
+  </div>
 </div>
 
 <div class="search" id="search">
@@ -920,6 +1133,22 @@ function fitHeight() {
   }, 60);
 }
 let view = 'sug', lastSug = [], lastReq = [], curStruct = null;
+
+/* ------------------------------------------------------------
+   « Il y a la suite. »
+
+   Le degrade ne s'affiche que s'il reste vraiment quelque chose a
+   voir, et il s'eteint quand on arrive en bas. Un degrade
+   permanent serait un mensonge decoratif — et dans une cabine, on
+   ne ment pas sur ce qui reste a lire.
+   ------------------------------------------------------------ */
+function marquerDefilement() {
+  const l = $('#list'), w = $('#listwrap');
+  if (!l || !w) return;
+  const reste = l.scrollHeight - l.clientHeight - l.scrollTop;
+  w.classList.toggle('plus', reste > 6);
+}
+$('#list').addEventListener('scroll', marquerDefilement, { passive: true });
 
 function toast(msg, red) {
   const t = $('#toast'); t.textContent = msg;
@@ -1223,6 +1452,7 @@ function renderSug(list) {
     </div>`).join('');
   renderStrip(curStruct, list[0] && list[0].plan);
   fitHeight();
+  marquerDefilement();
   marquerGlissables();
 }
 
@@ -1246,6 +1476,7 @@ function renderSos(list) {
       <button class="go" data-id="${r.id}">Copier</button>
     </div>`).join('');
   fitHeight();
+  marquerDefilement();
 }
 
 /* ---------- interactions ---------- */
@@ -1624,6 +1855,9 @@ function peindreTempo() {
   $('#mRange').value = v;
   const out = $('#mOut');
   out.textContent = v ? '± ' + v + ' %' : 'Auto';
+  /* En tete du volet, ce que le reglet vaut en pratique — la meme
+     place que « 10 styles » et « 6 a 9 » dans les deux autres. */
+  $('#mInfo').textContent = v ? 'reglee a la main' : 'apprise par Liaison';
   out.className = v ? 'v' : 'v auto';
   const b = fBpmJoue || 0;
   $('#mHint').textContent = !v
@@ -1748,10 +1982,25 @@ window.liaison.on('filters', renderFiltCount);
    un filtre, il n'a aucune raison de retomber.
    ============================================================ */
 const DENSITES = ['barre', 'cabine', 'grand'];
+/* ------------------------------------------------------------
+   Le dessin de la densite : un cadre et ce qu'il contient.
+
+   Premiere version : une, deux ou trois barres horizontales. A
+   deux boutons de distance du « ≡ » des reglages, c'est le meme
+   dessin — on ne peut pas demander au DJ de compter des traits
+   pour savoir sur quoi il clique.
+
+   Le cadre montre donc la FENETRE, et le pave a l'interieur ce
+   qu'elle occupe : un filet en bas pour la barre, la moitie pour
+   la cabine, tout pour le grand. Aucun autre bouton du widget ne
+   porte un cadre : la confusion est reglee par la forme, pas par
+   le detail.
+   ------------------------------------------------------------ */
+const CADRE = '<rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.6"/>';
 const DENS_ICONE = {
-  barre:  'M2.5 8h11',
-  cabine: 'M2.5 5.5h11M2.5 10.5h11',
-  grand:  'M2.5 4h11M2.5 8h11M2.5 12h11'
+  barre:  CADRE + '<rect x="4.4" y="9.6" width="7.2" height="2" rx="0.6" fill="currentColor" stroke="none"/>',
+  cabine: CADRE + '<rect x="4.4" y="7.2" width="7.2" height="4.4" rx="0.6" fill="currentColor" stroke="none"/>',
+  grand:  CADRE + '<rect x="4.4" y="4.4" width="7.2" height="7.2" rx="0.6" fill="currentColor" stroke="none"/>'
 };
 const DENS_NOM = { barre: 'Barre', cabine: 'Cabine', grand: 'Grand' };
 
@@ -1759,7 +2008,7 @@ function poserDensite(d, ecrire) {
   if (!DENSITES.includes(d)) d = 'cabine';
   cfg.densite = d;
   document.body.dataset.densite = d;
-  $('#densIcon').innerHTML = '<path d="' + DENS_ICONE[d] + '"/>';
+  $('#densIcon').innerHTML = DENS_ICONE[d];
   const suiv = DENSITES[(DENSITES.indexOf(d) + 1) % DENSITES.length];
   $('#btnDens').title = 'Hauteur : ' + DENS_NOM[d] + ' — cliquer pour ' + DENS_NOM[suiv];
   if (ecrire) window.liaison.setConfig({ densite: d });
