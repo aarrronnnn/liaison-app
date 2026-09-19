@@ -152,27 +152,36 @@ color:var(--ink3);cursor:pointer}
     <!-- Ce que la personne a REELLEMENT fait avec l'app. Pas un argument
          de vente invente : ses propres chiffres, pris dans ses fichiers. -->
     <p class="bil" id="bilan" hidden></p>
-    <!-- Les prix sont ecrits par poserLesTarifs(), depuis /api/tarifs.
-         Ceux qui figurent ici sont le repli hors ligne : ce sont les
-         tarifs NORMAUX, jamais un tarif promotionnel. Annoncer un
-         prix de lancement a quelqu'un qui paiera le prix plein
-         serait un mensonge, meme involontaire. -->
+    <!-- Les prix sont ecrits par poserLesTarifs(), depuis /api/tarifs,
+         avec le repli de license.js si le reseau ne repond pas —
+         main.js sert donc TOUJOURS un montant, en ligne ou non.
+
+         Ces cases partent volontairement vides (« — ») et non avec
+         un montant ecrit dans le HTML. Un chiffre en dur ne peut
+         que vieillir : celui-ci annoncait 149 € pour l'annee
+         pendant que la caisse en prenait 134, et personne ne
+         l'aurait vu puisqu'il est remplace une demi-seconde plus
+         tard — sauf le jour ou l'appel echoue, c'est-a-dire le
+         seul jour ou il s'affiche vraiment.
+
+         Un essai (build/test-promesses.js) refuse desormais tout
+         montant du bareme ecrit en dur dans une de ces pages. -->
     <div class="plans" id="plans">
       <button class="plan feat" data-plan="resident">
         <span class="n"><b>Résident</b><small>QR des invités, listes du client, tracklists, débrief. Deux machines.</small></span>
-        <span class="p"><span data-prix="resident">14,95 €</span><em>/ mois</em></span>
+        <span class="p"><span data-prix="resident">—</span><em>/ mois</em></span>
       </button>
       <button class="plan" data-plan="resident_an">
         <span class="n"><b>Résident — à l'année</b><small data-sous="resident_an">Même chose, deux mois offerts.</small></span>
-        <span class="p"><span data-prix="resident_an">149 €</span><em>/ an</em></span>
+        <span class="p"><span data-prix="resident_an">—</span><em>/ an</em></span>
       </button>
       <button class="plan" data-plan="collectif">
         <span class="n"><b>Collectif</b><small>Jusqu'à cinq DJs, mode B2B.</small></span>
-        <span class="p"><span data-prix="collectif">44,95 €</span><em>/ mois</em></span>
+        <span class="p"><span data-prix="collectif">—</span><em>/ mois</em></span>
       </button>
       <button class="plan" data-plan="pass">
         <span class="n"><b>Pass soirée</b><small>Tout Résident pendant 48 h — une soirée finit le lendemain matin.</small></span>
-        <span class="p"><span data-prix="pass">4,95 €</span><em>/ 48 h</em></span>
+        <span class="p"><span data-prix="pass">—</span><em>/ 48 h</em></span>
       </button>
     </div>
     <p class="lancnote" id="lancNote" hidden></p>

@@ -28,13 +28,42 @@
      pas devenu gris.
      ------------------------------------------------------------ */
   --paper:#EAE5D9; --paper2:#DFDACB; --ink:#141518; --ink2:#5A5D64;
-  /* --ink3 mesure : #83868D sur blanc ne rendait que 3,65:1, et il
-     porte les etiquettes de 9 px de la bande d'etat — le plus petit
-     texte de toute la fenetre. #74777E rend 4,48:1, ce qui passe la
-     barre pour du petit texte. */
-  --ink3:#74777E; --rule:#D3CDBE;
+  /* --ink3 remesure, sur la bonne surface.
+
+     #83868D rendait 3,65:1 : trop clair, corrige une premiere fois
+     en #74777E « 4,48:1 ». Mais ce 4,48 avait ete mesure sur du
+     BLANC pur, or aucun texte de l'app n'est pose sur du blanc pur —
+     les cartes sont a #FCFAF4 et le fond a #EAE5D9. Sur la carte,
+     #74777E ne rend en realite que 4,30:1, donc sous la barre, pour
+     tout le petit texte de la fenetre : etiquettes, boutons
+     discrets, legendes de jauge.
+
+     #6B6E75 rend 4,89:1 sur la carte. Les mesures de ce fichier se
+     font desormais sur --carte et --paper, jamais sur #FFF. */
+  --ink3:#6B6E75; --rule:#D3CDBE;
   /* cabine */
-  --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#63666D;
+  /* ------------------------------------------------------------
+     --cream3 REMESURE, sur les surfaces du widget.
+
+     Il porte TOUT le petit texte de la cabine : la ligne
+     « tonalite · ecart · transition » (9,5 px), les libelles du
+     plan de mix (8,5 px), l'artiste du morceau en cours (10 px),
+     les pastilles du rail. Mesure de #63666D :
+
+       sur la carte (#15171C)  3,12:1
+       sur le creux (#1D1F24)  2,87:1
+
+     Sous la barre partout, donc, pour le plus petit texte de
+     l'application — et lu dans une cabine sombre, sur un portable
+     dont la luminosite est souvent baissee pour ne pas eblouir.
+     Personne ne s'en plaignait parce qu'on DEVINE ces lignes : on
+     sait deja ce qu'elles disent.
+
+     #868A93 rend 4,77:1 sur la surface la plus defavorable. La
+     hierarchie tient toujours — il reste nettement sous --cream2 —
+     mais elle se lit.
+     ------------------------------------------------------------ */
+  --deep:#101114; --deep2:#17181C; --deep3:#1D1F24; --cream:#EFEAE0; --cream2:#9A9DA4; --cream3:#868A93;
   /* --dim : le ton le plus efface de la palette, pour une mention qui
      doit etre lisible sans jamais attirer l'oeil — « hors bulle »,
      « rare dans ta bibliotheque », « estime ». Le widget s'en servait
@@ -57,7 +86,25 @@
   --ombreCarte:0 1px 2px rgba(0,0,0,.35),0 12px 24px -18px rgba(68,89,255,.7);
   --wire:#26282E; --wire2:#33363E;
   /* drapeau */
+  /* ------------------------------------------------------------
+     DEUX BLEUS ET DEUX ROUGES : CE QUI REMPLIT, CE QUI ECRIT.
+
+     --blueLit et --redLit sont des couleurs de REMPLISSAGE : un
+     filet de 2 px, un repere sur le ruban, un chiffre de 25 px. A
+     ces tailles la barre est a 3:1, et ils la passent.
+
+     Mais ils servaient aussi a ECRIRE : la tonalite d'une ligne
+     (9,5 px), l'instant « Lance » (10 px), la valeur d'energie du
+     morceau en cours. La, la barre est a 4,5:1 — et #4459FF n'en
+     rend que 3,52 sur la carte de nuit.
+
+     Une valeur ne peut pas gagner les deux roles ; c'est la meme
+     conclusion que pour --blue / --blueTxt dans la fenetre de
+     preparation. D'ou --blueTxt et --redTxt, reserves a
+     l'ecriture.
+     ------------------------------------------------------------ */
   --blue:#1F35D8; --blueLit:#4459FF; --red:#E8402A; --redLit:#FF5A42;
+  --blueTxt:#6E7CFF; --redTxt:#FF5A42;
   --d:Anton,'Arial Narrow',Impact,sans-serif;
   --b:'Space Grotesk',system-ui,-apple-system,sans-serif;
   --m:'Space Mono',ui-monospace,Menlo,monospace;
@@ -108,13 +155,20 @@
 [data-theme="jour"]{
   --deep:#E9E4D8; --deep2:#F5F1E8; --deep3:#DCD6C6;
   --carte:#FCFAF4;
-  --cream:#111218; --cream2:#474B55; --cream3:#73777F;
+  /* #73777F ne rend que 3,10:1 sur --deep3 (#DCD6C6), la surface
+     du bloc « morceau en cours ». #585B63 rend 4,68:1 au pire,
+     6,51:1 sur la carte. */
+  --cream:#111218; --cream2:#474B55; --cream3:#585B63;
   --dim:#A4A7AE;
   --best:#FFFDF8;
   --ombre:0 10px 22px -18px rgba(40,34,20,.75);
   --ombreCarte:0 1px 2px rgba(40,34,20,.10),0 14px 26px -18px rgba(31,53,216,.45);
   --wire:#D9D3C4; --wire2:#C3BCA9;
   --blueLit:#1F35D8; --redLit:#C4321F;
+  /* De jour le bleu d'ecriture rejoint celui du drapeau : 5,66:1
+     meme sur la surface la plus foncee. Le rouge, lui, doit encore
+     descendre — #C4321F n'y rend que 3,79. */
+  --blueTxt:#1F35D8; --redTxt:#AE2A19;
 }
 .lbl{font-family:var(--m);font-size:9px;letter-spacing:.2em;text-transform:uppercase}
 /* Anton serre ses lettres par dessin : sous +0,03em, les paires

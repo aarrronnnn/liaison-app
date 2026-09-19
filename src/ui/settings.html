@@ -25,7 +25,25 @@
    deux coincident : sur du blanc, #1F35D8 rend 8,2:1 dans les
    deux roles. C'est la nuit qui obligeait a trancher.
    ------------------------------------------------------------ */
---blueTxt:var(--blue)}
+--blueTxt:var(--blue);
+/* ------------------------------------------------------------
+   ET LE MEME PROBLEME EN ROUGE.
+
+   --rose sert a remplir une pastille sous du texte blanc ET a
+   ecrire une etiquette de 9 px. Mesure sur la carte de jour
+   (#FCFAF4) :
+
+     #E8402A  texte 3,87:1 (sous la barre)  blanc dessus 3,6:1
+     #C4321F  texte 5,26:1 (bon)            blanc dessus 5,1:1
+
+   Le rouge du drapeau reste donc le rouge de REMPLISSAGE, et
+   --roseTxt porte l'ECRITURE : le nom du marchand sur un bouton
+   d'achat, une mention d'alerte en petit. De nuit les deux
+   coincident (#FF5A42 rend 5,8:1 sur le fond de cabine), c'est
+   le jour qui obligeait a trancher — exactement comme pour le
+   bleu deux blocs plus haut.
+   ------------------------------------------------------------ */
+--roseTxt:#C4321F}
 
 /* ============================================================
    LE MODE NUIT DE LA FENETRE DE PREPARATION.
@@ -45,7 +63,8 @@
   --ink:#EFEAE0; --ink2:#9BA0A8; --ink3:#71767F;
   --rule:#272A32; --line:#272A32;
   --card:#15171C; --card2:#1B1E26; --champ:#0B0C0F;
-  --blue:#3549F0; --blue2:#5C6EFF; --blueTxt:#6675FF; --rose:#FF5A42; --ok:#2E9B62;
+  --blue:#3549F0; --blue2:#5C6EFF; --blueTxt:#6675FF; --rose:#FF5A42; --roseTxt:#FF5A42;
+  --ok:#2E9B62;
   /* mesure : #888D96 sur #15171C = 5,31:1, la barre des 4,5 est
      passee pour les etiquettes de 9 px de la bande d'etat. */
   --ink3:#888D96;
@@ -81,10 +100,52 @@ h2{font-family:var(--d);font-weight:700;font-size:15px;margin:0 0 12px;display:f
 @media(max-width:760px){.grid{grid-template-columns:1fr}}
 label{display:block;font-family:var(--m);font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin:14px 0 6px}
 select,input[type=text],input[type=number]{width:100%;padding:10px 12px;border:1px solid var(--line);border-radius:3px;background:var(--champ);color:var(--ink);font:inherit;font-size:14px}
-button{font-family:var(--m);font-size:11px;letter-spacing:.12em;text-transform:uppercase;padding:10px 15px;border-radius:2px;
-border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer}
-button.g{background:transparent;color:var(--ink);border-color:var(--line)}
+/* ============================================================
+   TROIS POIDS DE BOUTON, PAS UN SEUL.
+
+   « beaucoup de bouton, tout de la meme couleur, tout de la meme
+     taille, il faut donner de l'importance a certaine chose »
+
+   La fenetre comptait quarante-deux boutons pour deux styles :
+   bleu plein, ou contour gris. Quinze d'entre eux etaient bleus
+   pleins — c'est-a-dire que quinze actions se declaraient
+   simultanement « la plus importante ». Un ecran ou tout crie est
+   un ecran ou rien ne s'entend, et le DJ qui ouvre la fenetre
+   pour la premiere fois ne sait pas par ou commencer.
+
+   Trois niveaux, et une regle simple :
+
+     1. PRIMAIRE (bleu plein) — UNE seule par panneau, celle pour
+        laquelle on a ouvert ce panneau. Elle est aussi la plus
+        grande : 12/18 au lieu de 10/15. La taille fait la moitie
+        du travail, la couleur l'autre moitie.
+     2. SECONDAIRE (.g, contour) — les autres chemins reels :
+        « Dupliquer », « Tout relire », « Exporter ».
+     3. DISCRET (.t, texte seul) — ce qu'on fait rarement et
+        jamais par erreur : verifier, liberer, vider, supprimer,
+        oublier. Un soulignement au survol suffit a dire que c'est
+        cliquable ; un cadre de plus ne disait rien de nouveau et
+        pesait autant qu'une action principale.
+
+   Et .t.att : les destructions. Rouge au survol seulement — une
+   liste de cinq boutons rouges au repos, c'est une fenetre qui
+   a l'air en panne.
+   ============================================================ */
+button{font-family:var(--m);font-size:12px;letter-spacing:.12em;text-transform:uppercase;padding:12px 18px;border-radius:2px;
+border:1px solid var(--blue);background:var(--blue);color:#fff;cursor:pointer;
+font-weight:700;transition:background .13s,border-color .13s,color .13s}
+button.g{background:transparent;color:var(--ink);border-color:var(--line);
+font-size:11px;padding:10px 15px;font-weight:400}
 button.g:hover{border-color:var(--ink)}
+button.t{background:transparent;border:0;color:var(--ink3);padding:10px 2px;
+font-size:10.5px;letter-spacing:.11em;font-weight:400;text-decoration:none}
+button.t:hover{color:var(--ink);text-decoration:underline;text-underline-offset:3px;background:transparent}
+button.t:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+button.t.att:hover{color:var(--rose)}
+/* Deux discrets cote a cote ont besoin d'air : sans marge, deux
+   mots soulignes se lisent comme une phrase. */
+.row button.t + button.t{margin-left:10px}
+@media(prefers-reduced-motion:reduce){button{transition:none}}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .state{font-family:var(--m);font-size:11px;color:var(--ink2);margin-top:10px}
 .state b{color:var(--blueTxt);font-weight:400}
@@ -147,7 +208,15 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 .hx .p{display:block;font-family:var(--m);font-size:11px;color:var(--ink3);word-break:break-all;margin-top:3px}
 .hx .p i{font-style:normal;color:var(--ink2)}
 .hplus{padding:8px 0;font-family:var(--m);font-size:11px;color:var(--ink3)}
-.dur.on{background:var(--blue);color:#fff;border-color:var(--blue)}
+/* Le choix de duree est un selecteur segmente, pas quatre
+   boutons : les quatre pavés ont donc EXACTEMENT la meme taille,
+   et seul le remplissage designe celui qui est choisi. Depuis que
+   la primaire est plus grande, un « 4 h » sans .g aurait grandi
+   au milieu des trois autres — un segment qui gonfle quand on le
+   choisit fait sauter toute la ligne. */
+.dur{font-size:11px;padding:10px 15px;font-weight:400}
+.dur.on{background:var(--blue);color:#fff;border-color:var(--blue);font-weight:700}
+.dur.on:hover{background:var(--blue2);border-color:var(--blue2)}
 .moments li{margin-bottom:6px;color:var(--ink2);font-size:13px}
 .moments b{color:var(--ink)}
 
@@ -174,6 +243,75 @@ vertical-align:middle;white-space:nowrap;position:relative;top:-1px}
 min-height:calc(100vh - 270px)}
 @media(max-width:820px){.shell{grid-template-columns:minmax(0,1fr)}}
 
+/* ============================================================
+   LA RECHERCHE, EN HAUT DU RAIL.
+
+   Elle est posee AU-DESSUS des rubriques et pas dans l'en-tete de
+   la fenetre : ce qu'elle fait, c'est naviguer. La mettre a cote
+   du titre l'aurait fait passer pour une recherche dans la
+   bibliotheque — ce qu'elle n'est pas, et la confusion aurait ete
+   couteuse.
+   ============================================================ */
+.rech{position:relative;margin:0 0 16px}
+.rechb{display:flex;align-items:center;gap:8px;padding:0 10px;height:38px;
+background:var(--champ);border:1px solid var(--line);border-radius:5px;
+transition:border-color .13s,box-shadow .13s}
+.rechb:focus-within{border-color:var(--blue);box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 16%,transparent)}
+.rechb svg{width:14px;height:14px;flex:none;color:var(--ink3)}
+.rechb input{flex:1;min-width:0;border:0;background:none;color:var(--ink);font:inherit;font-size:13px;
+padding:0;outline:none}
+.rechb input::placeholder{color:var(--ink3)}
+/* Le raccourci est ecrit sur le champ : c'est la seule facon
+   qu'on l'apprenne. Il s'efface des qu'on tape, il a fait son
+   travail. */
+.rechb kbd{font-family:var(--m);font-size:9px;letter-spacing:.06em;color:var(--ink3);
+border:1px solid var(--line);border-radius:3px;padding:2px 5px;flex:none;background:var(--card)}
+.rechb:focus-within kbd{display:none}
+/* La liste DEBORDE du rail, volontairement.
+
+   Le rail fait 236 px : a cette largeur, « Eviter ce que j'ai
+   deja joue dans une soiree du meme nom » devient « Eviter ce
+   que j'ai de… », et le DJ ne peut pas choisir entre deux
+   resultats qu'il ne peut pas lire. La liste prend donc la
+   largeur qu'il lui faut et passe par-dessus le panneau, comme
+   toute palette de commandes. */
+.rechr{position:absolute;left:0;top:calc(100% + 5px);z-index:40;
+min-width:100%;width:max-content;max-width:min(420px,72vw);
+background:var(--card);border:1px solid var(--line);border-radius:5px;overflow:hidden;
+box-shadow:0 2px 4px rgba(0,0,0,.06),0 18px 34px -20px rgba(0,0,0,.4)}
+:root[data-theme="nuit"] .rechr{box-shadow:0 2px 4px rgba(0,0,0,.5),0 18px 34px -20px rgba(0,0,0,.9)}
+.rechr[hidden]{display:none}
+/* Une ligne = ce qu'on a trouve, et OU c'est. La deuxieme moitie
+   est le coeur de la fonction : « Spotify » ne sert a rien si on
+   ne dit pas « dans Le client ». */
+.rechl{display:flex;align-items:baseline;gap:10px;width:100%;text-align:left;
+padding:9px 11px;border:0;border-radius:0;background:transparent;color:var(--ink);
+font-family:var(--b);font-size:13px;font-weight:400;text-transform:none;letter-spacing:0;
+cursor:pointer;border-bottom:1px solid var(--line)}
+.rechl:last-child{border-bottom:0}
+.rechl .q{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rechl .q b{font-weight:700;color:var(--blueTxt)}
+.rechl .ou{flex:none;font-family:var(--m);font-size:9px;letter-spacing:.1em;text-transform:uppercase;
+color:var(--ink3)}
+.rechl.on,.rechl:hover{background:var(--paper2);border-color:var(--line)}
+.rechl.on .ou,.rechl:hover .ou{color:var(--blueTxt)}
+.rechvide{padding:11px;font-size:12.5px;color:var(--ink3);line-height:1.5}
+/* Le clignotement de l'arrivee. Deux battements, puis plus rien :
+   un surlignage qui reste devient une decoration, et on finit par
+   ne plus le voir. */
+@keyframes trouve{
+  0%{box-shadow:0 0 0 0 color-mix(in srgb,var(--blue) 55%,transparent)}
+  35%{box-shadow:0 0 0 5px color-mix(in srgb,var(--blue) 26%,transparent)}
+  100%{box-shadow:0 0 0 0 color-mix(in srgb,var(--blue) 0%,transparent)}
+}
+.trouve{border-radius:4px;animation:trouve .85s ease-out 2}
+@media(prefers-reduced-motion:reduce){.trouve{animation:none;outline:2px solid var(--blue);outline-offset:3px}}
+/* En dessous de 820 px le rail devient une bande horizontale : la
+   recherche reprend toute la largeur au-dessus d'elle. */
+@media(max-width:820px){
+  .rech{margin-bottom:12px}
+  .rechr{max-height:50vh;overflow-y:auto}
+}
 .rail{position:sticky;top:0;align-self:start;padding:4px 18px 24px 0;border-right:1.5px solid var(--line)}
 @media(max-width:820px){.rail{position:static;border-right:0;border-bottom:1.5px solid var(--line);
   padding:0 0 14px;display:flex;gap:6px;overflow-x:auto;margin-bottom:18px}}
@@ -284,6 +422,9 @@ button.rnav[aria-current="true"]:hover{background:var(--ink);color:var(--paper);
 button.theme:hover{background:var(--card);border-color:var(--blue);color:var(--blueTxt)}
 button.aarf:hover{background:var(--card);border-color:var(--blue);color:var(--blueTxt)}
 .aal .go button.x:hover{background:transparent;border-color:transparent;color:var(--rose)}
+/* Le discret n'est pas un bouton plein : il ne prend pas de fond. */
+button.t:hover{background:transparent;border-color:transparent}
+button.t.att:hover{color:var(--rose)}
 .tiroir .lignes button.f:hover{background:transparent;border-color:var(--blue);color:var(--blueTxt)}
 input:focus,select:focus,textarea:focus{outline:2px solid var(--blue);outline-offset:1px;border-color:var(--blue)}
 
@@ -421,9 +562,14 @@ details.aide>summary{display:inline-flex;align-items:center;gap:7px;cursor:point
 font-family:var(--m);font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--ink3);
 padding:6px 0;user-select:none;width:auto}
 details.aide>summary::-webkit-details-marker{display:none}
-details.aide>summary .rd{display:inline-flex;align-items:center;justify-content:center;
-width:15px;height:15px;border:1px solid currentColor;border-radius:50%;font-size:9px;
-line-height:1;flex:none;font-weight:700}
+/* Le « i » etait un caractere texte dans un cercle CSS : la police
+   place le glyphe sur sa ligne de base, pas au centre optique du
+   disque, et son point se perd a 9px. On dessine donc la pastille
+   entiere en SVG — cercle, point et hampe sur la meme grille — ce
+   qui la rend centree par construction, a toutes les tailles. */
+details.aide>summary .rd{display:block;width:15px;height:15px;flex:none;
+color:inherit;opacity:.9}
+details.aide>summary:hover .rd{opacity:1}
 details.aide>summary .ch{width:5px;height:5px;border-right:1.3px solid currentColor;
 border-bottom:1.3px solid currentColor;transform:rotate(45deg) translate(-1px,-1px);transition:transform .16s}
 details.aide[open]>summary .ch{transform:rotate(-135deg) translate(-2px,-2px)}
@@ -506,25 +652,151 @@ stroke-linecap:round;stroke-linejoin:round}
 .aaliste{display:flex;flex-direction:column;gap:7px}
 /* Une ligne = un titre absent. Le rang ou le compte a gauche, en
    chiffres d'affichage : c'est ce qui se lit en diagonale. */
+/* ------------------------------------------------------------
+   DEUX ETATS, DEUX COULEURS — et le reste se tait.
+
+   Toutes les lignes etaient posees sur le meme aplat sable
+   (--paper2, #DFDACB de jour) : un marron sourd, plus fonce que
+   le papier, qui faisait de la liste un bloc de boue ou aucune
+   ligne ne ressortait. Et la liste ne montrait que les absents,
+   donc il n'y avait rien a distinguer.
+
+   Maintenant le classement est montre EN ENTIER :
+
+     possede — carte claire, texte apaise, une coche. Rien a
+               faire. C'est le fond de la liste, au sens propre.
+     manquant — filet rouge de 3 px, compteur rouge, lavis rouge
+               a un pour cent sur la carte, un bouton d'achat.
+
+   Le rouge n'est donc plus un accent parmi d'autres : dans cette
+   liste, rouge = il te manque. On peut compter ses trous a un
+   metre de l'ecran, sans lire un seul titre.
+   ------------------------------------------------------------ */
 .aal{display:grid;grid-template-columns:52px minmax(0,1fr) auto;gap:12px;align-items:center;
-padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:var(--paper2);
-position:relative;overflow:hidden}
-.aal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--line)}
-.aal.fort::before{background:var(--rose)}
+padding:10px 12px;border:1px solid var(--line);border-radius:5px;background:var(--card);
+position:relative;overflow:hidden;transition:border-color .14s,transform .14s}
+.aal::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:transparent}
+/* Ce qu'on a : la ligne se retire. Bordure plus douce, encre
+   secondaire, aucun appel a l'action — elle est la pour etre
+   comptee, pas pour etre traitee. */
+.aal.ok{background:var(--card);border-color:var(--line)}
+/* Mesure : a .55 d'opacite ce chiffre de 22 px ne rendait plus
+   que 2,07:1 de jour. « Discret » ne veut pas dire « illisible » —
+   un numero de classement qu'on ne peut pas lire ne classe rien.
+   La recession vient maintenant de la couleur (--ink3) et d'un
+   soupcon d'opacite, pas d'un voile. */
+.aal.ok .cpt{color:var(--ink3);opacity:.85}
+.aal.ok .nom b{font-weight:500;color:var(--ink2)}
+/* Ce qui manque : le seul rouge de l'ecran. */
+.aal.manque::before{background:var(--rose)}
+.aal.manque{border-color:color-mix(in srgb,var(--rose) 34%,var(--line))}
+.aal.manque .cpt{color:var(--rose)}
+/* Redemande plusieurs soirs : meme code, une intensite de plus.
+   On n'invente pas une troisieme couleur pour un troisieme
+   niveau — on appuie sur celle qui veut deja dire « il manque ». */
+.aal.fort{background:color-mix(in srgb,var(--rose) 6%,var(--card))}
+.aal.fort::before{width:5px}
+.aal:hover{transform:translateX(1px)}
 .aal .cpt{font-family:var(--d);font-weight:400;font-size:22px;line-height:1;text-align:right;
 color:var(--ink3);font-variant-numeric:tabular-nums}
-.aal.fort .cpt{color:var(--rose)}
 .aal .nom{min-width:0}
 .aal .nom b{display:block;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .aal .nom s{display:block;text-decoration:none;font-family:var(--m);font-size:10px;color:var(--ink3);
 margin-top:3px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .aal .nom s em{font-style:normal;color:var(--blueTxt)}
 .aal .go{display:flex;gap:5px;align-items:center;flex:none}
-.aal .go a{font-family:var(--m);font-size:9px;letter-spacing:.08em;text-transform:uppercase;
-padding:5px 8px;border:1px solid var(--line);border-radius:2px;color:var(--ink2);text-decoration:none;cursor:pointer}
-.aal .go a:hover{border-color:var(--blue);color:var(--blueTxt)}
+/* Le bouton d'achat porte le nom du marchand, en plein rouge :
+   c'est la seule action de la ligne, elle a le droit d'etre vue.
+   Un contour discret de plus, sur vingt-cinq lignes, ne se voyait
+   pas du tout. */
+.aal .go a.buy{font-family:var(--m);font-size:9px;letter-spacing:.09em;text-transform:uppercase;
+padding:6px 10px;border:1px solid var(--rose);border-radius:3px;color:var(--roseTxt);
+background:transparent;text-decoration:none;cursor:pointer;transition:background .13s,color .13s}
+.aal .go a.buy:hover{background:var(--rose);color:#fff;border-color:var(--rose)}
+/* La coche du possede : discrete par definition, mais presente —
+   c'est elle qui rend la liste satisfaisante a parcourir. */
+/* L'opacite .8 faisait tomber cette mention a 3,48:1. Elle est
+   petite ET verte : c'est justement le cas ou il ne reste aucune
+   marge. Pleine couleur, 4,81:1 de jour, 5,11 de nuit. */
+.aal .go .dans{display:inline-flex;align-items:center;gap:5px;font-family:var(--m);font-size:9.5px;
+letter-spacing:.09em;text-transform:uppercase;color:var(--ok);padding:6px 2px 6px 0}
+.aal .go .dans svg{width:12px;height:12px;flex:none}
 .aal .go .x{border:0;background:none;color:var(--ink3);font-size:15px;line-height:1;padding:2px 5px;cursor:pointer}
 .aal .go .x:hover{color:var(--rose)}
+@media(prefers-reduced-motion:reduce){.aal{transition:none}.aal:hover{transform:none}}
+/* La jauge du classement. Pleine = possede, creux = a acheter.
+   Meme rouge et meme vert que les lignes, pour qu'un coup d'oeil
+   a la barre et un coup d'oeil a la liste disent la meme chose. */
+.aascore{margin:2px 0 11px}
+.aascore-t{display:flex;align-items:baseline;gap:7px;font-family:var(--m);font-size:10px;
+letter-spacing:.09em;text-transform:uppercase;color:var(--ink3);margin-bottom:6px}
+.aascore-t b{font-family:var(--d);font-weight:400;font-size:26px;line-height:.9;
+letter-spacing:.02em;color:var(--ink);font-variant-numeric:tabular-nums}
+.aascore-t i{font-style:normal;flex:1;min-width:0}
+.aascore-t u{text-decoration:none;color:var(--ok);font-weight:700}
+.aascore-b{height:5px;border-radius:3px;background:color-mix(in srgb,var(--rose) 30%,var(--line));
+overflow:hidden}
+.aascore-b span{display:block;height:100%;background:var(--ok);border-radius:3px;
+transition:width .5s cubic-bezier(.22,1,.36,1)}
+@media(prefers-reduced-motion:reduce){.aascore-b span{transition:none}}
+/* ============================================================
+   LES TROIS OFFRES.
+
+   Une carte par offre, cliquable en entier, avec le prix en
+   chiffres d'affichage — la premiere chose qu'on lit. Dessous,
+   la seule phrase qui distingue cette offre des deux autres :
+   pas une liste de fonctions, la difference.
+
+   « Resident » porte un ruban et le bleu : c'est un conseil, pas
+   un piege — c'est celle qui convient au DJ qui joue plus de deux
+   fois par mois, et on le dit dans sa propre phrase.
+   ============================================================ */
+.vAcc{font-size:15px;line-height:1.55;color:var(--ink);margin:4px 0 14px;max-width:62ch}
+.vAcc b{color:var(--rose)}
+.voffres{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+@media(max-width:900px){.voffres{grid-template-columns:1fr}}
+.voffre{position:relative;display:flex;flex-direction:column;align-items:flex-start;gap:0;
+text-align:left;text-transform:none;letter-spacing:0;font-family:var(--b);font-weight:400;
+background:var(--card);color:var(--ink);border:1px solid var(--line);border-radius:6px;
+padding:16px 15px 14px;cursor:pointer;transition:border-color .14s,transform .14s,box-shadow .14s}
+.voffre:hover{border-color:var(--blue);transform:translateY(-2px);box-shadow:var(--ombreCarte)}
+.voffre.reco{border-color:var(--blue);border-width:1.5px}
+.voffre i{font-style:normal;font-family:var(--m);font-size:10px;letter-spacing:.14em;
+text-transform:uppercase;color:var(--ink3)}
+.voffre b{font-family:var(--d);font-weight:400;font-size:38px;line-height:1;letter-spacing:.02em;
+margin:8px 0 2px;color:var(--ink);font-variant-numeric:tabular-nums}
+.voffre u{text-decoration:none;font-family:var(--m);font-size:10px;letter-spacing:.1em;
+text-transform:uppercase;color:var(--ink3)}
+.voffre s{text-decoration:none;font-size:12.5px;line-height:1.5;color:var(--ink2);
+margin:10px 0 14px;flex:1}
+.voffre sup{font-size:.7em}
+/* L'appel a l'action de la carte : un faux bouton, parce que la
+   carte entiere EST le bouton — un vrai <button> imbrique serait
+   invalide et volerait le clic. */
+.voffre em{font-style:normal;display:block;width:100%;text-align:center;font-family:var(--m);
+font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;padding:9px 10px;border-radius:2px;
+border:1px solid var(--line);color:var(--ink2);transition:background .13s,color .13s,border-color .13s}
+.voffre:hover em{background:var(--blue);border-color:var(--blue);color:#fff}
+.voffre.reco em{background:var(--blue);border-color:var(--blue);color:#fff;font-weight:700}
+.voffre.reco:hover em{background:var(--blue2);border-color:var(--blue2)}
+.voffre .ruban{position:absolute;top:-8px;right:12px;font-family:var(--m);font-size:8.5px;
+letter-spacing:.14em;text-transform:uppercase;background:var(--blue);color:#fff;
+padding:3px 7px;border-radius:2px}
+.voffre:focus-visible{outline:2px solid var(--blue);outline-offset:2px}
+/* La ligne de reassurance : ce qui leve les quatre objections
+   qu'un DJ se pose avant de sortir sa carte. Petite, mais jamais
+   absente — c'est elle qui fait cliquer. */
+.vRass{font-family:var(--m);font-size:10px;line-height:1.9;letter-spacing:.04em;
+color:var(--ink3);margin:13px 0 0}
+.voffre del{color:var(--ink3);font-size:.52em;font-weight:400;margin-right:6px;
+text-decoration-thickness:1.5px;vertical-align:.22em}
+#licTarifs{font-size:12px;color:var(--ink3);margin-top:11px}
+#licTarifs b{color:var(--ink2)}
+#licTarifs .lienAn{color:var(--blueTxt);cursor:pointer;text-decoration:underline;text-underline-offset:2px}
+#licVente{padding-bottom:18px;margin-bottom:4px;border-bottom:1px solid var(--line)}
+#licVente[hidden]{display:none}
+@media(prefers-reduced-motion:reduce){.voffre{transition:none}.voffre:hover{transform:none}}
+
 /* L'etat du bloc quand il n'a rien a dire : une phrase qui
    explique le vide, jamais un vide muet. */
 .aavide{font-size:13px;color:var(--ink3);line-height:1.6;max-width:62ch}
@@ -633,29 +905,81 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
 
 <div class="card" id="licCard">
   <h2>Licence <span class="pill" id="licPill">—</span></h2>
+
+  <!-- ============================================================
+       LE BLOC QUI VEND — et qui n'existe que pour qui n'a pas paye.
+
+       Avant : un paragraphe de six lignes expliquant l'essai, le
+       verrouillage, le pass et la prolongation, puis deux boutons
+       nommes « Resident » et « Collectif ». Aucun prix nulle part,
+       alors que l'app SAIT les tarifs du jour — le canal existait
+       (tarifs:get), la fenetre ne l'appelait simplement jamais, et
+       le <p id="licTarifs"> prevu pour les recevoir restait vide
+       depuis le premier jour.
+
+       Un DJ qui doit cliquer pour decouvrir un prix ne clique pas.
+       Il ferme.
+
+       Trois offres, trois prix, trois differences — c'est tout ce
+       qu'il y a a savoir pour choisir. Le texte explicatif reste,
+       mais APRES, et replie : on vend d'abord, on explique a qui
+       demande.
+
+       Et tout ce bloc quitte l ecran des qu une licence est active :
+       on ne vend pas a quelqu'un qui a deja paye.
+       ============================================================ -->
+  <section id="licVente" hidden>
+    <p class="vAcc" id="licAcc"></p>
+    <div class="voffres" id="licOffres">
+      <button class="voffre" data-plan="pass">
+        <i>Pass soirée</i>
+        <b><span data-prix="pass">—</span></b>
+        <u>les 48 heures</u>
+        <s>Tout ouvert le temps d'une soirée. Sans abonnement.</s>
+        <em>Prendre le pass</em>
+      </button>
+      <button class="voffre reco" data-plan="resident">
+        <span class="ruban">le plus pris</span>
+        <i>Résident</i>
+        <b><span data-prix="resident">—</span></b>
+        <u>par mois</u>
+        <s>2 machines, rejeu de set, débrief de fin de soirée. Rentable dès la 3<sup>e</sup> soirée du mois.</s>
+        <em>Passer Résident</em>
+      </button>
+      <button class="voffre" data-plan="collectif">
+        <i>Collectif</i>
+        <b><span data-prix="collectif">—</span></b>
+        <u>par mois</u>
+        <s>5 machines, 7 suggestions au lieu de 5. Pour un crew ou une agence.</s>
+        <em>Passer Collectif</em>
+      </button>
+    </div>
+    <p class="vRass">Sans engagement, résiliable en un clic · Aucune carte bancaire pour l'essai ·
+      Une clé se libère et se réactive sur une autre machine · Une fois activé, Liaison marche sans réseau</p>
+    <!-- Volontairement SANS class="tips" : le script de repli
+         enveloppe tout p.tips non vide dans un <details>, et la
+         ligne des formules annuelles se retrouvait cachee
+         derriere un « Comment ca marche » — un prix range dans un
+         repli est un prix qui n'existe pas. -->
+    <p id="licTarifs"></p>
+  </section>
+
   <div class="grid">
     <div>
       <div class="state" id="licState" style="font-size:13.5px;line-height:1.7">—</div>
-      <label>Cle de licence</label>
+      <label id="licKeyL">Tu as déjà une clé ?</label>
       <div class="row" style="margin-top:0">
         <input type="text" id="licKey" placeholder="LSN-XXXX-XXXX-XXXX" style="flex:1;min-width:220px;text-transform:uppercase;font-family:var(--m)">
         <button id="licGo">Activer cette machine</button>
       </div>
       <div class="state" id="licMsg"></div>
       <div class="row">
-        <button class="g" id="licRefresh">Verifier maintenant</button>
-        <button class="g" id="licFree">Liberer cette machine</button>
+        <button class="t" id="licRefresh">Verifier maintenant</button>
+        <button class="t" id="licFree">Liberer cette machine</button>
       </div>
     </div>
     <div>
-      <label>Pas encore de cle</label>
-      <p class="tips">L'essai dure 7 jours, toutes fonctions ouvertes, sans carte bancaire. Ensuite l'application se verrouille : il n'y a pas de formule gratuite. Le pass soiree rouvre tout pendant 48 heures pour 4,95 &euro;. Et si tu arrives au bout de l'essai sans avoir joue une seule soiree, il est prolonge de sept jours, une fois.</p>
-      <div class="row">
-        <button id="buyRes">Resident</button>
-        <button class="g" id="buyCol">Collectif</button>
-      </div>
       <p class="tips" id="licApi" style="margin-top:12px"></p>
-      <p class="tips" id="licTarifs" style="margin-top:6px"></p>
 
       <!-- Ou en est ma version. Deux questions reviennent toujours :
            « est-ce que j'ai la derniere ? » et « est-ce que je dois
@@ -665,7 +989,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <label>Ta version</label>
       <div class="state" id="majState" style="font-size:13.5px;line-height:1.7">Verification…</div>
       <div class="row">
-        <button id="majVerifier" class="g">Verifier maintenant</button>
+        <button id="majVerifier" class="t">Verifier maintenant</button>
         <button id="majPage" class="g">Ouvrir la page de telechargement</button>
       </div>
       <p class="tips" style="margin-top:12px"><b>Installer une mise a jour ne demande jamais de desinstaller.</b>
@@ -710,7 +1034,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       borne, et tu peux tout effacer.</p>
     <div id="goutListe"></div>
     <div class="row" style="margin-top:14px">
-      <button id="goutOublier" class="g">Tout oublier</button>
+      <button id="goutOublier" class="t att">Tout oublier</button>
     </div>
   </div>
 
@@ -750,7 +1074,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <label>Fiches enregistrées</label>
       <div id="soirListe" class="state" style="margin-top:8px"></div>
       <div class="row">
-        <button id="soirNouvelle">Nouvelle soirée</button>
+        <button class="g" id="soirNouvelle">Nouvelle soirée</button>
         <button id="soirDupliquer" class="g">Dupliquer</button>
       </div>
     </div>
@@ -780,7 +1104,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <div class="row">
         <button id="soirEnregistrer">Enregistrer</button>
         <button id="soirActiver" class="g">Activer cette soirée</button>
-        <button id="soirSupprimer" class="g">Supprimer</button>
+        <button id="soirSupprimer" class="t att">Supprimer</button>
       </div>
       <p class="tips" id="soirEtat" style="margin-top:12px"></p>
     </div>
@@ -845,8 +1169,8 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <label>A passer — colle la liste, ou un lien de playlist Spotify</label>
       <textarea id="cliWant" rows="5" placeholder="Daft Punk - Get Lucky&#10;Modjo - Lady (Hear Me Tonight)&#10;&#10;ou colle https://open.spotify.com/playlist/..."></textarea>
       <div class="row">
-        <button id="cliAddWant">Ajouter a la liste</button>
-        <button class="g" id="cliClearWant">Vider</button>
+        <button class="g" id="cliAddWant">Ajouter a la liste</button>
+        <button class="t att" id="cliClearWant">Vider</button>
         <span class="mono" id="cliWantN" style="font-size:11px;color:var(--ink3)"></span>
       </div>
     </div>
@@ -854,8 +1178,8 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <label>A eviter — meme chose, en negatif</label>
       <textarea id="cliBan" rows="5" placeholder="Rick Astley - Never Gonna Give You Up"></textarea>
       <div class="row">
-        <button id="cliAddBan">Ajouter a la liste</button>
-        <button class="g" id="cliClearBan">Vider</button>
+        <button class="g" id="cliAddBan">Ajouter a la liste</button>
+        <button class="t att" id="cliClearBan">Vider</button>
         <span class="mono" id="cliBanN" style="font-size:11px;color:var(--ink3)"></span>
       </div>
     </div>
@@ -887,8 +1211,8 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
         <button class="g" id="shWa">WhatsApp</button>
         <button class="g" id="shSms">SMS</button>
         <button class="g" id="shMail">E-mail</button>
-        <button class="g" id="shCopy">Copier le lien</button>
-        <button class="g" id="shQr">Enregistrer le QR</button>
+        <button class="t" id="shCopy">Copier le lien</button>
+        <button class="t" id="shQr">Enregistrer le QR</button>
       </div>
       <table id="reqTable"><thead><tr><th>Demandes</th><th style="width:60px">Nb</th></tr></thead><tbody></tbody></table>
     </div>
@@ -953,7 +1277,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
   </div>
 
   <div class="pied">
-    <button class="g" id="aaVider">Vider la liste</button>
+    <button class="t att" id="aaVider">Vider la liste</button>
     <p class="tips">Un titre que tu ne veux pas acheter se retire d'un clic. Sans ce
       bouton, une liste de courses devient une liste de reproches.</p>
   </div>
@@ -1004,7 +1328,7 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <select id="dbSel"></select>
       <div class="row" style="margin-top:12px">
         <button id="dbVoir">Voir le debrief</button>
-        <button class="g" id="dbCopier">Copier</button>
+        <button class="t" id="dbCopier">Copier</button>
       </div>
       <div id="dbCourbe" style="margin-top:18px"></div>
     </div>
@@ -1024,8 +1348,8 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
       <select id="tlSel"></select>
       <div class="row" style="margin-top:12px">
         <button id="tlCopy">Copier le texte</button>
-        <button class="g" id="tlCsv">Exporter en CSV</button>
-        <button class="g" id="tlTxt">Exporter en .txt</button>
+        <button class="t" id="tlCsv">Exporter en CSV</button>
+        <button class="t" id="tlTxt">Exporter en .txt</button>
       </div>
       <div class="state" id="tlState">—</div>
       <p class="tips" style="margin-top:14px">Le CSV contient, par morceau&nbsp;: la date, le lieu, l'heure de passage, le titre, l'interprete, la duree d'utilisation, le BPM et la tonalite. C'est le detail que reclament la SACEM et les rapports de club.</p>
@@ -1115,6 +1439,113 @@ function renderLic(st){
   $('#licState').innerHTML = bits.join('<br>');
   $('#licApi').textContent = 'Serveur de licences : ' + st.api;
   if (st.key) $('#licKey').value = st.key;
+  licVente(st);
+}
+
+/* ------------------------------------------------------------
+   VENDRE, ET SEULEMENT A QUI N'A PAS PAYE.
+
+   « uniquement si le mec n'a pas de licence »
+
+   La regle est litterale : le bloc d'offres n'apparait que pour
+   un essai en cours, un essai termine, ou un pass qui court —
+   dans ce dernier cas parce que le pass dure 48 h et que
+   l'abonnement est precisement ce qui evite d'en racheter un
+   chaque samedi.
+
+   Un Resident, un Collectif ou un Ami ne voit jamais cette
+   section. Pas repliee, pas grisee : absente. Continuer a
+   proposer d'acheter a quelqu'un qui paie deja est la facon la
+   plus rapide de lui faire croire que son paiement n'est pas
+   enregistre.
+   ------------------------------------------------------------ */
+const VEND = { trial: 1, expire: 1, pass: 1 };
+function licVente(st) {
+  const sec = $('#licVente');
+  if (!sec) return;
+  const montrer = !!VEND[st.tier];
+  sec.hidden = !montrer;
+  /* Le libelle du champ de cle suit : « Tu as deja une cle ? »
+     n'a aucun sens quand on la voit affichee juste au-dessus. */
+  const l = $('#licKeyL');
+  if (l) l.textContent = st.key ? 'Cle de licence' : 'Tu as déjà une clé ?';
+  /* Une seule action principale par panneau. Quand les offres sont
+     la, c'est « Passer Resident » ; « Activer cette machine » ne
+     concerne alors qu'une minorite — celui qui vient d'acheter —
+     et repasse en secondaire. Des qu'une licence tourne, elle
+     redevient l'action du panneau et reprend le bleu plein. */
+  const go = $('#licGo');
+  if (go) go.className = montrer ? 'g' : '';
+  if (!montrer) return;
+
+  /* L'accroche dit l'enjeu en une ligne, chiffre a l'appui. Pas
+     de menace : l'etat des lieux, qui est deja assez clair. */
+  const acc = $('#licAcc');
+  if (st.tier === 'expire') {
+    acc.innerHTML = '<b>Ton essai est terminé.</b> Le widget affiche encore le morceau en cours, '
+      + 'mais il ne propose plus d\'enchaînement. Une clé rouvre tout, tout de suite.';
+  } else if (st.tier === 'pass') {
+    acc.innerHTML = 'Ton pass soirée court encore. <b>Au-delà de deux soirées par mois</b>, '
+      + 'l\'abonnement Résident revient moins cher qu\'un pass à chaque fois.';
+  } else {
+    const j = st.trialLeft;
+    acc.innerHTML = (j <= 2 ? '<b>Plus que ' + j + ' jour' + (j > 1 ? 's' : '') + ' d\'essai.</b> '
+                            : 'Il te reste <b>' + j + ' jours</b> d\'essai. ')
+      + 'Ensuite le widget continue d\'afficher le morceau en cours, mais il ne propose plus '
+      + 'd\'enchaînement — il n\'y a pas de formule gratuite.';
+  }
+  tarifsRendre();
+}
+
+/* ------------------------------------------------------------
+   LES PRIX, DEMANDES AU SERVEUR — enfin affiches.
+
+   license.js sait aller les chercher depuis le debut, main.js les
+   met en cache une heure, preload.js les expose sous
+   window.liaison.tarifs(). Le seul maillon manquant etait celui-ci :
+   personne n'appelait. Le <p id="licTarifs"> prevu pour les
+   recevoir est reste vide pendant toute la vie du produit, et la
+   fenetre vendait deux abonnements sans jamais dire combien.
+
+   Un echec reseau n'efface pas les prix : license.js renvoie sa
+   table de repli. Un prix approchant vaut mieux qu'un tiret, et
+   le montant exact est de toute facon reaffirme sur la page de
+   paiement.
+   ------------------------------------------------------------ */
+let TARIFS_VUS = null;
+async function tarifsRendre() {
+  if (!TARIFS_VUS) {
+    try { TARIFS_VUS = await window.liaison.tarifs(); } catch (e) { TARIFS_VUS = null; }
+  }
+  const t = TARIFS_VUS && TARIFS_VUS.plans;
+  if (!t) return;
+  /* Un prix barre n'est affiche que si le serveur dit que la
+     remise court VRAIMENT (`barre`). On ne fabrique pas un prix
+     de reference pour se donner l'air d'une promotion : c'est la
+     seule chose qui abime une page de tarifs pour de bon. */
+  const met = (cle) => {
+    const p = t[cle], n = document.querySelector('[data-prix="' + cle + '"]');
+    if (!n || !p || !p.euro) return;
+    n.innerHTML = (p.barre && p.euroPlein && p.euroPlein !== p.euro
+        ? '<del>' + p.euroPlein + '</del> ' : '')
+      + p.euro + ' €';
+  };
+  met('pass'); met('resident'); met('collectif');
+  /* L'annuel n'a pas sa carte — trois offres sont deja une de
+     trop pour un choix rapide. Il est dit en une ligne sous les
+     cartes, avec son equivalent mensuel : c'est le chiffre qui
+     compare, pas le total annuel. */
+  const an = [];
+  if (t.resident_an) an.push('<a class="lienAn" data-plan="resident_an">Résident à l\'année</a> : '
+    + t.resident_an.euro + ' €'
+    + (t.resident_an.parMois ? ', soit ' + t.resident_an.parMois + ' €/mois' : ''));
+  if (t.collectif_an) an.push('<a class="lienAn" data-plan="collectif_an">Collectif à l\'année</a> : '
+    + t.collectif_an.euro + ' €');
+  const mo = TARIFS_VUS.moisOfferts;
+  const ligne = $('#licTarifs');
+  if (ligne) ligne.innerHTML = an.length
+    ? (mo ? '<b>' + mo + ' mois offerts</b> sur l\'année — ' : 'À l\'année — ') + an.join(' · ') + '.'
+    : '';
 }
 $('#licGo').onclick = async () => {
   $('#licMsg').textContent = 'Activation…';
@@ -1137,8 +1568,15 @@ $('#licFree').onclick = async () => {
   $('#licMsg').textContent = 'Machine liberee. La cle peut servir ailleurs.';
   renderLic(await window.liaison.licenseStatus());
 };
-$('#buyRes').onclick = () => window.liaison.licenseBuy('resident');
-$('#buyCol').onclick = () => window.liaison.licenseBuy('collectif');
+/* Toute la carte est cliquable : viser un petit bouton dans une
+   carte qu'on regarde deja, c'est une etape de trop. */
+document.querySelectorAll('#licOffres .voffre').forEach(b => {
+  b.onclick = () => window.liaison.licenseBuy(b.dataset.plan);
+});
+document.addEventListener('click', e => {
+  const a = e.target.closest && e.target.closest('#licTarifs .lienAn');
+  if (a) window.liaison.licenseBuy(a.dataset.plan || 'resident_an');
+});
 window.liaison.on('license', renderLic);
 
 async function renderScanInfo() {
@@ -1817,15 +2255,72 @@ function aaLigne(x, opt) {
        (x.soirees > 1 ? '<em>' + x.soirees + ' soirées</em>' : null),
        (x.deja && x.deja.length ? 'proche de « ' + esc(x.deja[0].title || '') + ' » que tu as déjà' : null)
       ].filter(Boolean).join(' · ');
-  const achats = (x.achats || []).slice(0, 2).map(a =>
-    '<a data-url="' + esc(a.url || a.href || '') + '">' + esc(a.nom || a.label || 'acheter') + '</a>').join('');
-  return '<div class="aal' + ((x.soirees > 1 || x.poids >= 6) ? ' fort' : '') + '">'
+  /* UN bouton d'achat, nomme.
+
+     Il y en avait deux, tous les deux intitules « acheter ».
+     C'etait un bug de champ : acquire.buyLinks() renvoie `name`,
+     la vue lisait `nom` puis `label`, et retombait donc deux fois
+     sur le mot par defaut. Deux boutons identiques ne proposent
+     pas un choix, ils dedoublent une action — et l'oeil doit
+     s'arreter pour comprendre qu'il n'y a rien a comprendre.
+
+     On n'en garde qu'un, celui du premier marchand, avec SON nom :
+     « Beatport » dit ou l'on va, « acheter » ne disait rien. Les
+     autres marchands restent accessibles par la carte d'achat
+     plus bas, qui les liste tous avec leur specialite. */
+  const a0 = (x.achats || [])[0];
+  const achats = (x.a || !a0) ? '' :
+    '<a class="buy" data-url="' + esc(a0.url || a0.href || '')
+    + '" title="Chercher sur ' + esc(a0.name || a0.nom || '') + '">'
+    + esc(a0.name || a0.nom || a0.label || 'Acheter') + '</a>';
+  /* Trois etats, trois lectures.
+
+     `a`   — le titre est dans la bibliotheque : ligne calme, rien
+             a faire, juste la satisfaction de le voir coche.
+     sinon — il manque : filet rouge, compteur rouge, un bouton.
+     `fort`— il manque ET on l'a redemande plusieurs soirs : le
+             filet s'epaissit. C'est la seule hierarchie interne a
+             la liste, et elle suit l'urgence reelle.
+
+     Avant, TOUTES les lignes etaient posees sur le meme aplat
+     sable (--paper2) : vingt-cinq rectangles marron identiques,
+     ou rien ne disait lequel comptait. */
+  const etat = x.a ? ' ok' : ' manque' + ((x.soirees > 1 || x.poids >= 6) ? ' fort' : '');
+  return '<div class="aal' + etat + '">'
        + '<span class="cpt">' + esc(cpt) + '</span>'
        + '<span class="nom"><b>' + esc(x.title || '') + '</b><s>' + sous + '</s></span>'
-       + '<span class="go">' + achats
+       + '<span class="go">'
+       + (x.a ? '<span class="dans" title="Déjà dans ta bibliothèque">'
+                + '<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M3.2 8.4l3.1 3.1 6.5-6.6" '
+                + 'fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" '
+                + 'stroke-linejoin="round"/></svg>tu l\'as</span>' : achats)
        + (o.oubliable ? '<button class="x" data-oublier="1" data-a="' + esc(x.artist || '')
             + '" data-t="' + esc(x.title || '') + '" title="Je ne veux pas l\'acheter">×</button>' : '')
        + '</span></div>';
+}
+
+/* ------------------------------------------------------------
+   LE SCORE.
+
+   Un chiffre ecrit en fin de liste (« tu en as deja 18 ») se lit
+   et s'oublie. Une jauge se REGARDE : on voit d'un coup ou on en
+   est, et on voit la barre avancer d'une semaine sur l'autre sans
+   rien avoir a comparer. C'est la seule chose de cet ecran qui
+   donne envie d'y revenir.
+
+   Elle ne felicite pas et ne culpabilise pas : elle compte. Le
+   vert du plein, le rouge du reste — les deux memes couleurs que
+   les lignes en dessous, jamais une troisieme.
+   ------------------------------------------------------------ */
+function aaScore(ok, total) {
+  if (!total) return '';
+  const pct = Math.round((ok / total) * 100);
+  return '<div class="aascore" role="img" aria-label="'
+    + ok + ' titres sur ' + total + ' dans ta bibliothèque">'
+    + '<div class="aascore-t"><b>' + ok + '</b><i>/ ' + total + ' dans ta bibliothèque</i>'
+    + '<u>' + pct + '%</u></div>'
+    + '<div class="aascore-b"><span style="width:' + pct + '%"></span></div>'
+    + '</div>';
 }
 
 function aaVide(txt) { return '<p class="aavide">' + txt + '</p>'; }
@@ -1908,16 +2403,22 @@ async function aavoirRendre(avecClassement, forcer) {
   const boite = $('#aaChartsL'), cpt = $('#aaChartsN');
   if (k.etat === 'ok') {
     cpt.textContent = (k.source || '') + (k.zone ? ' · ' + k.zone : '');
-    boite.innerHTML = k.titres.length
-      ? k.titres.map(x => aaLigne(x, { rang: true })).join('')
-        /* On dit combien on a ecarte : sans ce chiffre, une liste
-           courte ressemble a une panne alors que c'est une bonne
-           nouvelle. Et ce compte est recalcule a chaque ouverture :
-           un morceau telecharge depuis hier se voit tout de suite. */
-        + aaVide('Sur ' + k.vus + ' titres du classement, <b>tu en as déjà ' + k.deja + '</b>.')
+    /* Le classement ENTIER, pas seulement ses trous.
+
+       Avant : on n'affichait que les absents, et on ecrivait
+       dessous « tu en as deja 18 ». Le chiffre etait juste et ne
+       servait a rien — on ne voit pas dix-huit, on lit dix-huit.
+       Maintenant le top 25 descend dans l'ordre, les lignes
+       possedees calmes, les manquantes rouges : le score se lit
+       sans etre ecrit, et cocher une ligne de plus la semaine
+       suivante devient visible. */
+    const liste = (k.tout && k.tout.length) ? k.tout : k.titres;
+    const manque = (k.titres || []).length;
+    boite.innerHTML = liste.length
+      ? aaScore(liste.length - manque, liste.length)
+        + liste.map(x => aaLigne(x, { rang: true })).join('')
         + aaReleve(k)
-      : aaVide('<b>Tu as déjà tout le classement.</b> Les ' + k.vus + ' titres sont dans ta bibliothèque.')
-        + aaReleve(k);
+      : aaVide('Le classement est vide pour ce pays.') + aaReleve(k);
   } else {
     cpt.textContent = '';
     const dit = {
@@ -2184,9 +2685,13 @@ window.liaison.clientGet().then(st => {
       'Ce que ta salle t\'a reclame et que tu n\'as pas.',
       ['demandes sans reponse', 'liste du client', 'classement du moment', 'liens d\'achat'],
       'Une demande d\'invite pour un titre absent etait jetee — « le DJ ne l\'a pas, rien a proposer ». C\'est vrai pour la nuit en cours et faux pour tout le reste. Elle est desormais notee, soiree apres soiree : <b>ce qui revient dans plusieurs soirees differentes est un trou dans ta bibliotheque</b>, pas une tablee insistante. Le classement du moment arrive en dernier, et il est annonce comme exterieur : il ne sait rien de ta salle.'],
+    /* Sept jours, pas quatorze : c'est TRIAL_DAYS dans license.js
+       qui fait foi, et cet ecran annoncait le double. Un essai
+       plus court que promis, decouvert le jour ou il se ferme,
+       est la seule mauvaise surprise qu'on ne rattrape pas. */
     licCard: ['Licence', 'Ton essai et ta cle', 'licence',
-      'Quatorze jours, toutes fonctions ouvertes, sans compte a creer.',
-      ['14 jours', 'sans compte', '1 cle = 1 machine'],
+      'Sept jours, toutes fonctions ouvertes, sans compte a creer.',
+      ['7 jours', 'prolonge si tu n\'as pas joue', '1 cle = 1 machine'],
       'Ensuite le widget continue de proposer un enchainement, mais <b>les sessions invites et le rejeu de set se ferment</b>. Une cle libere la machine ou tu l\'actives.'],
     default: [null, null]
   };
@@ -2218,7 +2723,12 @@ window.liaison.clientGet().then(st => {
       'Liaison regarde ce que tu joues apres chaque suggestion — celles que tu prends, et surtout celles que tu ignores — et deplace ses criteres vers les tiens. <b>Rien n\'est modifie avant douze enchainements</b>, tout est borne, et tu peux tout effacer.'],
     [/logiciel de mix/i, 'Logiciel de mix', 'Comment il voit tes decks', 'mix',
       'Le widget s\'ouvre quand ton logiciel s\'ouvre, et se ferme avec lui.',
-      ['Serato', 'Traktor', 'VirtualDJ', 'rekordbox : CDJ requis'],
+      /* « port d'ecoute » est dans les mots-cles et pas seulement
+         sur le champ : ce champ n'existe QUE si la source est
+         Traktor, donc un DJ sur Serato qui cherche « port » ne
+         trouverait rien du tout. La rubrique, elle, existe
+         toujours, et c'est bien la reponse. */
+      ['Serato', 'Traktor', 'VirtualDJ', 'rekordbox : CDJ requis', 'port d\'ecoute'],
       'Liaison surveille les logiciels ouverts : le widget apparait quand tu lances le tien, disparait quand tu le fermes. <b>Serato, Traktor et VirtualDJ</b> sont lus sans materiel. <b>rekordbox</b> demande un CDJ, un XDJ ou un DJM sur le reseau — sinon, la loupe du widget.'],
     [/contexte/i, 'Contexte', 'Le pays et le type de soiree', 'contexte',
       'Un mariage a Lille et un club a Berlin n\'appellent pas les memes titres.',
@@ -2245,6 +2755,22 @@ window.liaison.clientGet().then(st => {
       ['vivier garde', 'ordre refait', 'mixabilite tenue'],
       'Reprends le vivier d\'une soiree deja jouee. Liaison garde les morceaux mais reconstruit l\'ordre : <b>jamais le meme enchainement deux fois</b>, et la mixabilite tient toujours.']
   ];
+
+  /* Pastille « i » dessinee, pas ecrite. viewBox 16x16, cercle
+     centre en 8/8 : le point et la hampe partagent l'axe x=8, donc
+     rien ne peut deriver d'un demi-pixel comme le faisait le
+     glyphe de la police. */
+  var PASTILLE_I =
+    '<svg class="rd" viewBox="0 0 16 16" aria-hidden="true" focusable="false">'
+    + '<circle cx="8" cy="8" r="7.25" fill="none" stroke="currentColor" stroke-width="1.1"/>'
+    /* Geometrie posee pour que l'ENCRE soit centree, pas le
+       cadran : haut du point 3,85 ; bas de la hampe 12,15 ;
+       milieu exactement 8, comme le centre du cercle. Un glyphe
+       de police retombait a 7,7 — un quart de pixel trop haut a
+       15 px, ce qui suffit a voir que « ca penche ». */
+    + '<circle cx="8" cy="4.9" r="1.05" fill="currentColor"/>'
+    + '<rect x="7.1" y="6.85" width="1.8" height="5.3" rx=".9" fill="currentColor"/>'
+    + '</svg>';
 
   var shell = document.createElement('div'); shell.className = 'shell';
   var rail  = document.createElement('nav'); rail.className = 'rail'; rail.setAttribute('aria-label', 'Rubriques');
@@ -2361,7 +2887,7 @@ window.liaison.clientGet().then(st => {
     var d = document.createElement('details');
     d.className = 'aide';
     var sum = document.createElement('summary');
-    sum.innerHTML = '<span class="rd">i</span>Comment \u00e7a marche<span class="ch"></span>';
+    sum.innerHTML = PASTILLE_I + 'Comment \u00e7a marche<span class="ch"></span>';
     d.appendChild(sum);
     t.parentNode.insertBefore(d, t);
     d.appendChild(t);
@@ -2404,6 +2930,299 @@ window.liaison.clientGet().then(st => {
     try { localStorage.setItem('liaison.reglages.pan', id); } catch (e) {}
     window.scrollTo({ top: 0, behavior: 'auto' });
   }
+
+  /* ============================================================
+     LA RECHERCHE.
+
+     « si quelqu'un cherche un mot, ca lui dit ou il est dans
+       l'app preparation »
+
+     Onze rubriques, une soixantaine de reglages : c'est passe le
+     point ou on trouve en parcourant. Un DJ qui cherche « spotify »
+     doit ouvrir Le client ; qui cherche « port » doit ouvrir
+     Logiciel de mix et derouler Traktor. Rien ne le lui dit.
+
+     L'index n'est pas ecrit a la main — il serait faux au premier
+     reglage ajoute. Il est RELEVE sur la page une fois les
+     panneaux assembles :
+
+       - chaque rubrique : nom, sous-titre, phrase, mots-cles ;
+       - chaque reglage : les <label>, les <h3>, les intitules de
+         tuiles et de boutons, et les options des menus deroulants.
+
+     Chaque entree retient l'element exact, pas seulement le
+     panneau : le resultat ouvre la rubrique, y descend, et fait
+     clignoter la ligne. « Ou il est » veut dire a l'endroit, pas
+     dans la bonne page.
+     ============================================================ */
+  /* Sans accents et sans casse : un DJ tape « cle », « bibliotheque »,
+     « soiree ». Exiger l'accent, c'est ne rien trouver. */
+  function plat(t) {
+    return String(t || '').toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/\s+/g, ' ').trim();
+  }
+
+  var INDEX = [];
+  function indexer() {
+    INDEX = [];
+    [].forEach.call(pans.children, function (pan) {
+      var bt = pan.querySelector('.panh .hn');
+      var nom = bt ? bt.textContent.trim() : pan.id;
+
+      /* 1. la rubrique elle-meme — nom, sous-titre, phrase, mots-cles */
+      var mots = [].map.call(pan.querySelectorAll('.panh .mot'),
+                             function (m) { return m.textContent.trim(); });
+      var sous = pan.querySelector('.panh .paneb');
+      var phr  = pan.querySelector('.panh .phrase');
+      /* La colonne de droite dit OU c'est. Pour la rubrique
+         elle-meme, repeter son nom des deux cotes — « Le client →
+         Le client » — ne dit rien : on y met son sous-titre, qui
+         lui apprend quelque chose. */
+      INDEX.push({
+        pan: pan.id, rubrique: (sous ? sous.textContent.trim() : 'rubrique'),
+        el: null, rang: 0,
+        titre: nom,
+        cles: plat([nom, sous && sous.textContent, phr && phr.textContent]
+                    .concat(mots).join(' '))
+      });
+
+      /* 2. les reglages, un par un. On prend l'intitule VISIBLE —
+            c'est le mot que le DJ a vu et qu'il retape. */
+      var vus = {};
+      function poser(el, texte, rang) {
+        var t = String(texte || '').replace(/\s+/g, ' ').trim();
+        if (!t || t.length > 64) return;
+        var k = plat(t);
+        if (!k || vus[k]) return;
+        vus[k] = 1;
+        INDEX.push({ pan: pan.id, rubrique: nom, el: el, rang: rang,
+                     titre: t, cles: k });
+      }
+      [].forEach.call(pan.querySelectorAll('label'), function (l) {
+        poser(l, l.textContent, 1);
+      });
+      [].forEach.call(pan.querySelectorAll('h3'), function (h) {
+        poser(h, h.textContent, 1);
+      });
+      [].forEach.call(pan.querySelectorAll('button'), function (b) {
+        if (b.closest('.rail')) return;
+        poser(b, b.textContent, 2);
+      });
+      /* Un bouton dont tout le texte fait plus de soixante
+         caracteres est rejete plus haut — et c'est le cas des
+         cartes d'offre et des tuiles d'etat, qui sont des blocs
+         entiers rendus cliquables. Or « Resident » et « Soiree
+         armee » sont exactement des mots qu'on cherche. On
+         indexe donc leur intitule court. */
+      [].forEach.call(pan.querySelectorAll('.voffre i, .tuile .tl, .tuile b'), function (n) {
+        poser(n.closest('button') || n, n.textContent, 2);
+      });
+      /* Les options des menus : « Serato », « Mariage », « Italie »
+         sont des mots qu'on cherche, et ils ne sont ecrits nulle
+         part ailleurs dans la page. On pointe le menu, pas
+         l'option — on ne peut pas faire clignoter un <option>. */
+      [].forEach.call(pan.querySelectorAll('select'), function (sel) {
+        [].forEach.call(sel.options, function (o) {
+          poser(sel, o.textContent, 3);
+        });
+      });
+    });
+  }
+
+  /* Le classement d'un resultat, par QUALITE de correspondance :
+     le mot exact d'abord, puis ce qui commence par, puis ce qui
+     contient. Sans ca, « cle » remontait « Ce qu'il apprend »
+     (qui contient « cles » dans ses mots-cles) avant la Licence. */
+  function noter(e, q) {
+    /* DEBUT DE MOT UNIQUEMENT.
+
+       Premiere version : n'importe quelle sous-chaine. Chercher
+       « port » rendait alors « Exporter en CSV », « Exporter en
+       texte », « Exporter en playlist » et « Comportement » —
+       quatre lignes de bruit, et le port d'ecoute de Traktor
+       nulle part. Personne ne tape le milieu d'un mot : on tape
+       son debut. La contrainte enleve tout le bruit et ne coute
+       aucun vrai resultat.
+
+       Les accents et la casse, eux, restent ignores : « cle »
+       doit trouver « clé », « soiree » doit trouver « soirée ».
+       C'est la seule souplesse dont un DJ a besoin. */
+    var i = e.cles.indexOf(q);
+    while (i >= 0) {
+      if (i === 0 || /[^a-z0-9]/.test(e.cles.charAt(i - 1))) break;
+      i = e.cles.indexOf(q, i + 1);
+    }
+    if (i < 0) return -1;
+    return (plat(e.titre) === q ? 0 : 1) * 10 + e.rang;
+  }
+
+  /* ------------------------------------------------------------
+     Le morceau cherche, mis en gras dans le resultat.
+
+     Sans ca, sept lignes de texte gris se ressemblent toutes et
+     il faut les relire une par une. Avec, l'oeil tombe sur le
+     mot qu'il vient de taper.
+
+     La mise en gras se fait sur le titre D'ORIGINE, accents
+     compris, a partir d'une position trouvee sur sa version
+     aplatie : on aplatit donc caractere par caractere, pour que
+     les deux chaines aient exactement la meme longueur et que
+     l'index de l'une vaille pour l'autre. Si jamais ce n'etait
+     pas le cas — une ligature, un caractere exotique —, on rend
+     le titre tel quel plutot que de couper au mauvais endroit.
+     ------------------------------------------------------------ */
+  function platCar(t) {
+    return String(t || '').toLowerCase().split('').map(function (c) {
+      return c.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    }).join('');
+  }
+  function souligner(titre, q) {
+    if (!q) return esc(titre);
+    var a = platCar(titre);
+    if (a.length !== titre.length) return esc(titre);
+    var i = a.indexOf(q);
+    while (i >= 0 && !(i === 0 || /[^a-z0-9]/.test(a.charAt(i - 1)))) i = a.indexOf(q, i + 1);
+    if (i < 0) return esc(titre);
+    return esc(titre.slice(0, i)) + '<b>' + esc(titre.slice(i, i + q.length)) + '</b>'
+         + esc(titre.slice(i + q.length));
+  }
+
+  var rech = document.createElement('div');
+  rech.className = 'rech';
+  rech.innerHTML =
+    '<div class="rechb">'
+    + '<svg viewBox="0 0 16 16" aria-hidden="true">'
+    + '<circle cx="7.2" cy="7.2" r="4.4" fill="none" stroke="currentColor" stroke-width="1.5"/>'
+    + '<path d="M10.5 10.5 13.6 13.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>'
+    + '</svg>'
+    + '<input type="text" id="rechQ" placeholder="Chercher un réglage…" '
+    + 'autocomplete="off" spellcheck="false" role="combobox" aria-expanded="false" '
+    + 'aria-controls="rechR" aria-label="Chercher un réglage">'
+    + '<kbd>⌘K</kbd>'
+    + '</div>'
+    + '<div class="rechr" id="rechR" role="listbox" hidden></div>';
+  rail.insertBefore(rech, rail.firstChild);
+
+  var champ = rech.querySelector('#rechQ');
+  var boite = rech.querySelector('#rechR');
+  var trouves = [], vise = -1;
+
+  /* Sur Windows la touche est Ctrl, pas Cmd. L'etiquette du
+     raccourci doit dire ce que la machine attend, sinon elle
+     enseigne un geste qui ne marche pas. */
+  try {
+    if (!/Mac/i.test(navigator.platform || '')) rech.querySelector('kbd').textContent = 'Ctrl K';
+  } catch (e) {}
+
+  function fermer() {
+    boite.hidden = true; champ.setAttribute('aria-expanded', 'false');
+    vise = -1;
+  }
+
+  function dessiner() {
+    if (!trouves.length) {
+      boite.innerHTML = '<div class="rechvide">Rien sous ce mot. Essaie « clé », '
+                      + '« Serato », « QR », « tempo »…</div>';
+      boite.hidden = false; champ.setAttribute('aria-expanded', 'true');
+      return;
+    }
+    var q = plat(champ.value);
+    boite.innerHTML = trouves.map(function (e, i) {
+      return '<button type="button" class="rechl' + (i === vise ? ' on' : '') + '" '
+           + 'role="option" data-i="' + i + '" aria-selected="' + (i === vise) + '">'
+           + '<span class="q">' + souligner(e.titre, q) + '</span>'
+           + '<span class="ou">' + esc(e.rubrique) + '</span></button>';
+    }).join('');
+    boite.hidden = false;
+    champ.setAttribute('aria-expanded', 'true');
+  }
+
+  function chercher() {
+    var q = plat(champ.value);
+    if (q.length < 2) { trouves = []; fermer(); return; }
+    if (!INDEX.length) indexer();
+    var lot = [];
+    for (var i = 0; i < INDEX.length; i++) {
+      var n = noter(INDEX[i], q);
+      if (n >= 0) lot.push({ e: INDEX[i], n: n, i: i });
+    }
+    lot.sort(function (a, b) { return a.n - b.n || a.i - b.i; });
+    /* Une rubrique ne remonte qu'une fois : sans ca, chercher
+       « soiree » rendait huit lignes toutes marquees « Tes
+       soirees », ce qui n'aide personne a choisir. */
+    var deja = {}, out = [];
+    for (var j = 0; j < lot.length && out.length < 7; j++) {
+      var cle = lot[j].e.pan + '|' + (lot[j].e.el ? 'r' : 'p');
+      if (lot[j].e.el && deja[cle] >= 2) continue;
+      deja[cle] = (deja[cle] || 0) + 1;
+      out.push(lot[j].e);
+    }
+    trouves = out; vise = 0;
+    dessiner();
+  }
+
+  /* Ouvrir un resultat : la rubrique, puis l'endroit, puis le
+     clignotement. Les trois comptent — ouvrir la bonne rubrique
+     et laisser le DJ chercher dans soixante lignes, c'est avoir
+     repondu a cote. */
+  function ouvrir(e) {
+    if (!e) return;
+    montrer(e.pan);
+    fermer();
+    champ.blur();
+    if (!e.el) { champ.value = ''; return; }
+    /* Un reglage range derriere « Comment ca marche » ou « En
+       detail » est deplie avant qu'on y descende : sinon on fait
+       clignoter quelque chose d'invisible. */
+    var d = e.el.closest('details');
+    while (d) { d.open = true; d = d.parentElement && d.parentElement.closest('details'); }
+    var cible = e.el.closest('.card') ? e.el : e.el;
+    try { cible.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+    catch (err) { cible.scrollIntoView(); }
+    cible.classList.remove('trouve');
+    void cible.offsetWidth;
+    cible.classList.add('trouve');
+    setTimeout(function () { cible.classList.remove('trouve'); }, 1800);
+    /* Le champ garde le mot : on cherche souvent deux reglages de
+       suite avec le meme terme. */
+  }
+
+  champ.addEventListener('input', chercher);
+  /* L'index est refait a CHAQUE prise de focus, pas une fois pour
+     toutes. Des reglages apparaissent en cours de route — le port
+     d'ecoute n'existe que si la source est Traktor, les tuiles
+     d'etat se remplissent apres coup — et un index fige ne les
+     trouve jamais. Soixante noeuds a relire : c'est gratuit, et
+     c'est exactement le moment ou on peut se le permettre. */
+  champ.addEventListener('focus', function () {
+    indexer();
+    if (champ.value.trim().length >= 2) chercher();
+  });
+  champ.addEventListener('keydown', function (ev) {
+    if (ev.key === 'Escape') { champ.value = ''; fermer(); champ.blur(); return; }
+    if (boite.hidden || !trouves.length) return;
+    if (ev.key === 'ArrowDown') { ev.preventDefault(); vise = (vise + 1) % trouves.length; dessiner(); }
+    else if (ev.key === 'ArrowUp') { ev.preventDefault(); vise = (vise - 1 + trouves.length) % trouves.length; dessiner(); }
+    else if (ev.key === 'Enter') { ev.preventDefault(); ouvrir(trouves[vise]); }
+  });
+  boite.addEventListener('mousedown', function (ev) {
+    var l = ev.target.closest('.rechl');
+    if (!l) return;
+    ev.preventDefault();
+    ouvrir(trouves[Number(l.dataset.i)]);
+  });
+  document.addEventListener('click', function (ev) {
+    if (!rech.contains(ev.target)) fermer();
+  });
+  document.addEventListener('keydown', function (ev) {
+    if ((ev.metaKey || ev.ctrlKey) && (ev.key === 'k' || ev.key === 'K')) {
+      ev.preventDefault(); champ.focus(); champ.select();
+    }
+  });
+  /* L'index est releve a la premiere frappe, pas au demarrage :
+     la fenetre s'ouvre deja avec onze panneaux a monter, et
+     personne ne cherche dans la premiere demi-seconde. */
 
   var depart = null;
   try { depart = localStorage.getItem('liaison.reglages.pan'); } catch (e) {}

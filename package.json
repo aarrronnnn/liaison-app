@@ -9,7 +9,7 @@
     "dist:mac": "electron-builder --mac --arm64 --publish never",
     "dist:mac-intel": "electron-builder --mac --x64 --publish never",
     "dist:win": "electron-builder --win --x64 --publish never",
-    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-chemins.js && node build/test-suggestions.js && node build/test-rekordbox.js && node build/test-essai.js && node build/test-bulle.js && node build/test-prolink.js && node build/test-epoque.js && node build/test-affinites.js && node build/test-plancher.js && node build/test-parente.js && node build/test-tags.js && node build/test-analyse.js && node build/test-fenetre.js && node build/test-repertoire.js && node build/test-maj-biblio.js && node build/test-points-de-mix.js && node build/test-detection.js && node build/test-a-avoir.js && node build/test-widget.js && node build/test-licence-ui.js"
+    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-chemins.js && node build/test-suggestions.js && node build/test-rekordbox.js && node build/test-essai.js && node build/test-bulle.js && node build/test-prolink.js && node build/test-epoque.js && node build/test-affinites.js && node build/test-plancher.js && node build/test-parente.js && node build/test-tags.js && node build/test-analyse.js && node build/test-fenetre.js && node build/test-repertoire.js && node build/test-maj-biblio.js && node build/test-points-de-mix.js && node build/test-detection.js && node build/test-a-avoir.js && node build/test-widget.js && node build/test-licence-ui.js && node build/test-reglages-ui.js && node build/test-promesses.js"
   },
   "author": "Liaison",
   "license": "UNLICENSED",

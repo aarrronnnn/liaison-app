@@ -136,14 +136,25 @@ function post(pathname, body, timeoutMs, base) {
    On demande donc le tarif du jour, et on garde une valeur de repli
    pour le cas ou le reseau ne repond pas — il vaut mieux un prix
    approchant qu'une fenetre vide. */
+/* Ces valeurs sont la COPIE de liaison-web/lib/lib.js (PLANS).
+   Elles ne servent que si /api/tarifs ne repond pas, et elles ne
+   doivent jamais le contredire : une fenetre qui annonce 149 €
+   pendant que la caisse en prend 134 fait douter de tout le
+   reste. Le repli tient donc le tarif de lancement, comme le
+   serveur, et dit `lancement: true` pour que l'interface barre le
+   plein tarif de la meme facon. Au 1er novembre 2026 les deux
+   tables repassent au plein tarif ensemble. */
 const TARIFS_REPLI = {
-  lancement: false,
+  lancement: true,
+  moisOfferts: 2,
   plans: {
-    pass:         { euro: '4,95' },
-    resident:     { euro: '14,95' },
-    resident_an:  { euro: '149', parMois: '12,42' },
-    collectif:    { euro: '44,95' },
-    collectif_an: { euro: '449' }
+    pass:         { euro: '4,95',  euroPlein: '4,95',  barre: false },
+    resident:     { euro: '14,95', euroPlein: '14,95', barre: false },
+    resident_an:  { euro: '134',   euroPlein: '149',   barre: true,
+                    parMois: '11,17', auLieuDe: '179,40', economie: 45 },
+    collectif:    { euro: '44,95', euroPlein: '44,95', barre: false },
+    collectif_an: { euro: '404',   euroPlein: '449',   barre: true,
+                    parMois: '33,67', auLieuDe: '539,40', economie: 135 }
   }
 };
 

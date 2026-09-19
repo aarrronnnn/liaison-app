@@ -59,7 +59,36 @@ button{font:inherit;color:inherit;background:none;border:0;cursor:pointer}
 .grip .act button{width:34px;height:30px;border-radius:4px;color:var(--cream2);font-family:var(--m);
 font-size:18px;line-height:1;display:flex;align-items:center;justify-content:center}
 .grip .act button:hover{background:var(--deep3);color:var(--cream)}
-.grip .act button:hover{background:var(--deep3);color:var(--cream)}
+/* ------------------------------------------------------------
+   DANS UNE CABINE ETROITE, C'EST LE MOT « LIAISON » QUI PART.
+
+   Mesure a 320 px de large : le groupe de boutons faisait 174 px
+   et commencait a x=161, donc il finissait a 335. Quinze pixels
+   dehors — et la croix, le dernier bouton de la rangee, etait
+   celui qu'on perdait. Le bouton pour fermer le widget, hors du
+   widget.
+
+   Depuis que ces boutons sont passes de 24 a 34 px (a la
+   demande, et c'etait la bonne demande), cinq d'entre eux ne
+   tiennent plus a cote d'un mot de 85 px sur un ecran de 320.
+
+   Alors on choisit. Le logo reste — il dit de quelle app il
+   s'agit et il sert de poignee pour deplacer la fenetre. Le
+   MOT « LIAISON » disparait sous 380 px : personne n'a besoin
+   qu'on lui rappelle le nom du logiciel qu'il vient d'ouvrir,
+   et personne ne peut fermer une fenetre dont la croix est
+   dehors.
+   ------------------------------------------------------------ */
+@media (max-width:379px){
+  .grip .nm{display:none}
+  .grip{gap:6px}
+}
+/* Et si meme ca ne suffit pas — cabine tres etroite, sept
+   boutons un jour —, le groupe se comprime plutot que de sortir
+   de l'ecran : la cible reste au-dessus des 24 px recommandes. */
+@media (max-width:319px){
+  .grip .act button{width:30px}
+}
 
 /* ============================================================
    Le morceau en cours : la reference, pas une ligne de plus.
@@ -79,12 +108,12 @@ font-size:18px;line-height:1;display:flex;align-items:center;justify-content:cen
 position:relative}
 .ref::before{content:"";position:absolute;left:0;top:0;bottom:0;width:2px;background:var(--blueLit)}
 .ref .top{display:flex;align-items:baseline;gap:8px}
-.ref .top .lbl{color:var(--blueLit)}
+.ref .top .lbl{color:var(--blueTxt)}
 /* Les trois valeurs de reference : chacune sa couleur, toujours
    la meme, ici comme dans les suggestions. */
 .ref .m i{color:var(--cream)}
-.ref .m span:nth-child(1) i{color:var(--blueLit)}
-.ref .m span:nth-child(3) i{color:var(--redLit)}
+.ref .m span:nth-child(1) i{color:var(--blueTxt)}
+.ref .m span:nth-child(3) i{color:var(--redTxt)}
 /* Le tempo de reference, a la taille de ce qu'il commande. Tous
    les ecarts de la liste se lisent par rapport a ce chiffre : il
    ne peut pas etre ecrit plus petit qu'eux. */
@@ -188,7 +217,19 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
    plutot que d'etre tronques : les etiquettes, les faits de mix,
    puis l'artiste. L'artiste part le premier, les faits ne partent
    jamais. */
-.mm .bd{flex:0 0 auto}
+/* Mesure a 320 px de large, avec les cinq etiquettes possibles :
+   « CLOTURE · HORS BULLE · DEMANDE · DEJA PASSE » faisait 254 px
+   a partir de x=116, donc cinquante pixels dans le vide. Le
+   widget ne defilait pas pour autant — il coupait. « DEJA
+   PASSE », la seule etiquette qui dise NE JOUE PAS CA, etait
+   precisement celle qui tombait hors de l'ecran.
+
+   Les etiquettes se comportent donc comme les faits de mix :
+   elles passent a la ligne entre deux etiquettes plutot que
+   d'etre tronquees. Une ligne de plus sur une rangee qui porte un
+   avertissement est le bon prix ; un avertissement invisible ne
+   vaut rien. L'artiste, lui, s'efface toujours en premier. */
+.mm .bd{flex:0 1 auto;white-space:normal}
 /* Le groupe des faits de mix ne retrograde jamais derriere
    l'artiste, mais quand il est a lui seul plus large que la ligne
    — « 8B · Enchainement · TENDANCE · RELANCE » —, il se coupe
@@ -196,19 +237,19 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
    Une etiquette a moitie affichee (« RELAI ») est pire qu'une
    etiquette sur la ligne suivante. */
 .mm .fx{flex:0 1 auto;white-space:normal}
-.mm .up{color:var(--blueLit)}
-.mm .ask{color:var(--redLit);font-weight:700}
+.mm .up{color:var(--blueTxt)}
+.mm .ask{color:var(--redTxt);font-weight:700}
 /* Deja joue : ce soir en rouge (une faute), une autre fois en gris
    (une information). La couleur porte le poids, pas le texte. */
 .mm .deja{color:var(--cream3);font-weight:700}
 /* La cloture reservee, quand son heure est venue. Elle est en tete
    parce que le moteur l'y met — l'etiquette dit pourquoi. */
-.mm .clo{color:var(--blueLit);font-weight:700}
+.mm .clo{color:var(--blueTxt);font-weight:700}
 /* « hors bulle » : une nuance, pas une alerte. Le morceau est
    propose parce qu'il n'y avait pas mieux DANS la bulle — le DJ
    doit pouvoir le reperer d'un coup d'oeil sans que ca crie. */
 .mm .hb{color:var(--dim);font-weight:700;letter-spacing:.04em}
-.mm .deja.grave{color:var(--redLit)}
+.mm .deja.grave{color:var(--redTxt)}
 /* ============================================================
    LE BPM, SORTI DE LA LIGNE DE METADONNEES.
 
@@ -248,12 +289,12 @@ color:var(--cream3);margin-top:4px}
    regarde, et elle s'affichait dans le meme gris que le reste de
    la ligne. Elle est maintenant en tete du groupe des faits de
    mix, en gras, et bleue quand elle est sure. */
-.mm .kk{font-weight:700;color:var(--blueLit);letter-spacing:.02em}
+.mm .kk{font-weight:700;color:var(--blueTxt);letter-spacing:.02em}
 .mm .kk.flou{color:var(--cream3)}
 .mm .kk.vide{color:var(--dim);font-weight:400}
 /* « HORS FENETRE » : la seule etiquette rouge qui parle de mix et
    pas de programmation. Elle dit « celui-la, tu le coupes ». */
-.mm .hf{color:var(--redLit);font-weight:700;letter-spacing:.04em}
+.mm .hf{color:var(--redTxt);font-weight:700;letter-spacing:.04em}
 /* « rare dans ta bibliotheque » : une explication, pas un reproche.
    Le morceau est la parce qu'il n'y avait rien de mieux — la
    mention evite que le DJ croie a une erreur de Liaison. */
@@ -323,8 +364,8 @@ background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-
 padding-top:6px;border-top:1px solid var(--wire);white-space:nowrap;overflow:hidden}
 .plan b{font-weight:400;color:var(--cream3);letter-spacing:.1em;text-transform:uppercase;font-size:8.5px}
 .plan s{text-decoration:none;color:var(--cream);font-weight:700}
-.plan .k1 s{color:var(--blueLit)}
-.plan .k3 s{color:var(--redLit)}
+.plan .k1 s{color:var(--blueTxt)}
+.plan .k3 s{color:var(--redTxt)}
 .plan.wait{color:var(--cream3);border-top-color:var(--wire);display:block}
 /* Un calcul rate n'est pas un calcul en cours : il ne doit pas
    ressembler a une attente. */
@@ -492,7 +533,49 @@ transition:.18s;pointer-events:none}
 .row[data-drag]::after{content:"⠿";position:absolute;left:3px;top:50%;transform:translateY(-50%);
   font-size:11px;line-height:1;color:var(--cream3);opacity:0;transition:.12s;pointer-events:none}
 .row[data-drag]:hover::after{opacity:.55}
-.row.glisse{outline:1.5px solid var(--blueLit);outline-offset:-1px}
+/* ------------------------------------------------------------
+   LE GESTE, CONFIRME SANS UN MOT.
+
+   Le glisser d'une ligne vers un deck existe depuis le debut, et
+   il ne repondait rien : un trait bleu de 1,5 px pendant 700 ms.
+   Le geste le plus satisfaisant du widget — attraper un morceau
+   et le poser sur une platine — n'avait aucun accuse de
+   reception.
+
+   On lui en donne un, et rien d'autre : la ligne se souleve, le
+   filet bleu balaye son bord gauche, puis tout se retasse.
+   Aucune etiquette, aucun compteur, aucune phrase — le widget
+   vient d'etre desencombre, ce n'est pas pour y remettre du
+   texte. Il ne DIT pas que c'est parti : il REAGIT.
+
+   450 ms. Au-dela, une animation dans une cabine devient une
+   chose qu'on attend au lieu d'une chose qu'on remarque.
+   ------------------------------------------------------------ */
+@keyframes envoi{
+  0%  {transform:translateY(0) scale(1)}
+  22% {transform:translateY(-2px) scale(1.012)}
+  100%{transform:translateY(0) scale(1)}
+}
+@keyframes balai{
+  0%  {opacity:0;transform:scaleY(.2)}
+  25% {opacity:1;transform:scaleY(1)}
+  100%{opacity:0;transform:scaleY(1)}
+}
+.row.glisse{outline:1.5px solid var(--blueLit);outline-offset:-1px;
+background:var(--deep2);animation:envoi .45s cubic-bezier(.22,1,.36,1);
+z-index:2}
+/* Le balai : un filet bleu qui monte le long du bord gauche, la
+   ou le morceau vient de partir. C'est le meme filet que celui du
+   morceau en cours (.ref::before) — la ligne rejoint, le temps
+   d'un battement, la place de ce qui tourne. */
+.row.glisse::before{content:"";position:absolute;left:-1px;top:-1px;bottom:-1px;width:2px;
+background:var(--blueLit);border-radius:2px;transform-origin:50% 100%;
+animation:balai .45s ease-out;pointer-events:none}
+.row.glisse::after{opacity:1}
+@media(prefers-reduced-motion:reduce){
+  .row.glisse{animation:none}
+  .row.glisse::before{animation:none;opacity:1}
+}
 .row.sansFichier{cursor:default}
 .row.sansFichier::after{display:none}
 
@@ -2165,7 +2248,10 @@ document.addEventListener('dragstart', e => {
   if (ligne.classList.contains('sansFichier')) { e.preventDefault(); return; }
   e.preventDefault();                     /* sinon Chromium glisse du texte */
   ligne.classList.add('glisse');
-  setTimeout(() => ligne.classList.remove('glisse'), 700);
+  /* 460 ms : la duree de l'animation, plus un battement. A 700 ms
+     la ligne restait allumee apres la fin du mouvement, ce qui la
+     faisait paraitre bloquee. */
+  setTimeout(() => ligne.classList.remove('glisse'), 460);
   window.liaison.dragTrack(Number(ligne.dataset.drag));
 });
 /* Une ligne dont le fichier est introuvable ne doit pas donner l'illusion

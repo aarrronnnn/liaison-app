@@ -161,16 +161,47 @@ function tamiser(classement, opt) {
   if (!titres.length) return Object.assign({}, classement, { titres: [], deja: 0 });
   let deja = 0;
   const manquants = [];
+  /* On ne jette plus ce que le DJ possede : on le MARQUE.
+
+     Version precedente : la liste ne montrait que les absents.
+     Un top 25 arrivait donc ampute, sans qu'on voie jamais ce
+     qu'on avait deja — « 18 ecartes » en petit sous la liste ne
+     remplace pas de le voir. Or c'est precisement le rapport
+     entre les deux qui renseigne : dix-huit lignes calmes et
+     sept lignes rouges se lisent d'un coup d'oeil, et le
+     classement redevient verifiable ligne a ligne.
+
+     `titres` garde son sens — ce qui manque, rien d'autre — pour
+     tout ce qui s'en sert deja. `tout` est la liste complete,
+     dans l'ordre du classement, chaque entree portant `a` : vrai
+     si elle est dans la bibliotheque. Les liens d'achat ne sont
+     calcules que pour les absents : on n'achete pas ce qu'on a. */
+  const tout = [];
   for (const t of titres) {
     const trouve = o.match && o.library
       ? o.match((t.artist ? t.artist + ' ' : '') + t.title, o.library, 0.5) : null;
-    if (trouve) { deja++; continue; }
-    manquants.push(Object.assign({}, t, {
+    if (trouve) {
+      deja++;
+      tout.push(Object.assign({}, t, { a: true, achats: [] }));
+      continue;
+    }
+    const e = Object.assign({}, t, {
+      a: false,
       achats: o.buyLinks ? o.buyLinks({ artist: t.artist, title: t.title }) : []
-    }));
+    });
+    manquants.push(e);
+    tout.push(e);
   }
+  /* La limite decoupe une FENETRE dans le classement — le top 25
+     d'un releve qui en compte cinquante — et `titres` est ce qui
+     manque DANS cette fenetre. Les deux listes decrivent donc le
+     meme ecran : impossible d'afficher « 7 a acheter » au-dessus
+     d'une liste qui n'en montrerait que quatre. */
+  const lim = o.limite || 25;
+  const fenetre = tout.slice(0, lim);
   return Object.assign({}, classement, {
-    titres: manquants.slice(0, o.limite || 25),
+    titres: fenetre.filter(e => !e.a),
+    tout: fenetre,
     deja: deja,
     vus: titres.length
   });

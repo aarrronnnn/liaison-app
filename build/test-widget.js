@@ -353,7 +353,27 @@ const SOS = [
     const rangees = await p.evaluate(() => {
       poserDensite('cabine', false);
       const btns = [...document.querySelectorAll('.foot > .seg, .foot > .chip')];
-      return new Set(btns.map(b => Math.round(b.getBoundingClientRect().top))).size;
+      /* On compte des RANGEES, pas des ordonnees.
+
+         La version precedente groupait par `top` arrondi : les
+         pastilles « mini » sont deux pixels plus courtes que les
+         autres et centrees dans la rangee, donc leur haut tombe a
+         381 quand celui des grandes tombe a 380. Une seule rangee
+         visible etait comptee deux, et l'essai denoncait un
+         retour a la ligne qui n'existait pas — pendant qu'un vrai
+         debordement, lui, passait ailleurs inapercu.
+
+         Deux boutons sont sur la meme rangee s'ils se CHEVAUCHENT
+         verticalement. C'est la seule definition qui resiste a
+         des hauteurs differentes. */
+      const boites = btns.map(b => b.getBoundingClientRect())
+                         .sort((a, z) => a.top - z.top);
+      let n = 0, bas = -Infinity;
+      for (const b of boites) {
+        if (b.top >= bas) { n++; bas = b.bottom; }
+        else if (b.bottom > bas) bas = b.bottom;
+      }
+      return n;
     });
     verifier('9quater. le pied tient sur une seule rangee', rangees === 1, rangees + ' rangee(s)');
     await p.evaluate(() => poserDensite('cabine', false));
