@@ -71,8 +71,27 @@ if (fait.status !== 0 || !fs.existsSync(fichier)) {
    architecture des qu'on n'est pas sur la machine qui l'a
    installe — et s'il tourne, le premier volet du test le dira.
    ------------------------------------------------------------ */
-function lireDansUnAutreProcessus(env) {
-  const code = `
+/* Neutraliser ffprobe-static au niveau du module, comme le ferait
+   une machine dont le binaire refuse de demarrer.
+
+   Premiere version de ce test : on vidait le PATH et on pointait
+   LIAISON_FFPROBE vers un programme qui echoue. Insuffisant — le
+   chemin de ffprobe-static est ABSOLU, donc sur Linux, ou son
+   binaire est du bon type, il repondait et le repli n'etait jamais
+   emprunte. Le test affirmait alors « on bascule sur ffmpeg » et
+   tombait, non pas parce que le code avait tort, mais parce qu'il
+   mesurait le mecanisme au lieu de la propriete.
+
+   On remplace donc l'export du module avant tout chargement : la
+   panne du Mac est reproduite a l'identique partout. */
+const PREPARATION = `
+  const cheminPaquet = require.resolve('ffprobe-static', { paths: [${JSON.stringify(path.join(__dirname, '..'))}] });
+  require.cache[cheminPaquet] = { id: cheminPaquet, filename: cheminPaquet,
+    loaded: true, children: [], paths: [], exports: { path: '/introuvable/ffprobe' } };
+`;
+
+function lireDansUnAutreProcessus(env, sansFfprobe) {
+  const code = (sansFfprobe ? PREPARATION : '') + `
     const { probe, commentOnLitLesTags } = require(${JSON.stringify(path.join(__dirname, '..', 'src', 'library.js'))});
     probe(${JSON.stringify(fichier)}).then(r => {
       process.stdout.write(JSON.stringify({ lecteur: commentOnLitLesTags(), r: r }));
@@ -92,10 +111,10 @@ verifier('avec l\'outillage de la machine, les tags se lisent',
 
 /* 2. Le cas du Mac Apple Silicon : aucun ffprobe ne repond. */
 const sansFfprobe = lireDansUnAutreProcessus({
-  LIAISON_FFPROBE: process.platform === 'win32' ? 'cmd /c exit 1' : '/bin/false',
+  LIAISON_FFPROBE: '',                 /* aucune preference : on prend la chaine normale */
   PATH: dossier,                       /* un dossier sans le moindre outil */
   LIAISON_FFMPEG: FFMPEG               /* ffmpeg reste joignable par son chemin */
-});
+}, true);
 const t = (sansFfprobe.r && sansFfprobe.r.tags) || {};
 verifier('sans aucun ffprobe, on bascule sur ffmpeg',
   /ffmpeg/.test(sansFfprobe.lecteur || ''), sansFfprobe.lecteur || JSON.stringify(sansFfprobe).slice(0, 160));
@@ -109,14 +128,14 @@ verifier('et la duree est retrouvee sur la sortie d\'erreur',
 
 /* 3. Le morceau complet, pas seulement les tags bruts : c'est ce
       que le widget affiche. */
-const exterieurCode = `
+const exterieurCode = PREPARATION + `
   const ext = require(${JSON.stringify(path.join(__dirname, '..', 'src', 'exterieur.js'))});
   ext.depuisFichier(${JSON.stringify(fichier)}, new Set()).then(t =>
     process.stdout.write(JSON.stringify(t)));
 `;
 const r3 = spawnSync(process.execPath, ['-e', exterieurCode], {
   env: Object.assign({}, process.env, {
-    LIAISON_FFPROBE: '/bin/false', PATH: dossier, LIAISON_FFMPEG: FFMPEG
+    LIAISON_FFPROBE: '', PATH: dossier, LIAISON_FFMPEG: FFMPEG
   }), encoding: 'utf8'
 });
 let morceau = null;
