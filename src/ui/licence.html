@@ -249,10 +249,23 @@ document.querySelectorAll('[data-go]').forEach(b => b.onclick = () => go(b.datas
 function renderState(st) {
   ST = st;
   const s = $('#state');
-  if (st.tier === 'trial') s.textContent = 'Essai — ' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + ' restants';
+  /* Quand les jours sont ecoules mais que l'essai reste ouvert
+     faute de soirees jouees, on dit ce qu'il reste A FAIRE et non
+     ce qu'il reste a attendre : « 1 jour » affiche trois semaines
+     d'affilee n'est plus une information, c'est un bruit. */
+  const parSoirees = st.trialRaison === 'soirees';
+  const resteS = Math.max(1, (st.trialSoireesRequis | 0) - (st.trialSoirees | 0));
+  if (st.tier === 'trial') {
+    s.textContent = parSoirees
+      ? 'Essai — encore ' + (resteS > 1 ? resteS + ' soirées à jouer' : 'une soirée à jouer')
+      : 'Essai — ' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + ' restants';
+  }
   else if (st.tier === 'expire') s.textContent = 'Essai terminé';
   else s.textContent = 'Licence ' + st.label + ' — active';
-  $('#trialDays').textContent = st.trialLeft + ' jours';
+  const jd = $('#trialDays');
+  if (jd) jd.textContent = parSoirees
+    ? (resteS > 1 ? resteS + ' soirées' : '1 soirée')
+    : st.trialLeft + ' jours';
 }
 
 /* --- offres --- */

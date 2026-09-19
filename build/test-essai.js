@@ -37,12 +37,25 @@ os.homedir = () => MAISON;
 
 /* Le require vient APRES le detournement : license.js lit os.homedir
    a l'usage, pas au chargement, mais autant ne rien laisser au hasard. */
-const { License, TRIAL_DAYS } = require('../src/license.js');
+const { License, TRIAL_DAYS, TRIAL_SOIREES, TRIAL_PLAFOND_J } = require('../src/license.js');
 const LIC = path.join(DONNEES, 'license.json');
 
 let echecs = 0;
-function cas(quoi, attendu) {
+
+/* ------------------------------------------------------------
+   Les cas de fraude se jouent avec les soirees DEJA FAITES.
+
+   Depuis que l'essai se compte en soirees, un essai dont les
+   jours sont ecoules mais dont les soirees ne le sont pas reste
+   ouvert — c'est le but. Les neuf fraudes ci-dessous portent sur
+   l'horloge et les fichiers, pas sur les soirees : on pose donc
+   le compteur a son maximum pour que « zero jour restant » ait
+   le meme sens qu'avant, et on eprouve la regle des soirees
+   separement, plus bas.
+   ------------------------------------------------------------ */
+function cas(quoi, attendu, soirees) {
   const l = new License(LIC);
+  l.soirees = () => (soirees == null ? TRIAL_SOIREES : soirees);
   l.ensureTrial();
   const reste = l.trialLeft();
   const ok = reste === attendu;
@@ -106,6 +119,103 @@ fs.rmSync(DONNEES, { recursive: true, force: true });
 fs.mkdirSync(DONNEES, { recursive: true });
 cas('9. temoin d\'avant la mise a jour : accepte', 0);
 
+/* ============================================================
+   ET LA REGLE QUI REMPLACE LE COMPTE EN JOURS.
+
+   Le site promet depuis des mois que « l'essai se compte en
+   soirees, pas en jours ». Ces cas-la sont la promesse, ecrite
+   en code executable : si l'un d'eux tombe, la page ment.
+
+   Le sens de chacun est donne en clair, parce qu'un essai de
+   licence qu'on ne comprend pas est un essai qu'on desactivera
+   au premier faux positif.
+   ============================================================ */
+console.log('\nl\'essai se compte en soirees\n');
+
+function soir(quoi, jours, soirees, ouvert) {
+  fs.rmSync(racine, { recursive: true, force: true });
+  fs.mkdirSync(MAISON, { recursive: true });
+  fs.mkdirSync(DONNEES, { recursive: true });
+  decalage = 0;
+  const l0 = new License(LIC);
+  l0.soirees = () => soirees;
+  l0.ensureTrial();                       /* jour 0 : l'essai demarre */
+  decalage += jours * JOUR;
+  const l = new License(LIC);
+  l.soirees = () => soirees;
+  l.ensureTrial();
+  const reste = l.trialLeft();
+  const ok = (reste > 0) === ouvert;
+  if (!ok) echecs++;
+  console.log('  %s %s %s',
+    ok ? 'ok  ' : 'RATE', quoi.padEnd(56),
+    (reste > 0 ? 'ouvert (' + reste + ')' : 'ferme'));
+  return l;
+}
+
+/* Le plancher : les sept jours sont un minimum, jamais un
+   maximum. Jouer ses deux soirees des le premier week-end ne
+   doit PAS raccourcir l'essai — ce serait punir celui qui se
+   sert de l'app. */
+soir('deux soirees des le 3e jour : l\'essai continue', 3, 5, true);
+
+/* Le cas qui motive tout : le DJ de mariage. Il installe un
+   mardi, sa date est dans trois semaines. Avant, son essai se
+   fermait avant qu'il ait ouvert l'app en cabine une seule fois. */
+soir('8 jours, aucune soiree jouee : l\'essai reste ouvert', 8, 0, true);
+soir('30 jours, une seule soiree : l\'essai reste ouvert', 30, 1, true);
+
+/* Et il se ferme des que le DJ a pu juger. */
+soir('8 jours, deux soirees jouees : l\'essai se ferme', 8, TRIAL_SOIREES, false);
+soir('40 jours, trois soirees jouees : ferme', 40, 3, false);
+
+/* La butee. Quelqu'un qui installe et n'ouvre jamais son logiciel
+   de mix n'essaie rien : il stocke. Elle protege aussi de la
+   boucle infinie si la detection des decks echoue sur sa
+   machine — sans elle, un bug de detection donnerait un essai a
+   vie. */
+soir('61 jours sans une seule soiree : la butee ferme', TRIAL_PLAFOND_J + 1, 0, false);
+soir('59 jours sans soiree : encore ouvert, de justesse', TRIAL_PLAFOND_J - 1, 0, true);
+
+/* Ce que l'interface lit pour choisir entre « 5 j » et « encore
+   une soiree ». Afficher « 1 jour » pendant trois semaines
+   d'affilee serait faux, et cesserait d'etre cru. */
+{
+  const a = soir('pendant les 7 jours : on compte en jours', 2, 0, true);
+  const ok1 = a.trialRaison() === 'jours';
+  if (!ok1) echecs++;
+  console.log('  %s %s %s', ok1 ? 'ok  ' : 'RATE',
+    'et la raison annoncee est « jours »'.padEnd(56), a.trialRaison());
+
+  const b = soir('apres les 7 jours : on compte en soirees', 9, 0, true);
+  const ok2 = b.trialRaison() === 'soirees';
+  if (!ok2) echecs++;
+  console.log('  %s %s %s', ok2 ? 'ok  ' : 'RATE',
+    'et la raison annoncee est « soirees »'.padEnd(56), b.trialRaison());
+  const ok3 = b.status().trialSoireesRequis === TRIAL_SOIREES;
+  if (!ok3) echecs++;
+  console.log('  %s %s', ok3 ? 'ok  ' : 'RATE',
+    'le statut porte le nombre de soirees attendu'.padEnd(56));
+}
+
+/* Un compteur de soirees casse ne doit JAMAIS fermer la porte a
+   un client : il rend zero, donc l'essai reste ouvert. L'erreur
+   coute une semaine d'essai de trop, pas un client perdu. */
+{
+  fs.rmSync(racine, { recursive: true, force: true });
+  fs.mkdirSync(MAISON, { recursive: true }); fs.mkdirSync(DONNEES, { recursive: true });
+  decalage = 0;
+  const l0 = new License(LIC); l0.ensureTrial();
+  decalage += 9 * JOUR;
+  const l = new License(LIC);
+  l.soirees = () => { throw new Error('journal illisible'); };
+  l.ensureTrial();
+  const ok = l.trialLeft() > 0;
+  if (!ok) echecs++;
+  console.log('  %s %s', ok ? 'ok  ' : 'RATE',
+    'un compteur de soirees en panne laisse l\'essai ouvert'.padEnd(56));
+}
+
 /* ---------- menage ---------- */
 Date.now = vraiNow;
 os.homedir = vraiHome;
@@ -115,4 +225,4 @@ if (echecs) {
   console.error('\n' + echecs + ' cas d\'essai en echec.');
   process.exit(1);
 }
-console.log('\nessai : 9 fraudes essayees, la protection tient.');
+console.log('\nessai : 9 fraudes essayees, la protection tient, et il se compte en soirees.');

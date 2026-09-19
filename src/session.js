@@ -338,6 +338,11 @@ function shareLinks(url, sessionName) {
 }
 
 /* ---------- journal de set ---------- */
+/* Les deux seuils qui definissent une vraie soiree. Voir
+   soireesJouees() plus bas pour le raisonnement. */
+const SOIREE_TITRES = 8;
+const SOIREE_MINUTES = 45;
+
 class SetLog {
   constructor(file) { this.file = file; this.sets = this._load(); }
   _load() { return ecrire.lireJSON(this.file, []); }
@@ -395,8 +400,59 @@ class SetLog {
       at: Date.now(), transition: transition || null });
     this._save();
   }
-  list() { return this.sets.map(s => ({ id: s.id, name: s.name, pack: s.pack, at: s.at, n: s.played.length,
-    duree: s.played.length > 1 ? Math.round((s.played[s.played.length - 1].at - s.played[0].at) / 60000) : 0 })); }
+  /* `played` est lu depuis un fichier JSON sur le disque du DJ. Il
+     peut etre absent — un set ouvert et jamais joue — ou abime :
+     coupure de courant pendant l'ecriture, disque plein, edition
+     a la main. `s.played.length` jetait alors, et depuis que
+     l'essai se compte en soirees cette fonction porte le calcul
+     de la LICENCE : un journal abime aurait pu verrouiller une
+     app payee. On traite donc l'absence comme une session vide,
+     ce qui est la lecture genereuse et la seule sans risque. */
+  list() { return (this.sets || []).map(s => {
+    const j = Array.isArray(s && s.played) ? s.played : [];
+    return { id: s && s.id, name: s && s.name, pack: s && s.pack, at: s && s.at, n: j.length,
+             duree: j.length > 1 ? Math.round((j[j.length - 1].at - j[0].at) / 60000) : 0 };
+  }); }
+
+  /* ============================================================
+     QU'EST-CE QU'UNE VRAIE SOIREE ?
+
+     La question n'est pas rhetorique : c'est elle qui decide
+     quand l'essai se termine.
+
+     Jusqu'ici on comptait `setlog.list().length` — le nombre de
+     sessions OUVERTES. Or une session s'ouvre toute seule des
+     qu'un morceau est detecte sur un deck. Brancher son
+     controleur cinq minutes un mardi pour verifier que Liaison
+     capte bien, c'est une session. Le DJ de mariage qui faisait
+     trois essais a la maison arrivait donc au bout de son essai
+     en ayant « joue trois soirees » — et sans avoir jamais vu
+     l'app en cabine, la ou elle sert.
+
+     Une vraie soiree, c'est DEUX conditions ensemble :
+
+       - au moins 8 titres. En dessous, on n'a pas enchaine,
+         on a teste.
+       - au moins 45 minutes entre le premier et le dernier.
+         Huit titres en dix minutes, c'est qu'on a cliqué.
+
+     Les deux ensemble, parce que chacune seule se franchit par
+     accident : on peut laisser tourner une playlist deux heures
+     sans mixer (duree seule), et on peut charger huit morceaux
+     d'affilee pour les ecouter (nombre seul).
+
+     Ces deux seuils sont le seul reglage de ce mecanisme, et ils
+     sont volontairement genereux : mieux vaut offrir une soiree
+     de trop que fermer la porte au nez de quelqu'un qui n'a pas
+     encore pu juger.
+     ============================================================ */
+  soireesJouees() {
+    let n = 0;
+    for (const s of this.list()) {
+      if ((s.n | 0) >= SOIREE_TITRES && (s.duree | 0) >= SOIREE_MINUTES) n++;
+    }
+    return n;
+  }
   get(id) { return this.sets.find(s => s.id === id); }
 
   /* ----------------------------------------------------------
@@ -554,4 +610,5 @@ class SetLog {
   }
 }
 
-module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP };
+module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP,
+                   SOIREE_TITRES, SOIREE_MINUTES };

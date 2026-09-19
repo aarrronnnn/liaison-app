@@ -1060,6 +1060,16 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
         <input type="checkbox" id="optLogin"> Lancer Liaison au demarrage de la machine</label>
       <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
         <input type="checkbox" id="optAnnounce"> Pro DJ Link : se declarer sur le reseau si aucun paquet n'arrive</label>
+      <!-- Le reglage existe ICI aussi, et pas seulement dans la
+           fenetre qui s'ouvre au moment d'une panne. Un accord
+           donne une fois dans une boite de dialogue, un soir, doit
+           pouvoir etre repris a froid — sinon ce n'est pas un
+           accord, c'est un piege. -->
+      <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
+        <input type="checkbox" id="optPannes"> Envoyer un rapport anonyme quand Liaison plante</label>
+      <p class="tips" style="margin-top:2px">Uniquement la version, ton système et la trace technique —
+        jamais un titre, jamais un nom de fichier, jamais ton nom. L'envoi se fait au démarrage
+        suivant, <b>jamais pendant que tu mixes</b>.</p>
     </div>
   </div>
 </div>
@@ -1420,14 +1430,44 @@ function renderSrcOpts() {
   if (tp) tp.onchange = () => window.liaison.setConfig({ source: 'traktor', sourceOpts: { port: Number(tp.value) } });
 }
 
+/* ------------------------------------------------------------
+   DIRE L'ESSAI JUSTE.
+
+   Tant que les jours courent, on affiche des jours — c'est ce que
+   le DJ comprend. Quand les jours sont ecoules mais que l'essai
+   reste ouvert parce qu'il n'a pas encore joue ses deux soirees,
+   afficher « 1 j » serait faux et le resterait pendant des
+   semaines : on dirait tous les matins qu'il reste un jour, et
+   au bout de trois fois plus personne ne croit le chiffre.
+
+   Dans ce cas on dit ce qui est vrai : ce qui reste a faire,
+   pas ce qui reste a attendre.
+   ------------------------------------------------------------ */
+function essaiCourt(st) {
+  if (st.trialRaison === 'soirees') {
+    const reste = Math.max(1, (st.trialSoireesRequis | 0) - (st.trialSoirees | 0));
+    return reste > 1 ? reste + ' soirées' : '1 soirée';
+  }
+  return st.trialLeft + ' j';
+}
+function essaiLong(st) {
+  if (st.trialRaison === 'soirees') {
+    const reste = Math.max(1, (st.trialSoireesRequis | 0) - (st.trialSoirees | 0));
+    return 'Essai — il te reste <b>' + (reste > 1 ? reste + ' soirées à jouer' : 'une soirée à jouer')
+         + '</b>. Les jours sont écoulés, mais l\'essai reste ouvert tant que tu n\'as pas '
+         + 'pu juger Liaison en cabine.';
+  }
+  return 'Essai — <b>' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + '</b> restants';
+}
+
 function renderLic(st){
   if (!st) return;
-  $('#licPill').textContent = st.label + (st.tier === 'trial' ? ' · ' + st.trialLeft + ' j' : '');
+  $('#licPill').textContent = st.label + (st.tier === 'trial' ? ' · ' + essaiCourt(st) : '');
   $('#licPill').className = 'pill' + (st.tier === 'expire' ? '' : ' ok');
   const bits = [];
   bits.push('Machine : <b>' + esc(st.deviceName) + '</b>');
   if (st.key) bits.push('Cle : <b>' + esc(st.key) + '</b>');
-  if (st.tier === 'trial') bits.push('Essai — <b>' + st.trialLeft + ' jours</b> restants');
+  if (st.tier === 'trial') bits.push(essaiLong(st));
   if (st.tier === 'expire') bits.push("<b>Essai termine.</b> Le widget reste installe et continue d'afficher le morceau en cours, mais il ne propose plus d'enchainement. Un <b>pass soiree a 4,95 €</b> rouvre tout pendant 48 heures — assez pour une soiree qui commence samedi 19 h et finit dimanche 5 h. Un abonnement Resident revient moins cher des la troisieme soiree du mois.");
   if (st.until) bits.push('Valide jusqu au <b>' + new Date(st.until).toLocaleDateString('fr-FR') + '</b>');
   if (st.cacheUntil) bits.push('Fonctionne hors ligne jusqu au <b>' + new Date(st.cacheUntil).toLocaleDateString('fr-FR') + '</b>');
@@ -1843,11 +1883,14 @@ $('#event').onchange = renderPack;
 $('#gw').oninput = () => $('#gwv').textContent = $('#gw').value + ' %';
 $('#drop').oninput = () => $('#dropv').textContent = $('#drop').value + ' %';
 
-['optWidget','optLogin','optAnnounce'].forEach(id => {
+['optWidget','optLogin','optAnnounce','optPannes'].forEach(id => {
   $('#' + id).onchange = () => window.liaison.setConfig({
     autoWidget: $('#optWidget').checked,
     launchAtLogin: $('#optLogin').checked,
-    prolinkAnnounce: $('#optAnnounce').checked
+    prolinkAnnounce: $('#optAnnounce').checked,
+    /* 'oui' ou 'non' : le troisieme etat ('une' — juste celui-la)
+       n'existe que dans la fenetre de panne et ne se coche pas. */
+    rapportPannes: $('#optPannes').checked ? 'oui' : 'non'
   });
 });
 $('#saveCtx').onclick = async () => {
@@ -2209,9 +2252,9 @@ async function bandeau() {
     const l = await window.liaison.licenseStatus();
     if (l) {
       const essai = l.tier === 'trial';
-      set('#bLic', essai ? (l.trialLeft + ' j') : (l.label || l.tier),
+      set('#bLic', essai ? essaiCourt(l) : (l.label || l.tier),
           essai ? 'essai en cours' : 'activée sur cette machine',
-          essai ? (l.trialLeft <= 3 ? 'att' : 'info') : 'ok');
+          essai ? ((l.trialRaison === 'soirees' || l.trialLeft <= 3) ? 'att' : 'info') : 'ok');
     }
   } catch (e) {}
 
@@ -2525,6 +2568,7 @@ window.liaison.on('app', () => renderApps());
   $('#optWidget').checked = C.config.autoWidget !== false;
   $('#optLogin').checked = C.config.launchAtLogin !== false;
   $('#optAnnounce').checked = !!C.config.prolinkAnnounce;
+  $('#optPannes').checked = C.config.rapportPannes === 'oui';
   renderSources(); renderApps();
   const sets = await window.liaison.listSets();
   const opts = sets.length

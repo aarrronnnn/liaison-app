@@ -293,6 +293,69 @@ const SOS = [
              c.key === '—', 'affiche « ' + c.key + ' »');
   }
 
+  /* ============================================================
+     11. LES PROPOSITIONS ARRIVENT EN CASCADE.
+
+     « qu'elles arrivent une par une avec un petit effet »
+
+     Cinq lignes qui apparaissent ensemble sont un
+     rafraichissement ; cinq lignes qui se posent l'une apres
+     l'autre sont une reponse. Toute la difference tient dans le
+     decalage, et un decalage est exactement le genre de detail
+     qu'une refonte de CSS emporte sans que personne le remarque
+     — puisque la liste continue de s'afficher.
+
+     On verifie donc les trois proprietes qui font l'effet, et
+     pas « il y a une animation » :
+       - chaque ligne demarre APRES la precedente,
+       - le decalage plafonne (sept suggestions ne font pas
+         attendre un tiers de seconde de plus que cinq),
+       - le remplissage est `backwards`, faute de quoi les cinq
+         lignes clignotent ensemble avant de se decaler.
+     ============================================================ */
+  {
+    const a = await p.evaluate((sug) => {
+      renderSug(sug);
+      return [].map.call(document.querySelectorAll('#list .row'), el => {
+        const cs = getComputedStyle(el);
+        return { nom: cs.animationName, delai: parseFloat(cs.animationDelay),
+                 duree: parseFloat(cs.animationDuration), fill: cs.animationFillMode };
+      });
+    }, SUG);
+    verifier('11. chaque proposition a une animation d\'arrivee',
+             a.length > 0 && a.every(x => x.nom === 'arrivee'),
+             a.map(x => x.nom).join(', '));
+    verifier('11bis. et elles arrivent l\'une APRES l\'autre',
+             a.every((x, i) => i === 0 ? x.delai === 0 : x.delai > a[i - 1].delai),
+             a.map(x => Math.round(x.delai * 1000) + 'ms').join(' · '));
+    verifier('11ter. invisible avant son tour (backwards)',
+             a.every(x => /backwards|both/.test(x.fill)), a[0] && a[0].fill);
+    /* Le dernier ne doit pas se faire attendre : au-dela d'un
+       quart de seconde, en cabine, on attend la liste au lieu de
+       la lire. */
+    const dernier = a[a.length - 1];
+    verifier('11quater. la derniere ligne n\'attend pas',
+             dernier && (dernier.delai + dernier.duree) <= 0.6,
+             dernier ? Math.round((dernier.delai + dernier.duree) * 1000) + ' ms au total' : '');
+
+    /* Avec sept propositions — la formule Collectif — le
+       decalage doit plafonner au lieu de s'allonger. */
+    const sept = await p.evaluate((sug) => {
+      /* SUG n'a que trois entrees : concat + slice(0,7) en rendait
+         six, et l'essai denoncait un plafond qui marchait. On
+         fabrique donc VRAIMENT sept lignes. */
+      const l = Array.from({ length: 7 },
+                           (_, i) => Object.assign({}, sug[i % sug.length], { id: 100 + i }));
+      renderSug(l);
+      return [].map.call(document.querySelectorAll('#list .row'),
+                         el => parseFloat(getComputedStyle(el).animationDelay));
+    }, SUG);
+    verifier('11quinquies. le decalage plafonne a sept propositions',
+             sept.length === 7 && sept[6] === sept[5],
+             sept.map(d => Math.round(d * 1000)).join(' · '));
+    await p.evaluate((sug) => renderSug(sug), SUG);
+  }
+
   /* ---------- 7. la cabine etroite ---------- */
   {
     await p.setViewportSize({ width: 320, height: 620 });

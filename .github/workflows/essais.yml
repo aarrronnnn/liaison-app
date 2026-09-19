@@ -1,0 +1,79 @@
+name: Essais
+
+# ============================================================
+#  POURQUOI CE FICHIER EXISTE.
+#
+#  Le projet compte pres de quatre cents controles, dont environ
+#  cent soixante qui RENDENT vraiment les ecrans dans un
+#  navigateur : contrastes mesures, debordements, geometrie du
+#  pictogramme, cascade des propositions.
+#
+#  Ceux-la ne tournent que si Playwright est installe. Il ne
+#  l'est pas sur la machine de developpement — et les essais,
+#  correctement, se taisent et passent quand il manque. Resultat :
+#  les garde-fous visuels etaient « parfois allumes », et en
+#  pratique presque jamais. Deux debordements du widget sont
+#  restes caches des semaines pour cette seule raison : les
+#  essais tournaient dans un conteneur SANS LES POLICES, donc
+#  avec des metriques de texte fausses.
+#
+#  Ici, ils tournent a chaque poussee, avec les polices du depot,
+#  sur une machine qui a le navigateur. C'est la seule facon que
+#  « 4,5:1 » veuille dire quelque chose.
+# ============================================================
+
+on:
+  push:
+    branches: ['**']
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  essais:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # `npm ci` installe aussi electron, qui pese lourd et ne sert
+      # a rien ici : aucun essai n'ouvre de fenetre Electron, ils
+      # rendent du HTML dans Chromium. On evite donc son
+      # telechargement post-installation.
+      - name: Dependances
+        run: npm ci
+        env:
+          ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
+
+      - name: Navigateur de rendu
+        run: npx --yes playwright@1 install --with-deps chromium
+
+      # Playwright est installe par npx, donc absent de node_modules :
+      # les essais le cherchent avec require(). On le pose sans
+      # toucher au package.json — la dependance est un outil de
+      # verification, pas une dependance de l'application.
+      - name: Poser playwright pour require()
+        run: npm install --no-save playwright@1
+
+      - name: Toute la suite
+        run: npm run verifier
+
+      # Le site vit dans un autre depot. Quand il est disponible a
+      # cote — ce qui n'est pas le cas ici — ses propres controles
+      # tournent aussi. On ne le clone pas : ce serait un couplage
+      # de plus pour peu de gain, et construire-tout.sh les lance
+      # deja a chaque construction du site.
+      # Mesure faite le 19 septembre 2026, sur cette meme image
+      # Linux : 552 controles ici contre 381 sur le Mac de
+      # developpement. Les 171 de difference sont EXACTEMENT ceux
+      # qui rendent les ecrans — ceux qui ne tournaient jamais.
+      - name: Ce qui a ete verifie
+        if: always()
+        run: |
+          echo "Les essais de rendu ont tourne avec Chromium ET les polices du depot."
+          echo "Un contraste mesure ici vaut ce qu'il annonce."
+          echo "Reference : 552 controles attendus, contre 381 sans navigateur."

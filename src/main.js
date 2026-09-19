@@ -13,6 +13,7 @@ const { GuestServer, SetLog, qrPNG, shareLinks } = require('./session');
 const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
 const exterieur = require('./exterieur');
+const incidents = require('./incidents');
 const { AppWatcher } = require('./watcher');
 const { StructurePool, StructureCache } = require('./structure');
 const { AnalysisService } = require('./analysis');
@@ -58,6 +59,11 @@ const SCAN = () => path.join(DIR(), 'scan-cache.json');
 const DEFAULTS = {
   source: null, sourceOpts: {},
   autoLibrary: true, autoWidget: true, launchAtLogin: true, prolinkAnnounce: false,
+  /* undefined tant que la question n'a pas ete posee : c'est ce qui
+     distingue « il n'a pas encore repondu » de « il a dit non ».
+     Aucun envoi dans les deux cas — la valeur par defaut est le
+     silence. */
+  rapportPannes: undefined,
   libraryMode: null, libraryPath: null,
   pack: 'fr-club', sessionName: 'Session', guestWeight: 0.5,
   /* « auto » par defaut : Liaison lit la pente dans ce qui est
@@ -3072,8 +3078,25 @@ app.whenReady().then(async () => {
   loadConfig();
   buildMenu();
   license = new License(LIC());
-  license.ensureTrial();
   setlog = new SetLog(SETS());
+  /* ------------------------------------------------------------
+     L'essai a besoin de savoir combien de vraies soirees ont ete
+     jouees — c'est ce qui decide maintenant quand il se ferme.
+
+     license.js ne connait pas setlog et n'a aucune raison de le
+     connaitre : on lui branche une fonction, il l'appelle quand
+     il en a besoin. C'est aussi ce qui permet aux essais de
+     poser n'importe quel nombre de soirees sans fabriquer de
+     journal de sets.
+
+     L'ORDRE COMPTE : setlog doit exister avant ensureTrial(),
+     sinon le premier calcul de l'essai se fait avec zero soiree.
+     Sans consequence aujourd'hui — zero est la reponse genereuse
+     — mais c'est le genre de dependance silencieuse qui se paie
+     le jour ou la regle change de sens.
+     ------------------------------------------------------------ */
+  license.soirees = () => { try { return setlog.soireesJouees(); } catch (e) { return 0; } };
+  license.ensureTrial();
   structCache = new StructureCache(STRUCT());
   createWidget();
   if (config.autoWidget) widget.hide();          // le widget attend son logiciel
@@ -3089,6 +3112,15 @@ app.whenReady().then(async () => {
     send('license', license.status());
     refreshTray();
   });
+
+  /* La file des incidents part ICI, et nulle part ailleurs : au
+     demarrage, avant qu'un logiciel de mix soit ouvert. C'est le
+     seul moment ou un envoi ne peut pas tomber pendant un set.
+     Le decalage laisse l'ouverture du widget passer devant — un
+     rapport de panne ne merite pas de retarder ce pour quoi
+     l'app existe. */
+  const minuteurIncidents = setTimeout(() => { envoyerIncidents(); }, 6000);
+  if (minuteurIncidents.unref) minuteurIncidents.unref();
   if (!license.state.seenWelcome) {
     license.state.seenWelcome = Date.now();
     license._save();
@@ -3183,6 +3215,12 @@ function regarderLEssai() {
       tier: av.tier, trialLeft: av.trialLeft, trialStart: license.state.trialStart,
       sets: b0.sets, dejaProlonge: license.state.prolonge
     });
+    /* pro.prolonger ne se declenche plus : prolongationDue() exige
+       trialLeft === 0, et trialLeft ne tombe a zero qu'une fois
+       les deux soirees jouees — c'est-a-dire exactement le cas ou
+       prolongationDue() refuse. Le chemin est garde en place pour
+       les installations qui avaient deja recu leur prolongation
+       et dont l'etat le mentionne encore. */
     if (pro.prolonger && !setlog.current) {
       license.state.prolonge = Date.now();
       license.state.prolongeJours = pro.jours;
@@ -3278,20 +3316,103 @@ function noterPanne(quoi, err) {
   try { fs.mkdirSync(DIR(), { recursive: true }); } catch (e) {}
   try { fs.appendFileSync(path.join(DIR(), 'pannes.log'), ligne); } catch (e) {}
   try { console.error(ligne); } catch (e) {}
+
+  /* ------------------------------------------------------------
+     La panne est aussi mise de cote pour un envoi EVENTUEL.
+
+     Mise de cote, pas envoyee : rien ne part tant que le DJ n'a
+     pas dit oui, et meme alors la file n'est videe qu'au
+     demarrage suivant. On empile donc toujours — y compris avant
+     d'avoir une reponse — parce qu'une panne qui tue le
+     processus doit pouvoir etre racontee au prochain lancement.
+     Si la reponse est non, la file est effacee sans jamais avoir
+     ete lue par personne.
+     ------------------------------------------------------------ */
+  try {
+    const inc = incidents.batir(quoi, err, app.getVersion(), process.platform);
+    if (inc) incidents.empiler(ecrire, DIR(), inc);
+  } catch (e) {}
+
   if (dejaPrevenu) return;
   dejaPrevenu = true;
+
+  /* ------------------------------------------------------------
+     ON DEMANDE AU MOMENT OU C'EST CONCRET.
+
+     L'accord d'envoi se demande ICI, dans la fenetre de panne, et
+     pas au premier lancement. Au premier lancement, « acceptez-vous
+     l'envoi de rapports anonymes » est une case qu'on coche sans
+     lire. Au moment d'une panne, la question a un objet : il vient
+     de se passer quelque chose, on propose de le raconter, et le
+     DJ voit exactement ce qu'il autorise.
+
+     Trois reponses, et « Non » est la reponse par defaut de la
+     touche Echap.
+     ------------------------------------------------------------ */
+  const choix = config.rapportPannes;          /* 'oui' | 'non' | undefined */
+  const boutons = choix === undefined
+    ? ['Ne rien envoyer', 'Envoyer ce rapport', 'Toujours envoyer']
+    : ['Continuer', 'Ouvrir le journal'];
   try {
     dialog.showMessageBox({
       type: 'warning',
       title: 'Liaison a rencontre un probleme',
       message: 'Liaison continue de tourner.',
-      detail: 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
-              'Le detail est dans :\n' + path.join(DIR(), 'pannes.log'),
-      buttons: ['Continuer', 'Ouvrir le journal'],
+      detail: choix === undefined
+        ? 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
+          'Tu peux m\'aider a le corriger en envoyant un rapport ANONYME : la version, ton systeme, ' +
+          'et la trace technique. Jamais un titre, jamais un nom de fichier, jamais ton nom. ' +
+          'L\'envoi se fait au prochain demarrage, jamais pendant que tu mixes.\n\n' +
+          'Le detail est dans :\n' + path.join(DIR(), 'pannes.log')
+        : 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
+          'Le detail est dans :\n' + path.join(DIR(), 'pannes.log'),
+      buttons: boutons,
       defaultId: 0, cancelId: 0
-    }).then(r => { if (r && r.response === 1) { try { shell.showItemInFolder(path.join(DIR(), 'pannes.log')); } catch (e) {} } })
-      .catch(() => {});
+    }).then(r => {
+      const i = r ? r.response : 0;
+      if (choix === undefined) {
+        if (i === 0) { config.rapportPannes = 'non'; saveConfig(); incidents.vider(ecrire, DIR()); }
+        else if (i === 1) { config.rapportPannes = 'une'; saveConfig(); }
+        else if (i === 2) { config.rapportPannes = 'oui'; saveConfig(); }
+      } else if (i === 1) {
+        try { shell.showItemInFolder(path.join(DIR(), 'pannes.log')); } catch (e) {}
+      }
+    }).catch(() => {});
   } catch (e) {}
+}
+
+/* ============================================================
+   L'ENVOI, AU DEMARRAGE ET NULLE PART AILLEURS.
+
+   « Aucune requete reseau pendant le set » est une promesse de
+   la page d'accueil. Elle reste vraie au mot pres : la file est
+   videe ici, une fois, au lancement — avant meme qu'un logiciel
+   de mix soit ouvert — et jamais ensuite.
+
+   Tout ce qui peut echouer echoue en silence. Un rapport de
+   panne qui fait ramer le demarrage est un defaut de plus, et il
+   toucherait tout le monde plutot qu'une minorite.
+   ============================================================ */
+async function envoyerIncidents() {
+  const choix = config.rapportPannes;
+  if (choix !== 'oui' && choix !== 'une') return;
+  let file = [];
+  try { file = incidents.lire(ecrire, DIR()); } catch (e) { return; }
+  if (!file.length) return;
+  /* « Envoyer ce rapport » ne vaut que pour celui-la : on vide la
+     permission avant l'envoi, pour qu'un echec ne la fasse pas
+     durer une fois de plus. */
+  if (choix === 'une') { config.rapportPannes = 'non'; saveConfig(); }
+  try {
+    const r = await incidents.envoyer(
+      (process.env.LIAISON_API || 'https://liaisondj.app') + '/api/etat',
+      { incidents: file.slice(0, incidents.FILE_MAX) },
+      incidents.DELAI_MS);
+    /* On ne vide QUE si le serveur a pris : sinon la file repart
+       au prochain lancement, ce qui est exactement ce qu'on veut
+       pour un DJ qui n'avait pas de reseau ce soir-la. */
+    if (r && r.code >= 200 && r.code < 300) incidents.vider(ecrire, DIR());
+  } catch (e) { /* silence : ce n'est pas au DJ de s'en occuper */ }
 }
 process.on('uncaughtException', e => noterPanne('exception non attrapee', e));
 process.on('unhandledRejection', e => noterPanne('promesse rejetee', e));

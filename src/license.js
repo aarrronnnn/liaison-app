@@ -34,7 +34,46 @@ const API_LISTE = (process.env.LIAISON_API ? [process.env.LIAISON_API] : []).con
   'https://liaison-web-ochre.vercel.app'
 ]);
 const API = API_LISTE[0];
+/* ============================================================
+   L'ESSAI SE COMPTE EN SOIREES, PAS EN JOURS.
+
+   La page d'accueil le promet en gros depuis des mois :
+   « L'essai se compte en soirees, pas en jours. » Le code, lui,
+   comptait des jours de calendrier, avec une prolongation unique
+   de sept jours en rattrapage. Les deux ne disaient pas la meme
+   chose, et c'est le code qui avait raison contre la promesse.
+
+   Le probleme n'est pas theorique. Un DJ de mariage joue deux a
+   quatre fois par mois. Sept jours de calendrier font donc tres
+   souvent ZERO soiree reelle — il installe un mardi, sa date est
+   dans trois semaines, et l'essai se ferme avant qu'il ait pu
+   ouvrir l'app en cabine une seule fois. Il n'a rien juge. Il ne
+   paiera pas pour quelque chose qu'il n'a pas vu marcher, et il
+   aura raison.
+
+   La nouvelle regle a deux bornes et une condition :
+
+     PLANCHER  7 jours. L'essai ne dure jamais moins. Celui qui
+               joue ce samedi a sa reponse dans la semaine.
+     CONDITION 2 vraies soirees jouees. Tant qu'elles ne sont pas
+               faites, l'essai NE SE FERME PAS — automatiquement,
+               sans rien demander, et sans limite de nombre de
+               prolongations.
+     PLAFOND   60 jours. Au-dela, l'essai se ferme meme sans
+               soiree jouee. Quelqu'un qui installe et n'ouvre
+               jamais son logiciel de mix n'essaie rien : il
+               stocke. La butee protege aussi de la boucle
+               infinie si la detection des decks ne marche pas
+               sur sa machine.
+
+   Ce que « vraie soiree » veut dire est defini dans session.js
+   (8 titres ET 45 minutes) et n'est PAS le nombre de sessions
+   ouvertes — c'etait le defaut de la version precedente, qui
+   comptait comme soiree cinq minutes de branchement un mardi.
+   ============================================================ */
 const TRIAL_DAYS = 7;
+const TRIAL_SOIREES = 2;
+const TRIAL_PLAFOND_J = 60;
 
 /* ------------------------------------------------------------
    Ce que chaque palier ouvre.
@@ -343,17 +382,57 @@ class License {
     this._ecrireTemoin({ t: debut, v: Math.max(n, this._vuTemoin()) });
     return this.trialLeft();
   }
+  /* Combien de vraies soirees ont ete jouees. main.js branche ici
+     setlog.soireesJouees() ; hors Electron — les essais, un
+     chargement partiel — on repond zero plutot que de jeter, ce
+     qui rend l'essai PLUS genereux et jamais moins. Un compteur
+     casse ne doit pas fermer la porte a un client. */
+  soireesJouees() {
+    try { return this.soirees ? (this.soirees() | 0) : 0; } catch (e) { return 0; }
+  }
+
+  /** Jours de calendrier ecoules depuis le debut de l'essai. */
+  joursEcoules() {
+    const vuT = this._debutTemoin();
+    const debuts = [this.state.trialStart, vuT].filter(x => typeof x === 'number' && x > 0);
+    if (!debuts.length) return 0;
+    return (this.maintenant() - Math.min.apply(null, debuts)) / 86400000;
+  }
+
   trialLeft() {
     const vuT = this._debutTemoin();
     const debuts = [this.state.trialStart, vuT].filter(x => typeof x === 'number' && x > 0);
     if (!debuts.length) return TRIAL_DAYS;
-    const debut = Math.min.apply(null, debuts);
-    const used = (this.maintenant() - debut) / 86400000;
-    /* La prolongation accordee a qui n'a pas encore joue de vraie
-       soiree s'ajoute a la duree, pas a la date de depart : le temoin
-       anti-recul reste valable tel quel. */
+    const used = this.joursEcoules();
+    /* La prolongation unique de l'ancienne version reste honoree :
+       quelqu'un qui l'a recue garde ses jours. Elle n'est plus
+       jamais accordee — la regle des soirees la remplace — mais
+       la retirer retroactivement raccourcirait l'essai de gens
+       qui sont en train de l'utiliser. */
     const rab = this.state.prolongeJours > 0 ? Math.min(30, this.state.prolongeJours) : 0;
-    return Math.max(0, Math.ceil(TRIAL_DAYS + rab - used));
+    const restant = Math.ceil(TRIAL_DAYS + rab - used);
+    if (restant > 0) return restant;
+
+    /* Les jours sont ecoules. L'essai continue tant que les deux
+       soirees ne sont pas faites — et tant que le plafond n'est
+       pas atteint. On rend 1 plutot que le nombre de jours qui
+       reste avant le plafond : ce chiffre-la n'a aucun sens pour
+       le DJ, et l'interface affiche de toute facon « encore une
+       soiree » dans ce cas. */
+    if (used < TRIAL_PLAFOND_J && this.soireesJouees() < TRIAL_SOIREES) return 1;
+    return 0;
+  }
+
+  /* Ce qui retient l'essai ouvert, en ce moment meme. C'est cette
+     valeur que l'interface lit pour choisir entre « 5 j » et
+     « encore une soiree » : sans elle, elle afficherait « 1 j »
+     tous les jours pendant des semaines, ce qui serait faux et
+     finirait par ne plus etre cru. */
+  trialRaison() {
+    if (this.trialLeft() <= 0) return 'fini';
+    const rab = this.state.prolongeJours > 0 ? Math.min(30, this.state.prolongeJours) : 0;
+    if (Math.ceil(TRIAL_DAYS + rab - this.joursEcoules()) > 0) return 'jours';
+    return 'soirees';
   }
 
   /** Niveau effectif, sans reseau. */
@@ -381,6 +460,12 @@ class License {
       device: this.device,
       deviceName: deviceName(),
       trialLeft: this.trialLeft(),
+      /* Ce qui tient l'essai ouvert, et ou en sont les soirees.
+         L'interface en a besoin pour ne pas annoncer « 1 jour »
+         pendant trois semaines. */
+      trialRaison: this.trialRaison(),
+      trialSoirees: this.soireesJouees(),
+      trialSoireesRequis: TRIAL_SOIREES,
       until: p && p.until ? p.until : null,
       cacheUntil: p && p.exp ? p.exp : null,
       subStatus: p ? p.status : null,
@@ -442,4 +527,4 @@ class License {
 }
 
 module.exports = { License, TIERS, deviceId, deviceName, verify, tarifs, TARIFS_REPLI,
-                   API, API_LISTE, TRIAL_DAYS };
+                   API, API_LISTE, TRIAL_DAYS, TRIAL_SOIREES, TRIAL_PLAFOND_J };

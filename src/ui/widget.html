@@ -170,6 +170,41 @@ background:linear-gradient(to bottom,transparent,var(--carte));opacity:0;transit
 .row{position:relative;display:grid;grid-template-columns:38px minmax(0,1fr) auto;gap:10px;align-items:start;
 padding:9px 8px 10px;border:1px solid transparent;border-radius:3px}
 .row + .row{border-top:1px solid var(--wire)}
+/* ============================================================
+   LES PROPOSITIONS ARRIVENT, ELLES N'APPARAISSENT PAS.
+
+   Jusqu'ici les cinq lignes se posaient d'un bloc, instantanement.
+   Techniquement irreprochable, et completement muet : rien ne
+   disait que Liaison venait de RECALCULER quelque chose. Un DJ
+   qui change de morceau voyait une liste differente sans avoir
+   vu le moment ou elle avait change.
+
+   Elles entrent donc l'une apres l'autre, de la droite, avec
+   quarante-cinq millisecondes d'ecart. Le decalage est ce qui
+   fait tout le travail : cinq lignes qui apparaissent ensemble
+   sont un rafraichissement, cinq lignes qui se posent en cascade
+   sont une reponse.
+
+   Trois contraintes tenues :
+
+     - 45 ms d'ecart et 8 px de course. Au-dela, en cabine, on
+       ATTEND la liste au lieu de la lire ; le mouvement doit
+       etre fini avant qu'on ait fini de tourner la tete.
+     - `backwards` : la ligne est invisible AVANT son tour, sinon
+       les cinq clignotent ensemble puis se decalent.
+     - le decalage plafonne a la sixieme ligne. Avec sept
+       suggestions (formule Collectif), la derniere n'a pas a
+       attendre un tiers de seconde de plus que la premiere.
+   ============================================================ */
+@keyframes arrivee{
+  from{opacity:0;transform:translateX(8px)}
+  to  {opacity:1;transform:none}
+}
+.row{animation:arrivee .34s cubic-bezier(.16,1,.3,1) backwards}
+/* Le glisser reprend la main sur l'animation : une ligne qu'on
+   envoie sur un deck ne doit pas rejouer son arrivee. */
+.row.glisse{animation:envoi .45s cubic-bezier(.22,1,.36,1)}
+@media(prefers-reduced-motion:reduce){.row{animation:none}}
 .row:hover{background:var(--deep2);border-color:var(--wire2)}
 /* ------------------------------------------------------------
    Le score, et ce qu'il doit dire d'un coup d'oeil.
@@ -1523,7 +1558,7 @@ function renderSug(list) {
     return;
   }
   box.innerHTML = list.map((r, i) => `
-    <div class="row tempo ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel">
+    <div class="row tempo ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel" style="animation-delay:${Math.min(i, 5) * 45}ms">
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       ${bpmHTML(r)}
       <span style="min-width:0">
@@ -2200,7 +2235,17 @@ $('#lClX').onclick = async () => {
 
 function licState(st) {
   const bar = $('#licBar');
-  if (st.tier === 'trial') { bar.classList.add('on'); $('#licTxt').textContent = 'Essai — ' + st.trialLeft + ' jours'; }
+  /* En cabine, le bandeau doit dire ce qui est vrai en trois mots.
+     « Essai — 1 jour » repete pendant trois semaines cesse d'etre
+     cru ; « Essai — encore une soiree » dit ce qu'il reste a
+     faire. */
+  if (st.tier === 'trial') {
+    bar.classList.add('on');
+    const reste = Math.max(1, (st.trialSoireesRequis | 0) - (st.trialSoirees | 0));
+    $('#licTxt').textContent = st.trialRaison === 'soirees'
+      ? 'Essai — encore ' + (reste > 1 ? reste + ' soirées' : 'une soirée')
+      : 'Essai — ' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '');
+  }
   else if (st.tier === 'expire') { bar.classList.add('on'); bar.classList.add('stop');
     $('#licTxt').textContent = 'Essai terminé — un pass soirée à 4,95 € rouvre tout pour 48 h'; }
   else bar.classList.remove('on');
