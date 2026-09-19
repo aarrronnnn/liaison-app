@@ -7,8 +7,8 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const { spawn } = require('child_process');
-const { analyze } = require('./analyze');
+const { spawn, spawnSync } = require('child_process');
+const { analyze, ffmpegPath } = require('./analyze');
 
 const AUDIO = new Set(['.mp3', '.wav', '.aiff', '.aif', '.flac', '.m4a', '.aac', '.ogg', '.wma']);
 
@@ -229,9 +229,107 @@ function ffprobePath() {
   return 'ffprobe';
 }
 
-function probe(file) {
+/* ============================================================
+   FFPROBE PEUT ETRE LA SANS POUVOIR TOURNER.
+
+   ffprobe-static 3.1.0 — la derniere version publiee — livre dans
+   bin/darwin/arm64/ un binaire qui est en realite du x86_64.
+   Verifie sur l'archive npm officielle, ce n'est donc pas une
+   installation abimee : le paquet est faux.
+
+   Sur un Mac Apple Silicon sans Rosetta, ce fichier existe, son
+   chemin se resout, et il refuse de s'executer. spawn emettait
+   alors « error », probe() rendait {} — et un morceau sans le
+   moindre tag remontait comme si le fichier n'en avait pas. Pas
+   d'erreur, pas de message : juste une bibliotheque qui perd ses
+   titres, ses artistes, ses genres et ses tonalites.
+
+   ffmpeg-static, lui, livre bien de l'arm64. On a donc toujours un
+   lecteur valide sous la main ; il fallait seulement arreter de
+   supposer que le premier marche.
+
+   On essaie donc les candidats une fois, pour de vrai (-version),
+   et on retient celui qui repond. Si aucun ffprobe ne tourne, on
+   lit les tags avec ffmpeg, qui sait le faire.
+   ============================================================ */
+let _lecteur;                                  /* {mode, bin} decide une fois */
+
+function utilisable(bin, args) {
+  try {
+    const r = spawnSync(bin, args, { timeout: 5000, stdio: 'ignore' });
+    return !r.error && r.status === 0;
+  } catch (e) { return false; }
+}
+
+/** Quel lecteur de tags marche sur CETTE machine. Decide une seule
+    fois : le resultat ne change pas en cours de route. */
+function lecteurDeTags() {
+  if (_lecteur) return _lecteur;
+  const candidats = [];
+  if (process.env.LIAISON_FFPROBE) candidats.push(process.env.LIAISON_FFPROBE);
+  try {
+    let p = require('ffprobe-static');
+    if (p && p.path) p = p.path;
+    if (p) candidats.push(String(p).replace('app.asar', 'app.asar.unpacked'));
+  } catch (e) {}
+  candidats.push('ffprobe');                   /* celui du systeme, s'il y en a un */
+
+  for (const bin of candidats) {
+    if (utilisable(bin, ['-version'])) { _lecteur = { mode: 'ffprobe', bin: bin }; return _lecteur; }
+  }
+  /* Aucun ffprobe n'a repondu : ffmpeg sait lire les tags aussi. */
+  _lecteur = { mode: 'ffmpeg', bin: ffmpegPath() };
+  return _lecteur;
+}
+
+/** Pour le diagnostic : dire par quoi les tags sont lus, au lieu de
+    laisser deviner devant une bibliotheque vide. */
+function commentOnLitLesTags() {
+  const l = lecteurDeTags();
+  return l.mode === 'ffprobe' ? 'ffprobe (' + l.bin + ')'
+                              : 'ffmpeg — aucun ffprobe utilisable sur cette machine';
+}
+
+/* La duree, telle que ffmpeg l'annonce sur sa sortie d'erreur. */
+function dureeDeStderr(txt) {
+  const m = /Duration:\s*(\d+):(\d\d):(\d\d(?:\.\d+)?)/.exec(txt || '');
+  if (!m) return 0;
+  return (+m[1]) * 3600 + (+m[2]) * 60 + parseFloat(m[3]);
+}
+
+/* Le format « ffmetadata » : des lignes cle=valeur, un point-virgule
+   en tete de commentaire, et l'antislash qui protege le reste. */
+function lireFfmetadata(txt) {
+  const t = {};
+  for (const ligne of String(txt || '').split(/\r?\n/)) {
+    if (!ligne || ligne[0] === ';' || ligne[0] === '#') continue;
+    const i = ligne.indexOf('=');
+    if (i <= 0) continue;
+    const k = ligne.slice(0, i).trim().toLowerCase();
+    if (k) t[k] = ligne.slice(i + 1).replace(/\\([=;#\\\n])/g, '$1');
+  }
+  return t;
+}
+
+function probeViaFfmpeg(file) {
   return new Promise(resolve => {
-    const p = spawn(ffprobePath(), ['-v', 'quiet', '-print_format', 'json',
+    const p = spawn(ffmpegPath(), ['-hide_banner', '-i', file, '-f', 'ffmetadata', '-']);
+    let out = '', err = '';
+    p.stdout.on('data', d => (out += d));
+    p.stderr.on('data', d => (err += d));
+    p.on('error', () => resolve({}));
+    p.on('close', () => {
+      try { resolve({ tags: lireFfmetadata(out), duration: dureeDeStderr(err) }); }
+      catch (e) { resolve({}); }
+    });
+  });
+}
+
+function probe(file) {
+  const l = lecteurDeTags();
+  if (l.mode === 'ffmpeg') return probeViaFfmpeg(file);
+  return new Promise(resolve => {
+    const p = spawn(l.bin, ['-v', 'quiet', '-print_format', 'json',
       '-show_format', '-show_entries', 'format=duration:format_tags', file]);
     let out = '';
     p.stdout.on('data', d => (out += d));
@@ -948,5 +1046,5 @@ function finalize(tracks) {
     });
 }
 
-module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath,
+module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, commentOnLitLesTags, lecteurDeTags, lireFfmetadata, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath,
                    FIABILITE, fiabilite, elaguerDisparus, dedoublonner, normaliserNom, AUDIO };

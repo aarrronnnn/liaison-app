@@ -13,9 +13,62 @@ const https = require('https');
 const http = require('http');
 const ecrire = require('./ecrire');
 
-const PUBLIC_KEY = `-----BEGIN PUBLIC KEY-----
+/* ============================================================
+   LES CLES PUBLIQUES, ET POURQUOI IL Y EN A UN TABLEAU.
+
+   Une licence est un petit objet JSON signe avec une cle privee
+   qui vit sur le serveur. L'application porte la cle PUBLIQUE
+   correspondante et verifie : cette licence vient bien de nous,
+   elle n'a pas ete bricolee.
+
+   Les deux vont par paire. Tant qu'il n'y en avait qu'une, seule
+   et sans nom, changer la cle privee revenait a invalider d'un
+   coup TOUTES les licences deja vendues : l'application aurait
+   continue de verifier avec l'ancienne cle publique, et chaque
+   client aurait ete verrouille du jour au lendemain.
+
+   Autrement dit : la cle ne pouvait pas tourner. Ni apres une
+   fuite, ni par hygiene, jamais. C'est une impasse qu'il faut
+   ouvrir TANT QU'IL Y A PEU DE LICENCES EN CIRCULATION — dans
+   deux ans, la meme manoeuvre demande d'attendre que tout le
+   parc se mette a jour.
+
+   Le mecanisme est celui des jetons web : la charge signee porte
+   un NUMERO DE CLE (`kid`), et l'application connait plusieurs
+   cles publiques. Pour tourner, on publie d'abord une version
+   qui connait la cle 2, on attend que le parc l'ait, puis on
+   bascule le serveur sur la cle 2. Les licences signees avec la
+   cle 1 continuent de se verifier avec la cle 1 : personne n'est
+   coupe.
+
+   LE POINT DELICAT : les licences deja emises n'ont PAS de
+   `kid` — elles ont ete signees avant que ce champ existe. Une
+   charge sans numero est donc attribuee a la cle 1, qui est
+   exactement celle qui l'a signee. C'est ce qui rend la mise a
+   jour invisible pour les clients actuels, et c'est teste.
+
+   Choisir la cle d'apres un champ NON ENCORE VERIFIE est sans
+   danger : le numero ne fait que DESIGNER une cle dans une liste
+   fermee. Un numero inconnu est refuse, et designer la cle 2 ne
+   sert a rien sans une signature valide de la cle 2.
+   ============================================================ */
+const CLE_PAR_DEFAUT = '1';
+const CLES_PUBLIQUES = {
+  /* Cle d'origine. Elle signe toutes les licences emises jusqu'a
+     aujourd'hui, avec ou sans numero. Elle ne sera retiree de
+     cette liste que le jour ou plus aucune licence signee par
+     elle ne peut encore etre en cache — c'est-a-dire longtemps
+     apres une rotation. */
+  '1': `-----BEGIN PUBLIC KEY-----
 MCowBQYDK2VwAyEAZDFMHUbLpG/oPPTkjqslX0sF6sp0DSwmYGxzNpOfGgM=
------END PUBLIC KEY-----`;
+-----END PUBLIC KEY-----`
+  /* Le jour d'une rotation, la cle suivante s'ajoute ICI — et
+     dans une version publiee AVANT que le serveur bascule. */
+};
+
+/* Garde de compatibilite : du code ailleurs pouvait lire
+   PUBLIC_KEY. On la laisse pointer sur la cle courante. */
+const PUBLIC_KEY = CLES_PUBLIQUES[CLE_PAR_DEFAUT];
 
 /* ------------------------------------------------------------
    L'adresse du service de licence.
@@ -131,8 +184,22 @@ function verify(token) {
     const [b, s] = String(token).split('.');
     if (!b || !s) return null;
     const body = Buffer.from(b, 'base64url');
-    const ok = crypto.verify(null, body, crypto.createPublicKey(PUBLIC_KEY), Buffer.from(s, 'base64url'));
+
+    /* On lit la charge AVANT de verifier, uniquement pour savoir
+       quelle cle essayer. Rien de ce qu'on y lit n'est cru a ce
+       stade : le numero ne fait que designer une entree dans une
+       liste fermee, et tout ce qui suit depend de la signature. */
+    let annonce;
+    try { annonce = JSON.parse(body.toString('utf8')); } catch (e) { return null; }
+    const kid = (annonce && annonce.kid != null) ? String(annonce.kid) : CLE_PAR_DEFAUT;
+    const pem = CLES_PUBLIQUES[kid];
+    if (!pem) return null;                               // cle inconnue : on refuse
+
+    const ok = crypto.verify(null, body, crypto.createPublicKey(pem), Buffer.from(s, 'base64url'));
     if (!ok) return null;
+
+    /* Et seulement maintenant on relit la charge — celle qui
+       vient d'etre prouvee. */
     const payload = JSON.parse(body.toString('utf8'));
     if (payload.device !== deviceId()) return null;      // licence d'une autre machine
     return payload;
@@ -527,4 +594,5 @@ class License {
 }
 
 module.exports = { License, TIERS, deviceId, deviceName, verify, tarifs, TARIFS_REPLI,
-                   API, API_LISTE, TRIAL_DAYS, TRIAL_SOIREES, TRIAL_PLAFOND_J };
+                   API, API_LISTE, TRIAL_DAYS, TRIAL_SOIREES, TRIAL_PLAFOND_J,
+                   CLES_PUBLIQUES, CLE_PAR_DEFAUT, PUBLIC_KEY };

@@ -4,7 +4,7 @@
    ffmpeg decode -> mono 22050 Hz float32 -> descripteurs.
    Rien ne sort de la machine.
    ============================================================ */
-const { spawn } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const path = require('path');
 
 /* ------------------------------------------------------------
@@ -20,14 +20,43 @@ const path = require('path');
 
    LIAISON_FFMPEG donne une porte de sortie en une ligne, et
    build/diagnostic.js sait le dire. ------------------------------------------------------------ */
+/* ------------------------------------------------------------
+   UN BINAIRE PRESENT N'EST PAS UN BINAIRE QUI TOURNE.
+
+   Meme lecon que pour ffprobe (voir library.js) : les paquets
+   « static » livrent parfois un executable de la mauvaise
+   architecture. Le chemin se resout, le fichier existe, et spawn
+   echoue — en silence, parce que plus haut on se contente de
+   resoudre une promesse vide.
+
+   On essaie donc chaque candidat une fois, pour de vrai, et on
+   garde celui qui repond. Une seule verification par session : le
+   resultat ne change pas en cours de route.
+   ------------------------------------------------------------ */
+let _ffmpeg;
+
 function ffmpegPath() {
-  if (process.env.LIAISON_FFMPEG) return process.env.LIAISON_FFMPEG;
+  if (_ffmpeg) return _ffmpeg;
+  const candidats = [];
+  if (process.env.LIAISON_FFMPEG) candidats.push(process.env.LIAISON_FFMPEG);
   try {
     let p = require('ffmpeg-static');
     if (p && p.path) p = p.path;
-    if (p) return p.replace('app.asar', 'app.asar.unpacked');
+    if (p) candidats.push(String(p).replace('app.asar', 'app.asar.unpacked'));
   } catch (e) { /* fallback */ }
-  return 'ffmpeg';
+  candidats.push('ffmpeg');
+
+  for (const bin of candidats) {
+    try {
+      const r = spawnSync(bin, ['-version'], { timeout: 5000, stdio: 'ignore' });
+      if (!r.error && r.status === 0) { _ffmpeg = bin; return _ffmpeg; }
+    } catch (e) {}
+  }
+  /* Aucun n'a repondu : on rend le dernier nomme plutot que rien,
+     pour que l'erreur remonte a l'appel au lieu d'etre inventee
+     ici — mais on ne la met pas en cache, au cas ou l'outil serait
+     installe pendant que l'app tourne. */
+  return candidats[candidats.length - 1];
 }
 
 /* Un morceau ne se decode pas en plus de ca : au-dela, c'est bloque. */
