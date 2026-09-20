@@ -26,6 +26,33 @@ if (!chromium) {
 }
 
 const FICHIER = 'file://' + path.join(__dirname, '..', 'src', 'ui', 'widget.html');
+
+/* ============================================================
+   LES STYLES DU FAUX PONT VIENNENT DE LA VRAIE FONCTION.
+
+   Ils etaient ecrits a la main ici : [{ tag: 'Techno', n: 770 }].
+   Or genresDuDJ() ne rend pas « tag » — elle rend { cle, libelle,
+   n, famille }. Le faux collait donc a ce que la PAGE croyait
+   recevoir, pas a ce que le cote principal envoie vraiment.
+
+   Consequence : cet essai affirmait « le tiroir sert les styles du
+   DJ » pendant que, en cabine, le tiroir servait des pastilles
+   sans texte qui ne filtraient rien. Un faux ecrit depuis
+   l'hypothese du consommateur ne verifie que l'hypothese.
+
+   On fabrique donc le faux AVEC la fonction reelle. Les deux
+   cotes ne peuvent plus diverger sans que ce fichier tombe.
+   ============================================================ */
+const STYLES = (() => {
+  const g = require('../src/genres');
+  const biblio = [];
+  let id = 0;
+  const poser = (tag, n) => { for (let i = 0; i < n; i++) biblio.push({ id: ++id, tags: [tag] }); };
+  poser('Variété française', 2840);
+  poser('Disco', 1620);
+  poser('Techno', 770);
+  return g.genresDuDJ(biblio, 18);
+})();
 const LARGEUR = 420;
 
 let echecs = 0;
@@ -79,7 +106,7 @@ const SOS = [
   /* Le faux pont. Il doit rendre EXACTEMENT ce que preload.js rend —
      c'est la moitie de l'interet de cet essai : si la forme change
      d'un cote sans l'autre, ce fichier le dit. */
-  await p.addInitScript(() => {
+  await p.addInitScript((DONNEES) => {
     const rien = () => {};
     const ecoute = {};
     window.__ecoute = ecoute;
@@ -122,8 +149,7 @@ const SOS = [
                 genres: ['Disco'], marge: 0, energyMin: 0, energyMax: 0 } }),
       /* Les etiquettes de style, telles que main.js les lit dans la
          bibliotheque du DJ : son orthographe, ses habitudes. */
-      filterGenres: async () => ([{ tag: 'Variété française', n: 2840 }, { tag: 'Disco', n: 1620 },
-                                  { tag: 'Techno', n: 770 }]),
+      filterGenres: async () => DONNEES.styles,
       analysisState: async () => ({ library: 22000, analyses: 12000, offline: 0,
                                     restants: 10000, total: 22000, conseils: [] }),
       licenseStatus: async () => ({ tier: 'pro', label: 'Pro', limit: 5 }),
@@ -135,7 +161,7 @@ const SOS = [
       platform: 'darwin'
     });
     window.liaison = api;
-  });
+  }, { styles: STYLES });
 
   await p.goto(FICHIER);
   await p.waitForTimeout(600);

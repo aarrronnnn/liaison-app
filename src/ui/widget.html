@@ -1933,10 +1933,24 @@ async function peindreGenres() {
     fitHeight();
     return;
   }
+  /* ------------------------------------------------------------
+     Le nom du champ, et ce qu'il en coute de se tromper.
+
+     Cette page lisait « g.tag ». genresDuDJ() n'a jamais rendu ce
+     champ-la : elle rend { cle, libelle, n, famille }. Resultat a
+     l'ecran — un rang de pastilles SANS TEXTE, ou seul le compte
+     s'affichait, et qui ne filtraient rien : data-g valait la
+     chaine vide, et le cote principal la jetait avec un
+     .filter(Boolean). Aucune erreur nulle part.
+
+     On envoie « libelle » — l'orthographe du DJ — et pas « cle » :
+     le cote principal aplatit de toute facon avant de comparer, et
+     c'est le libelle qui s'affiche ensuite dans « un filtre tourne ».
+     ------------------------------------------------------------ */
   box.innerHTML = liste.map(g =>
-    '<button data-g="' + esc(g.tag) + '" aria-pressed="' +
-    (fEtat.genres.includes(g.tag) ? 'true' : 'false') + '">' +
-    esc(g.tag) + '<s>' + nbfr(g.n) + '</s></button>').join('');
+    '<button data-g="' + esc(g.libelle) + '" aria-pressed="' +
+    (fEtat.genres.includes(g.libelle) ? 'true' : 'false') + '">' +
+    esc(g.libelle) + '<s>' + nbfr(g.n) + '</s></button>').join('');
   $('#gInfo').textContent = fEtat.genres.length
     ? fEtat.genres.length + ' retenu' + (fEtat.genres.length > 1 ? 's' : '')
     : liste.length + ' styles';
