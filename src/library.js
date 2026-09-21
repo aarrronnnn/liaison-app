@@ -827,9 +827,25 @@ function cleChemin(p) {
    mis le SSD dans l'autre poche. Garder sur un fichier efface,
    c'est proposer toute la nuit un morceau qui ne se chargera pas.
    ============================================================ */
-function volumeDe(p) {
+function volumeDe(p, plateforme) {
   const x = String(p || '');
-  if (process.platform === 'win32') {
+  if ((plateforme || process.platform) === 'win32') {
+    /* ------------------------------------------------------------
+       Le partage reseau est un volume, lui aussi.
+
+       Sans cette ligne, un DJ dont la musique vit sur un NAS voyait
+       sa bibliotheque DISPARAITRE des qu'il quittait le wifi de
+       chez lui : le fichier ne repondait pas, aucune lettre de
+       lecteur n'etait reconnue, et faute de volume identifiable on
+       concluait « efface » au lieu de « injoignable ». Il branchait
+       son ordinateur en soiree et Liaison etait vide.
+
+       Le volume d'un chemin UNC, c'est le partage : \\NAS\Musique.
+       Le serveur seul ne suffit pas — un serveur peut repondre avec
+       un partage demonte.
+       ------------------------------------------------------------ */
+    const unc = x.match(/^[\\/]{2}([^\\/]+)[\\/]([^\\/]+)/);
+    if (unc) return '\\\\' + unc[1] + '\\' + unc[2];
     const m = x.match(/^([A-Za-z]:)[\\/]/);
     return m ? m[1] + '\\' : null;
   }
@@ -841,16 +857,26 @@ function volumeDe(p) {
  * Sort de la bibliotheque ce qui a vraiment disparu, marque ce qui
  * est seulement injoignable.
  * @param {Array} tracks
+ * @param {{existe?:Function, volumeVivant?:Function}} [opt]
+ *   Seulement pour les bancs d'essai : un Windows a trois disques ne
+ *   se simule pas avec le vrai fs. En production les deux restent
+ *   absents et on interroge le disque, comme avant.
  * @returns {{gardes:Array, disparus:Array, horsLigne:number}}
  */
-function elaguerDisparus(tracks) {
+function elaguerDisparus(tracks, opt) {
+  const o = opt || {};
+  const surLeDisque = typeof o.existe === 'function'
+    ? o.existe
+    : (p) => { try { fs.statSync(p); return true; }
+               catch (e) { if (e && e.code === 'ENOENT') return false; return true; } };
   const volumes = new Map();          /* un test par volume, pas par morceau */
   const volumeRepond = (p) => {
-    const v = volumeDe(p);
+    const v = volumeDe(p, o.plateforme);
     if (!v) return true;
     if (volumes.has(v)) return volumes.get(v);
     let ok = true;
-    try { ok = fs.existsSync(v); } catch (e) { ok = true; }
+    if (typeof o.volumeVivant === 'function') ok = !!o.volumeVivant(v);
+    else { try { ok = fs.existsSync(v); } catch (e) { ok = true; } }
     volumes.set(v, ok);
     return ok;
   };
@@ -863,13 +889,10 @@ function elaguerDisparus(tracks) {
     if (!t.path || /^[a-z]+:/i.test(t.path) && t.path.indexOf(':\\') < 0 && t.path.charAt(0) !== '/') {
       gardes.push(t); continue;
     }
+    /* ENOENT seul veut dire « pas la ». Un refus de permission ou
+       un disque qui bougonne n'est pas une suppression. */
     let existe = true;
-    try { fs.statSync(t.path); }
-    catch (e) {
-      /* ENOENT seul veut dire « pas la ». Un refus de permission ou
-         un disque qui bougonne n'est pas une suppression. */
-      existe = e && e.code !== 'ENOENT';
-    }
+    try { existe = !!surLeDisque(t.path); } catch (e) { existe = true; }
     if (existe) { t.disparu = false; gardes.push(t); continue; }
     if (volumeRepond(t.path)) { t.disparu = true; disparus.push(t); }
     else { t.offline = true; horsLigne++; gardes.push(t); }
@@ -986,6 +1009,29 @@ function dedoublonner(tracks) {
            information que les logiciels DJ n'ont pas : on prend la
            plus haute plutot que celle du hasard. */
         if ((t.pop || 0) > (garde.pop || 0)) garde.pop = t.pop;
+      }
+      /* ------------------------------------------------------------
+         Les chemins des copies repliees ne partent PAS a la poubelle.
+
+         Trouve par le banc « soiree Windows » : le DJ a le meme
+         morceau sur C: (rekordbox) et sur E: (Serato). On replie,
+         on garde l'entree C: — et quand Serato charge la copie E:
+         sur le deck, l'index des chemins ne la connait plus. Le
+         widget affiche « hors bibliotheque » sur un titre que le DJ
+         possede, et le morceau precedent reste au tableau.
+
+         On garde donc tous les chemins du groupe comme alias. Le
+         morceau reste UN seul morceau — une seule proposition, une
+         seule ligne — mais il repond a chacune de ses adresses.
+         ------------------------------------------------------------ */
+      const alias = [];
+      for (const t of g) {
+        if (!t.path || t.path === garde.path) continue;
+        if (alias.indexOf(t.path) < 0) alias.push(t.path);
+      }
+      if (alias.length) {
+        garde.alias = (garde.alias || []).concat(
+          alias.filter(a => (garde.alias || []).indexOf(a) < 0));
       }
       garde.copies = g.length;
       replies += g.length - 1;

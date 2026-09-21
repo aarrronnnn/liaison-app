@@ -1817,7 +1817,17 @@ let indexChemins = null;
 function chemins() {
   if (indexChemins) return indexChemins;
   indexChemins = new Map();
-  for (const t of library) if (t.path) indexChemins.set(libmod.cleChemin(t.path), t);
+  for (const t of library) {
+    if (t.path) indexChemins.set(libmod.cleChemin(t.path), t);
+    /* Les copies repliees par le dedoublonnage repondent aussi :
+       le DJ a le morceau sur deux disques, Serato charge celui que
+       nous n'avons pas garde, et sans ces alias le titre sortirait
+       « hors bibliotheque ». Voir dedoublonner() dans library.js. */
+    if (t.alias) for (const a of t.alias) {
+      const cle = libmod.cleChemin(a);
+      if (!indexChemins.has(cle)) indexChemins.set(cle, t);
+    }
+  }
   return indexChemins;
 }
 
@@ -3546,9 +3556,60 @@ ipcMain.handle('maj:etat', async () => {
   }
   return { courante: app.getVersion(), info: derniereMaj };
 });
-ipcMain.handle('maj:ouvrir', () => {
-  shell.openExternal((derniereMaj && derniereMaj.page) || 'https://liaisondj.app/telecharger');
-  return true;
+/* ============================================================
+   METTRE A JOUR SANS LAISSER DEUX LIAISON DERRIERE SOI.
+
+   Rapporte par le premier acheteur, sur Windows : « pour
+   installer la nouvelle version j'ai du desinstaller l'ancienne
+   et redemarrer le PC car il m'en ouvrait 5 ».
+
+   La mise a jour se contentait d'ouvrir la page de
+   telechargement. Le DJ lancait donc l'installateur PENDANT que
+   Liaison tournait — et sous Windows, on ne remplace pas un
+   fichier .exe en cours d'execution. L'installateur echoue a
+   moitie, l'ancienne version reste en memoire, et on se retrouve
+   avec deux installations et plusieurs fenetres.
+
+   Sur macOS le probleme ne se voit pas : on glisse l'app dans
+   Applications et le systeme s'arrange. Encore une panne que la
+   machine de developpement ne montre jamais.
+
+   On ne laisse donc plus ce piege ouvert : on previent, et on
+   propose de fermer Liaison tout de suite. Le DJ garde le choix —
+   il est peut-etre en pleine soiree.
+   ============================================================ */
+ipcMain.handle('maj:ouvrir', async () => {
+  const page = (derniereMaj && derniereMaj.page) || 'https://liaisondj.app/telecharger';
+  shell.openExternal(page);
+
+  /* En pleine soiree, on ne propose rien du tout : une boite de
+     dialogue par-dessus la cabine serait pire que le probleme.
+     « setlog.current » est deja ce qui sert ailleurs a savoir
+     qu'un set tourne — on ne reinvente pas le critere. */
+  if (setlog && setlog.current) return { ouvert: true, ferme: false, raison: 'soiree' };
+
+  const r = await dialog.showMessageBox({
+    type: 'info',
+    title: 'Mise a jour de Liaison',
+    message: 'Ferme Liaison avant de lancer l\'installateur.',
+    detail: process.platform === 'win32'
+      ? 'Windows ne peut pas remplacer une application en cours d\'execution : si Liaison tourne '
+        + 'pendant l\'installation, l\'ancienne version peut rester en place.\n\n'
+        + 'La page de telechargement vient de s\'ouvrir. Tu peux fermer Liaison maintenant, '
+        + 'puis lancer le fichier telecharge.'
+      : 'La page de telechargement vient de s\'ouvrir. Ferme Liaison, remplace-le dans '
+        + 'Applications, puis relance-le.',
+    buttons: ['Fermer Liaison maintenant', 'Plus tard'],
+    defaultId: 0, cancelId: 1
+  }).catch(() => ({ response: 1 }));
+
+  if (r.response === 0) {
+    /* On laisse le navigateur finir d'ouvrir la page avant de
+       partir, sinon le DJ se retrouve sans rien a l'ecran. */
+    setTimeout(() => { app.quit(); }, 1200);
+    return { ouvert: true, ferme: true };
+  }
+  return { ouvert: true, ferme: false };
 });
 ipcMain.handle('maj:ignorer', (e, version) => {
   config.majIgnoree = String(version || '');
