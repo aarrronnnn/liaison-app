@@ -549,10 +549,44 @@ async function autoImport(preferKind) {
       (b.kind === preferKind ? 1 : 0) - (a.kind === preferKind ? 1 : 0));
     send('status', { ok: true, msg: 'Lecture : ' + ordered.map(s => s.kind).join(', ') });
 
+    /* ------------------------------------------------------------
+       UNE SOURCE LUE QUI NE REND RIEN DOIT LE DIRE.
+
+       Un DJ a envoye une capture : « 0 titres prets », avec deux
+       bases Serato correctement detectees juste en dessous. Tout
+       avait l'air normal — la detection affichait ses trouvailles,
+       aucune erreur nulle part — et la seule information utile,
+       « ces bases ont ete ouvertes et n'ont donne aucun morceau »,
+       n'etait affichee nulle part.
+
+       Une source qui rend zero n'est pas la meme chose qu'une
+       source absente, et ne se repare pas pareil. On les separe.
+       ------------------------------------------------------------ */
     const lists = [];
+    const muettes = [];
     for (const src of ordered) {
-      try { lists.push(await autolib.readSource(src, x => send('progress', x), { cache: SCAN() })); }
-      catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
+      try {
+        const l = await autolib.readSource(src, x => send('progress', x), { cache: SCAN() });
+        if (!l || !l.length) muettes.push(src);
+        lists.push(l);
+      }
+      catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); muettes.push(src); }
+    }
+    if (muettes.length) {
+      send('conseils', [{
+        cle: 'source-muette', quand: 'import',
+        titre: muettes.length === 1
+          ? 'Une source a ete lue mais n\'a donne aucun morceau'
+          : muettes.length + ' sources ont ete lues sans donner un seul morceau',
+        texte: 'Liaison a bien trouve ' + muettes.map(s => s.label || s.kind).join(', ') +
+               ' et a pu l\'ouvrir, mais rien n\'en est sorti. Ce n\'est donc pas un probleme ' +
+               'de detection : soit la base est vide, soit les fichiers qu\'elle designe ne sont ' +
+               'pas la ou elle le dit — un disque debranche, par exemple.',
+        marche: ['Verifie que le disque qui porte ta musique est bien branche',
+                 'Reglages > Bibliotheque > Tout relire',
+                 'Sinon, ajoute le dossier de ta musique a la main'],
+        repli: 'Les autres sources, elles, ont ete lues normalement.'
+      }]);
     }
     const merged = autolib.merge(lists);
     /* ------------------------------------------------------------

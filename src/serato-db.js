@@ -61,9 +61,87 @@ function parseLen(s) {
   return Number(s) || 0;
 }
 
+/* ============================================================
+   OU VIT REELLEMENT LE FICHIER QUE SERATO DESIGNE.
+
+   Serato ecrit ses chemins SANS la racine du volume : la base de
+   D:\_Serato_ contient « Music/x.mp3 », pas « D:\Music\x.mp3 ».
+   buildTestDatabase ci-dessous le montre, il retire le premier
+   slash — c'est bien la convention du format.
+
+   Ce module rendait donc, sur Windows, un chemin RELATIF. Aucun
+   fichier ne repondait, l'elagage « fichier introuvable » faisait
+   son travail, et la bibliotheque tombait a zero. Symptome cote
+   DJ : « 0 titres prets » avec deux bases Serato correctement
+   detectees juste en dessous — et, dans la foulee, chaque morceau
+   pose sur le deck annonce comme hors bibliotheque, puisqu'il n'y
+   a plus de bibliotheque a laquelle le rapprocher.
+
+   Sur macOS, « / » + chemin tombait juste par chance tant que la
+   base etait celle du disque de demarrage. Pour une base posee sur
+   un SSD externe — c'est-a-dire le cas normal en soiree — elle
+   designait /Music/x.mp3 au lieu de /Volumes/SSD/Music/x.mp3, et
+   se trompait exactement de la meme facon.
+
+   La regle est une et la meme partout : le chemin est relatif a la
+   RACINE DU VOLUME QUI PORTE LA BASE.
+   ============================================================ */
+const path = require('path');
+
+/** La racine du volume qui porte ce fichier de base. */
+function racineDuVolume(fichier, plateforme) {
+  const win = (plateforme || process.platform) === 'win32';
+  const f = String(fichier || '');
+  if (win) {
+    const m = /^([A-Za-z]:)[\\/]/.exec(f);
+    return m ? m[1] + '\\' : '';
+  }
+  /* Un volume monte : /Volumes/<nom>, /media/<user>/<nom>, /mnt/<nom> */
+  let m = /^(\/Volumes\/[^/]+)(?=\/)/.exec(f)
+       || /^(\/media\/[^/]+\/[^/]+)(?=\/)/.exec(f)
+       || /^(\/mnt\/[^/]+)(?=\/)/.exec(f);
+  return m ? m[1] : '';
+}
+
+/* Un chemin deja absolu — certaines versions en ecrivent — se
+   reconnait et ne se touche pas. */
+function estAbsolu(p, win) {
+  return win ? /^[A-Za-z]:[\\/]/.test(p) : p.startsWith('/');
+}
+
+/**
+ * Le chemin reel du morceau.
+ *
+ * On ne DEVINE pas : on propose les interpretations possibles et on
+ * garde celle qui designe un fichier existant. Si aucune ne repond
+ * — disque debranche, par exemple — on rend la plus probable, pour
+ * que l'elagage puisse faire la difference entre « efface » et
+ * « hors ligne » comme il sait le faire.
+ *
+ * @param {string} p chemin tel que Serato l'ecrit
+ * @param {string} base racine du volume portant la base
+ * @param {{plateforme?:string, existe?:Function}} opt injection pour les essais
+ */
+function resoudre(p, base, opt) {
+  opt = opt || {};
+  const plateforme = opt.plateforme || process.platform;
+  const win = plateforme === 'win32';
+  const existe = opt.existe || (x => { try { return fs.statSync(x).isFile(); } catch (e) { return false; } });
+  if (estAbsolu(p, win)) return p;
+
+  const sep = win ? '\\' : '/';
+  const nu = p.replace(/^[\\/]+/, '');
+  const candidats = [];
+  if (base) candidats.push(base.replace(/[\\/]+$/, '') + sep + nu.replace(/\//g, sep));
+  if (!win) candidats.push('/' + nu);              /* le disque de demarrage */
+  for (const c of candidats) if (existe(c)) return c;
+  return candidats[0] || p;
+}
+
 /** @returns {Array} morceaux de la bibliotheque Serato */
-function parseDatabase(file) {
+function parseDatabase(file, opt) {
   const buf = fs.readFileSync(file);
+  const base = (opt && opt.base !== undefined) ? opt.base : racineDuVolume(file, opt && opt.plateforme);
   const out = [];
   for (const c of readChunks(buf, 0, buf.length)) {
     if (c.tag !== 'otrk') continue;
@@ -71,7 +149,7 @@ function parseDatabase(file) {
     const p = t.pfil || '';
     if (!p) continue;
     out.push({
-      path: process.platform === 'win32' ? p : (p.startsWith('/') ? p : '/' + p),
+      path: resoudre(p, base, opt),
       title: t.tsng || '',
       artist: t.tart || '',
       genre: t.tgen || '',
@@ -123,4 +201,5 @@ function buildTestDatabase(tracks) {
   return Buffer.concat(parts);
 }
 
-module.exports = { parseDatabase, buildTestDatabase, readChunks, readText };
+module.exports = { parseDatabase, buildTestDatabase, readChunks, readText,
+                   racineDuVolume, resoudre };
