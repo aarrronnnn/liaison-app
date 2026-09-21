@@ -125,12 +125,12 @@ const page = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'settings.h
 const pont = fs.readFileSync(path.join(__dirname, '..', 'src', 'preload.js'), 'utf8');
 const principal = fs.readFileSync(path.join(__dirname, '..', 'src', 'main.js'), 'utf8');
 
-for (const m of ['dossiersListe', 'dossiersAjouter', 'dossiersRetirer']) {
+for (const m of ['dossiersListe', 'dossiersAjouter', 'dossiersRetirer', 'diagRapport', 'copy']) {
   verifier('la page appelle « ' + m + " », et le pont l'expose",
     page.includes('window.liaison.' + m) && pont.includes(m + ':'),
     'page:' + page.includes('window.liaison.' + m) + ' pont:' + pont.includes(m + ':'));
 }
-for (const c of ['dossiers:liste', 'dossiers:ajouter', 'dossiers:retirer']) {
+for (const c of ['dossiers:liste', 'dossiers:ajouter', 'dossiers:retirer', 'diag:rapport']) {
   verifier('le canal « ' + c + ' » est bien traite cote principal',
     principal.includes("ipcMain.handle('" + c + "'"));
 }

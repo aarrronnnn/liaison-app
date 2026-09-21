@@ -22,6 +22,7 @@ const prepare = require('./prepare');
 const clientlist = require('./clientlist');
 const cratesmod = require('./crates');
 const filtersmod = require('./filters');
+let dernierImport = null;   /* compte rendu du dernier import, pour le diagnostic */
 const genresmod = require('./genres');
 const dossiersmod = require('./dossiers');
 const aavoir = require('./aavoir');
@@ -582,13 +583,25 @@ async function autoImport(preferKind) {
        ------------------------------------------------------------ */
     const lists = [];
     const muettes = [];
+    /* Ce que chaque source a donne, garde pour le diagnostic : sans
+       ca, « 0 titre » ne dit pas LAQUELLE des sources est vide. */
+    dernierImport = { quand: Date.now(), sources: [], retires: 0, doublons: 0, horsLigne: 0 };
     for (const src of ordered) {
-      try {
-        const l = await autolib.readSource(src, x => send('progress', x), { cache: SCAN() });
-        if (!l || !l.length) muettes.push(src);
-        lists.push(l);
-      }
-      catch (e) { send('status', { ok: false, msg: src.kind + ' : ' + e.message }); muettes.push(src); }
+      let l = null, err = null;
+      try { l = await autolib.readSource(src, x => send('progress', x), { cache: SCAN() }); }
+      catch (e) { err = e.message; send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
+      if (!l || !l.length) muettes.push(src);
+      lists.push(l || []);
+      dernierImport.sources.push({
+        kind: src.kind, path: src.path, manuel: !!src.manuel, erreur: err,
+        lus: (l || []).length,
+        /* trois chemins en exemple, et s'ils designent un fichier :
+           c'est ce qui distingue « base vide » de « chemins faux » */
+        exemples: (l || []).slice(0, 3).map(t => ({
+          path: t.path,
+          existe: (() => { try { return !!t.path && fs.statSync(t.path).isFile(); } catch (e) { return false; } })()
+        }))
+      });
     }
     if (muettes.length) {
       send('conseils', [{
@@ -637,6 +650,12 @@ async function autoImport(preferKind) {
         ' doublon' + (sansDoublons.replies > 1 ? 's' : '') + ' replie' +
         (sansDoublons.replies > 1 ? 's' : '') + ' (meme morceau dans deux bibliotheques)' });
     const elagage = libmod.elaguerDisparus(sansDoublons.tracks);
+    if (dernierImport) {
+      dernierImport.retires = elagage.disparus.length;
+      dernierImport.doublons = sansDoublons.replies || 0;
+      dernierImport.horsLigne = elagage.horsLigne || 0;
+      dernierImport.gardes = elagage.gardes.length;
+    }
     if (elagage.disparus.length)
       send('status', { ok: true, msg: elagage.disparus.length +
         ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retire' +
@@ -1967,6 +1986,96 @@ ipcMain.handle('library:pick', async (e, mode) => {
    le DJ veut pointer SON export rekordbox, et on ajoute ici la
    liste de dossiers, qui, elle, s'additionne.
    ============================================================ */
+/* ============================================================
+   LE RAPPORT DE DIAGNOSTIC.
+
+   Un DJ a ecrit « il ne trouve rien, et meme avec un titre charge
+   il affiche toujours l'ancien ». Tout y etait sauf ce qu'il
+   fallait : QUELLE source a ete lue, COMBIEN elle a rendu, et a
+   quoi ressemblent ses chemins. Sans ca, on devine — et on a
+   devine deux fois de suite.
+
+   Ce rapport tient en un texte que le DJ copie et colle. Il n'est
+   jamais envoye tout seul : il contient des chemins de fichiers et
+   des titres, donc c'est SA decision, pas la notre.
+   ============================================================ */
+function rapportDiagnostic() {
+  const L = [];
+  const n = x => (x || 0).toLocaleString('fr-FR');
+  L.push('--- DIAGNOSTIC LIAISON ---');
+  L.push('version ' + app.getVersion() + '  ·  ' + process.platform + ' ' + process.arch +
+         '  ·  electron ' + process.versions.electron);
+  L.push('');
+
+  L.push('BIBLIOTHEQUE : ' + n(library.length) + ' titre(s)');
+  if (dernierImport) {
+    const age = Math.round((Date.now() - dernierImport.quand) / 1000);
+    L.push('dernier import il y a ' + age + ' s');
+    for (const s of dernierImport.sources) {
+      L.push('  · ' + s.kind + (s.manuel ? ' (ajoute a la main)' : '') + ' — ' + s.lus + ' lu(s)');
+      L.push('      ' + s.path);
+      if (s.erreur) L.push('      ERREUR : ' + s.erreur);
+      for (const e of s.exemples)
+        L.push('      ' + (e.existe ? 'fichier OK  ' : 'INTROUVABLE ') + e.path);
+      if (s.lus && !s.exemples.some(e => e.existe))
+        L.push('      >>> la base est lue mais AUCUN de ses fichiers ne repond');
+    }
+    L.push('  doublons replies : ' + n(dernierImport.doublons));
+    L.push('  retires (fichier introuvable) : ' + n(dernierImport.retires));
+    L.push('  hors ligne (disque absent) : ' + n(dernierImport.horsLigne));
+  } else {
+    L.push('  aucun import enregistre dans cette session');
+  }
+  L.push('');
+
+  L.push('DOSSIERS AJOUTES : ' + ((config.dossiers || []).length || 'aucun'));
+  for (const d of dossiersmod.sources(config.dossiers))
+    L.push('  · ' + (d.present ? 'present ' : 'ABSENT  ') + d.path);
+  L.push('');
+
+  /* --------------------------------------------------------
+     LE MORCEAU EN COURS, ET POURQUOI IL N'EST PAS RAPPROCHE.
+
+     C'est la moitie la plus utile : on montre ce que le logiciel
+     a annonce, la cle que ca produit, et si la bibliotheque
+     contient cette cle. Un ecart d'un caractere se voit alors.
+     -------------------------------------------------------- */
+  L.push('SUR LE DECK');
+  if (!current) L.push('  rien en cours');
+  else {
+    L.push('  ' + (current.artist || '?') + ' — ' + (current.title || '?'));
+    L.push('  hors bibliotheque : ' + (current.horsBiblio ? 'OUI' : 'non') +
+           '   source : ' + (commentIl || '?'));
+    if (current.path) {
+      const cle = libmod.cleChemin(current.path);
+      L.push('  chemin annonce : ' + current.path);
+      L.push('  cle calculee   : ' + cle);
+      L.push('  dans l\'index  : ' + (chemins().has(cle) ? 'OUI' : 'NON'));
+      if (!chemins().has(cle)) {
+        /* On cherche le plus proche : si un seul caractere separe
+           les deux, il faut le VOIR. */
+        const base = String(current.path).split(/[\\/]/).pop().toLowerCase();
+        const proches = [];
+        for (const k of chemins().keys()) {
+          if (k.endsWith(base)) { proches.push(k); if (proches.length >= 3) break; }
+        }
+        for (const pr of proches) L.push('  cle proche     : ' + pr);
+        if (!proches.length) L.push('  aucun morceau de la bibliotheque ne porte ce nom de fichier');
+      }
+    } else {
+      L.push('  le logiciel n\'annonce pas de chemin de fichier (titre seul)');
+    }
+  }
+  L.push('');
+  L.push('LOGICIELS OUVERTS : ' +
+    ((() => { try { return watcher.current().map(a => a.id).join(', ') || 'aucun'; }
+              catch (e) { return 'inconnu'; } })()));
+  L.push('--- fin ---');
+  return L.join('\n');
+}
+
+ipcMain.handle('diag:rapport', () => rapportDiagnostic());
+
 ipcMain.handle('dossiers:liste', () => ({
   liste: dossiersmod.sources(config.dossiers),
   /* combien de morceaux viennent de chacun : le DJ doit voir si
@@ -3184,7 +3293,61 @@ function buildMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate(modele));
 }
 
+/* ============================================================
+   UNE SEULE LIAISON A LA FOIS.
+
+   Rapporte par le premier acheteur : « pour installer la nouvelle
+   version j'ai du desinstaller l'ancienne et redemarrer le PC car
+   il m'en ouvrait 5 ».
+
+   Il n'y avait aucun verrou d'instance. Chaque double-clic, chaque
+   relance par l'installeur, chaque entree de demarrage ouvrait une
+   application COMPLETE de plus. Cinq Liaison, c'est :
+
+     — cinq lectures de la bibliotheque en parallele sur le meme
+       disque, qui se disputent la tete de lecture ;
+     — cinq processus qui reecrivent le MEME config.json et le meme
+       cache de scan : le dernier ecrit gagne, les reglages des
+       autres sont perdus ;
+     — cinq widgets, dont celui qu'on regarde n'est pas forcement
+       celui qui a lu le deck.
+
+   Ce dernier point explique le symptome le plus deroutant :
+   « meme avec un titre charge sur le deck, il affiche toujours
+   l'ancien ». Le widget visible appartenait a une instance restee
+   sur son etat d'il y a une heure.
+
+   Le verrou doit etre pris AVANT tout le reste — avant de lire la
+   config, avant d'ouvrir une fenetre — sinon la deuxieme instance
+   a deja ecrit dans les fichiers de la premiere quand elle
+   s'apercoit qu'elle est de trop.
+
+   Et relancer l'application n'est pas une erreur de l'utilisateur :
+   c'est ainsi qu'on redemande un widget qu'on a masque. La seconde
+   instance sert donc a RAMENER la premiere.
+   ============================================================ */
+/* On retient la reponse plutot que d'interroger Electron plus tard :
+   hasSingleInstanceLock() n'existe pas partout, et un garde-fou qui
+   depend d'une API absente saute le demarrage entier — ce qui est
+   pire que le defaut qu'il corrige. */
+const SEULE_INSTANCE = app.requestSingleInstanceLock();
+if (!SEULE_INSTANCE) {
+  app.quit();
+} else {
+  app.on('second-instance', () => {
+    if (widget) {
+      if (widget.isMinimized()) widget.restore();
+      widget.show();
+      widget.setAlwaysOnTop(true, 'screen-saver');
+      widget.focus();
+    }
+  });
+}
+
 app.whenReady().then(async () => {
+  /* Si le verrou n'a pas ete obtenu, app.quit() est deja demande :
+     on ne demarre pas une deuxieme fois par-dessus. */
+  if (!SEULE_INSTANCE) return;
   loadConfig();
   buildMenu();
   license = new License(LIC());

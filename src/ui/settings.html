@@ -1051,6 +1051,10 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
     <div class="pied">
       <button id="reScan">Relire maintenant</button>
       <button id="reScanTout" class="g">Tout relire</button>
+      <!-- Quand rien ne marche et qu'on ne sait pas pourquoi : un
+           texte a coller dans un mail. Il n'est jamais envoye tout
+           seul — il contient des chemins et des titres. -->
+      <button id="diagCopier" class="t">Copier le diagnostic</button>
       <p class="tips" id="scanInfo"></p>
     </div>
     <p class="tips" style="margin-top:10px">
@@ -1902,6 +1906,16 @@ function cheminCourt(p, max) {
   const s = String(p || ''); const m = max || 46;
   return s.length <= m ? s : '…' + s.slice(s.length - (m - 1));
 }
+
+$('#diagCopier') && ($('#diagCopier').onclick = async () => {
+  const b = $('#diagCopier'); const avant = b.textContent;
+  try {
+    const t = await window.liaison.diagRapport();
+    await window.liaison.copy(t);
+    b.textContent = 'Copie — colle-le dans ton message';
+  } catch (e) { b.textContent = 'Impossible de copier'; }
+  setTimeout(() => { b.textContent = avant; }, 4000);
+});
 
 async function renderDossiers(){
   const box = $('#dListe');

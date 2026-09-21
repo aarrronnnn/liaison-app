@@ -11,6 +11,10 @@ contextBridge.exposeInMainWorld('liaison', {
   pickLibrary: mode => invoke('library:pick', mode),
   /* Les dossiers que le DJ ajoute lui-meme : des sources EN PLUS
      de ce que la detection a trouve, jamais a leur place. */
+  /* Le rapport de diagnostic : un texte que le DJ copie et envoie
+     s'il le veut. Jamais transmis tout seul — il contient des
+     chemins de fichiers et des titres. */
+  diagRapport: () => invoke('diag:rapport'),
   dossiersListe: () => invoke('dossiers:liste'),
   dossiersAjouter: () => invoke('dossiers:ajouter'),
   dossiersRetirer: p => invoke('dossiers:retirer', p),
