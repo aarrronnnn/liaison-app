@@ -771,6 +771,21 @@ function hash53(s) {
 function cleChemin(p) {
   let x = String(p || '').replace(/\\/g, '/');
   try { if (x.indexOf('file://') === 0) x = decodeURIComponent(x.replace(/^file:\/\/(localhost)?/, '')); } catch (e) {}
+  /* ------------------------------------------------------------
+     LE SLASH DEVANT LA LETTRE DE LECTEUR.
+
+     Une URL de fichier Windows s'ecrit « file://localhost/C:/... » :
+     le slash est exige par la syntaxe des URL, il ne fait pas
+     partie du chemin. En le gardant, on fabriquait la cle
+     « /c:/users/... » pour une bibliotheque rangee sous
+     « c:/users/... » — un seul caractere d'ecart, et le morceau
+     annonce sur le deck n'etait jamais rapproche du sien.
+
+     Trouve par le banc multi-plateforme des la premiere execution,
+     sur les CINQ formats a la fois : le defaut n'etait pas dans les
+     parseurs, il etait ici, dans la comparaison.
+     ------------------------------------------------------------ */
+  x = x.replace(/^\/([A-Za-z]:)/, '$1');
   x = x.replace(/\/:/g, '/').replace(/\/+/g, '/');
   /* La forme composee, avant la mise en minuscules : c'est ce qui
      reconcilie le disque et les bases des logiciels de mix. */

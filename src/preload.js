@@ -9,6 +9,11 @@ contextBridge.exposeInMainWorld('liaison', {
   pack: (country, event) => invoke('locales:pack', country, event),
   setConfig: patch => invoke('config:set', patch),
   pickLibrary: mode => invoke('library:pick', mode),
+  /* Les dossiers que le DJ ajoute lui-meme : des sources EN PLUS
+     de ce que la detection a trouve, jamais a leur place. */
+  dossiersListe: () => invoke('dossiers:liste'),
+  dossiersAjouter: () => invoke('dossiers:ajouter'),
+  dossiersRetirer: p => invoke('dossiers:retirer', p),
   suggest: () => invoke('suggest'),
   rescue: () => invoke('rescue'),
   /* la bulle : rester dans le meme style */

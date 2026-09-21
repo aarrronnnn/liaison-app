@@ -86,57 +86,11 @@ function parseLen(s) {
    La regle est une et la meme partout : le chemin est relatif a la
    RACINE DU VOLUME QUI PORTE LA BASE.
    ============================================================ */
-const path = require('path');
-
-/** La racine du volume qui porte ce fichier de base. */
-function racineDuVolume(fichier, plateforme) {
-  const win = (plateforme || process.platform) === 'win32';
-  const f = String(fichier || '');
-  if (win) {
-    const m = /^([A-Za-z]:)[\\/]/.exec(f);
-    return m ? m[1] + '\\' : '';
-  }
-  /* Un volume monte : /Volumes/<nom>, /media/<user>/<nom>, /mnt/<nom> */
-  let m = /^(\/Volumes\/[^/]+)(?=\/)/.exec(f)
-       || /^(\/media\/[^/]+\/[^/]+)(?=\/)/.exec(f)
-       || /^(\/mnt\/[^/]+)(?=\/)/.exec(f);
-  return m ? m[1] : '';
-}
-
-/* Un chemin deja absolu — certaines versions en ecrivent — se
-   reconnait et ne se touche pas. */
-function estAbsolu(p, win) {
-  return win ? /^[A-Za-z]:[\\/]/.test(p) : p.startsWith('/');
-}
-
-/**
- * Le chemin reel du morceau.
- *
- * On ne DEVINE pas : on propose les interpretations possibles et on
- * garde celle qui designe un fichier existant. Si aucune ne repond
- * — disque debranche, par exemple — on rend la plus probable, pour
- * que l'elagage puisse faire la difference entre « efface » et
- * « hors ligne » comme il sait le faire.
- *
- * @param {string} p chemin tel que Serato l'ecrit
- * @param {string} base racine du volume portant la base
- * @param {{plateforme?:string, existe?:Function}} opt injection pour les essais
- */
-function resoudre(p, base, opt) {
-  opt = opt || {};
-  const plateforme = opt.plateforme || process.platform;
-  const win = plateforme === 'win32';
-  const existe = opt.existe || (x => { try { return fs.statSync(x).isFile(); } catch (e) { return false; } });
-  if (estAbsolu(p, win)) return p;
-
-  const sep = win ? '\\' : '/';
-  const nu = p.replace(/^[\\/]+/, '');
-  const candidats = [];
-  if (base) candidats.push(base.replace(/[\\/]+$/, '') + sep + nu.replace(/\//g, sep));
-  if (!win) candidats.push('/' + nu);              /* le disque de demarrage */
-  for (const c of candidats) if (existe(c)) return c;
-  return candidats[0] || p;
-}
+/* La regle de resolution est partagee avec Traktor, qui souffrait
+   exactement du meme defaut : voir src/volumes.js. */
+const vol = require('./volumes');
+const racineDuVolume = vol.racineDuVolume;
+const resoudre = vol.resoudre;
 
 /** @returns {Array} morceaux de la bibliotheque Serato */
 function parseDatabase(file, opt) {

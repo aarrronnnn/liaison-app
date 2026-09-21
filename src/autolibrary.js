@@ -13,6 +13,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const seratoDb = require('./serato-db');
+const vol = require('./volumes');
 const lib = require('./library');
 
 const HOME = os.homedir();
@@ -234,7 +235,11 @@ const TRAKTOR_KEY = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','
 const attr = (s, name) => { const m = s.match(new RegExp('\\b' + name + '="([^"]*)"')); return m ? m[1] : ''; };
 const unesc = s => String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
 
-function parseTraktor(file) {
+/* L'option « existe » n'est la que pour les essais : elle permet
+   d'eprouver la resolution du volume sur une plateforme simulee,
+   sans brancher un disque. En production, resoudre() interroge le
+   vrai systeme de fichiers. */
+function parseTraktor(file, opt) {
   const xml = fs.readFileSync(file, 'utf8');
   const out = [];
   const re = /<ENTRY\b([\s\S]*?)<\/ENTRY>/g;
@@ -244,10 +249,32 @@ function parseTraktor(file) {
     const dir = unesc(attr(e, 'DIR')).replace(/\/:/g, '/').replace(/^\/+/, '/');
     const f = unesc(attr(e, 'FILE'));
     if (!f) continue;
+    /* ------------------------------------------------------------
+       L'ATTRIBUT « VOLUME », QUI ETAIT JETE.
+
+       Traktor ecrit <LOCATION DIR="/:Music/:" FILE="x.mp3"
+       VOLUME="D:"> — et VOLUME porte la lettre du disque sous
+       Windows, le NOM du volume sous macOS. On ne lisait que DIR
+       et FILE : le chemin rendu n'avait donc pas de racine.
+
+       Exactement la panne de Serato, dans un autre format : aucun
+       fichier ne repond, l'elagage supprime tout, la bibliotheque
+       tombe a zero et chaque morceau pose sur le deck est annonce
+       « hors bibliotheque ». Invisible sur le disque de demarrage
+       d'un Mac, ou « / » + chemin tombe juste par hasard.
+
+       C'est aussi ce qui explique la plainte d'origine : « avec
+       iTunes aucun probleme » — iTunes ecrit un chemin ABSOLU.
+       ------------------------------------------------------------ */
+    const volume = unesc(attr(e, 'VOLUME'));
     const kv = attr(e, 'VALUE');
     const bpm = parseFloat(attr(e, 'BPM')) || 0;
     out.push({
-      path: (dir || '/') + f,
+      path: (function () {
+        const r = vol.racinesTraktor(volume, opt && opt.plateforme);
+        return vol.resoudre((dir || '/') + f, r[0],
+          { autres: r.slice(1), existe: opt && opt.existe, plateforme: opt && opt.plateforme });
+      })(),
       title: unesc(attr(head, 'TITLE')) || f,
       artist: unesc(attr(head, 'ARTIST')),
       genre: unesc(attr(e, 'GENRE')),

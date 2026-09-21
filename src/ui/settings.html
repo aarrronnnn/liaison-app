@@ -149,6 +149,23 @@ button.t.att:hover{color:var(--rose)}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:12px}
 .state{font-family:var(--m);font-size:11px;color:var(--ink2);margin-top:10px}
 .state b{color:var(--blueTxt);font-weight:400}
+.dossiers{margin-top:18px;padding-top:16px;border-top:1px solid var(--line)}
+.dtt{font-family:var(--m);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--ink3);display:flex;gap:10px;align-items:baseline}
+.dtt i{font-style:normal;margin-left:auto;font-size:10.5px;color:var(--ink3)}
+.dl{display:flex;align-items:center;gap:12px;padding:10px 12px;margin-top:8px;
+  background:var(--card);border:1px solid var(--line);border-radius:5px}
+/* Pas de « direction:rtl » pour tronquer par la gauche : un chemin
+   qui commence par « / » y perd son slash initial, deplace en fin
+   de ligne par l'algorithme bidirectionnel. « /Volumes/SSD/Tracks »
+   s'affichait « Volumes/SSD/Tracks/ » — un chemin faux, qui a l'air
+   vrai. On tronque donc en JS, ou le resultat est previsible. */
+.dl .dp{flex:1;min-width:0;font-family:var(--m);font-size:12px;color:var(--ink);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.dl .dn{font-family:var(--m);font-size:11px;color:var(--ink3);flex:none}
+.dl .dabs{font-family:var(--m);font-size:10.5px;color:var(--rose);flex:none}
+.dl button{flex:none}
+.dvide{margin-top:8px;font-size:13px;color:var(--ink3)}
 .qrbox{display:flex;gap:18px;align-items:flex-start;margin-top:14px}
 .qrbox img{width:132px;height:132px;border:1px solid var(--line);border-radius:4px;background:#fff}
 .tips{font-size:13px;color:var(--ink2);line-height:1.6;margin:10px 0 0}
@@ -1012,6 +1029,25 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
     <div class="state" id="libState">Recherche en cours…</div>
     <div class="bar"><i id="bar"></i></div>
     <div id="srcTable"></div>
+    <!-- ------------------------------------------------------------
+         Quand la detection ne suffit pas.
+
+         Elle teste quinze noms de dossiers, sur un seul niveau.
+         « D:\Mes sons 2024 » n'y sera jamais. A un moment il faut
+         laisser le DJ montrer du doigt — et ce qu'il montre
+         s'AJOUTE a ce qui a ete trouve, ca ne le remplace pas.
+         ------------------------------------------------------------ -->
+    <div class="dossiers">
+      <div class="dtt">Dossiers que tu as ajoutés<i id="dInfo"></i></div>
+      <div id="dListe"></div>
+      <div class="row">
+        <button id="dAjouter" class="g">Ajouter un dossier de musique</button>
+      </div>
+      <p class="tips">Liaison lit ces dossiers <b>en plus</b> de ce qu'il a trouvé tout seul —
+        ta base rekordbox ou Serato reste en place. Utile si ta musique vit sur un deuxième
+        disque, ou dans un dossier au nom que Liaison ne peut pas deviner.</p>
+    </div>
+
     <div class="pied">
       <button id="reScan">Relire maintenant</button>
       <button id="reScanTout" class="g">Tout relire</button>
@@ -1848,6 +1884,78 @@ window.liaison.on('progress', p => {
   if (bar && p.total) bar.style.width = Math.round(p.done / p.total * 100) + '%';
 });
 renderScanInfo();
+/* ============================================================
+   LES DOSSIERS AJOUTES A LA MAIN.
+
+   Le cote principal rend { liste, comptes } : la liste est faite
+   d'objets { path, present, label }, et « comptes » dit combien de
+   morceaux de la bibliotheque viennent de chaque dossier.
+
+   Ce compte n'est pas decoratif. Sans lui, un DJ qui ajoute le
+   mauvais dossier n'a aucun moyen de le savoir : l'interface
+   dirait « ajoute » et il ne se passerait rien de visible. Avec
+   lui, « 0 morceau » se voit tout de suite.
+   ============================================================ */
+/* Le chemin raccourci par la GAUCHE : la fin d'un chemin dit ou on
+   est, le debut dit seulement qu'on est sur un disque. */
+function cheminCourt(p, max) {
+  const s = String(p || ''); const m = max || 46;
+  return s.length <= m ? s : '…' + s.slice(s.length - (m - 1));
+}
+
+async function renderDossiers(){
+  const box = $('#dListe');
+  if (!box || !window.liaison.dossiersListe) return;
+  let r = null;
+  try { r = await window.liaison.dossiersListe(); } catch (e) {}
+  const liste = (r && r.liste) || [];
+  const comptes = (r && r.comptes) || {};
+  $('#dInfo').textContent = liste.length
+    ? liste.length + ' dossier' + (liste.length > 1 ? 's' : '')
+    : '';
+  if (!liste.length) {
+    box.innerHTML = '<div class="dvide">Aucun pour l\'instant — Liaison se debrouille tout seul. ' +
+                    'Ajoute-en un s\'il lui manque de la musique.</div>';
+    return;
+  }
+  box.innerHTML = liste.map(d => {
+    const n = comptes[d.path] || 0;
+    return '<div class="dl">' +
+      '<span class="dp" title="' + esc(d.path) + '">' + esc(cheminCourt(d.path)) + '</span>' +
+      (d.present
+        ? '<span class="dn">' + (n ? n.toLocaleString('fr-FR') + ' titres' : '0 titre') + '</span>'
+        : '<span class="dabs">disque absent</span>') +
+      '<button class="t" data-retirer="' + esc(d.path) + '">Retirer</button>' +
+      '</div>';
+  }).join('');
+}
+
+$('#dListe') && $('#dListe').addEventListener('click', async e => {
+  const b = e.target.closest('button[data-retirer]'); if (!b) return;
+  b.disabled = true;
+  try { await window.liaison.dossiersRetirer(b.dataset.retirer); } catch (err) {}
+  await renderDossiers(); await renderSources();
+});
+
+$('#dAjouter') && ($('#dAjouter').onclick = async () => {
+  const b = $('#dAjouter');
+  b.disabled = true; const avant = b.textContent; b.textContent = 'Lecture en cours…';
+  try {
+    const r = await window.liaison.dossiersAjouter();
+    if (r && !r.annule && r.refuses && r.refuses.length) {
+      /* On DIT pourquoi un dossier n'est pas entre. « Rien ne se
+         passe » est la pire reponse possible a un clic. */
+      const mots = { deja: 'deja dans la liste', inclus: 'deja couvert par un dossier au-dessus',
+                     vide: 'chemin vide' };
+      $('#dInfo').textContent = r.refuses.map(x => mots[x.raison] || x.raison).join(' · ');
+    }
+  } catch (err) {}
+  b.disabled = false; b.textContent = avant;
+  await renderDossiers(); await renderSources();
+});
+
+renderDossiers();
+
 async function renderSources(){
   const list = await window.liaison.librarySources();
   /* ------------------------------------------------------------

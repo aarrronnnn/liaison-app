@@ -23,6 +23,7 @@ const clientlist = require('./clientlist');
 const cratesmod = require('./crates');
 const filtersmod = require('./filters');
 const genresmod = require('./genres');
+const dossiersmod = require('./dossiers');
 const aavoir = require('./aavoir');
 const charts = require('./charts');
 const landing = require('./landing');
@@ -65,6 +66,8 @@ const DEFAULTS = {
      silence. */
   rapportPannes: undefined,
   libraryMode: null, libraryPath: null,
+  /* les dossiers que le DJ a montres du doigt : des sources EN PLUS */
+  dossiers: [],
   pack: 'fr-club', sessionName: 'Session', guestWeight: 0.5,
   /* « auto » par defaut : Liaison lit la pente dans ce qui est
      joue plutot que d'attendre qu'on la lui declare. */
@@ -529,6 +532,21 @@ async function autoImport(preferKind) {
   importing = true;
   try {
     librarySources = autolib.detect();
+    /* ------------------------------------------------------------
+       LES DOSSIERS QUE LE DJ A MONTRES DU DOIGT.
+
+       La detection couvre les rangements previsibles ; elle ne
+       couvrira jamais « D:\\Mes sons 2024 ». Ces dossiers-la
+       arrivent donc ici, EN PLUS des bases trouvees — jamais a
+       leur place. Tout le reste de la chaine (fusion, doublons,
+       elagage, surveillance) travaille deja sur une liste de
+       sources et n'a rien a apprendre.
+
+       Un dossier dont le disque est debranche n'est pas lu ce soir
+       et n'est pas non plus efface du reglage : il revient demain.
+       ------------------------------------------------------------ */
+    const manuels = dossiersmod.lisibles(config.dossiers);
+    if (manuels.length) librarySources = librarySources.concat(manuels);
     /* Ce qui manque pour aller vite — typiquement rekordbox
        installe sans export XML. On le dit avant le scan, pas
        apres deux heures. */
@@ -1939,6 +1957,64 @@ ipcMain.handle('library:pick', async (e, mode) => {
   if (r.canceled || !r.filePaths[0]) return null;
   const n = await importLibrary(mode, r.filePaths[0]);
   return { path: r.filePaths[0], n: n };
+});
+
+/* ============================================================
+   LES DOSSIERS AJOUTES A LA MAIN — trois gestes, rien de plus.
+
+   « library:pick » existait deja et remplacait toute la
+   bibliotheque par le dossier choisi. On le laisse pour le cas ou
+   le DJ veut pointer SON export rekordbox, et on ajoute ici la
+   liste de dossiers, qui, elle, s'additionne.
+   ============================================================ */
+ipcMain.handle('dossiers:liste', () => ({
+  liste: dossiersmod.sources(config.dossiers),
+  /* combien de morceaux viennent de chacun : le DJ doit voir si
+     son ajout a servi a quelque chose */
+  comptes: (() => {
+    const c = {};
+    for (const t of library) {
+      if (!t.path) continue;
+      for (const d of (config.dossiers || [])) {
+        if (dossiersmod.contient(d, t.path)) { c[d] = (c[d] || 0) + 1; break; }
+      }
+    }
+    return c;
+  })()
+}));
+
+ipcMain.handle('dossiers:ajouter', async () => {
+  const r = await dialog.showOpenDialog({
+    title: 'Choisis un dossier de musique',
+    message: 'Liaison lira ce dossier EN PLUS de ce qu\'il a deja trouve.',
+    properties: ['openDirectory', 'multiSelections', 'createDirectory']
+  });
+  if (r.canceled || !r.filePaths.length) return { annule: true };
+
+  let liste = (config.dossiers || []).slice();
+  const refuses = [];
+  let bouge = false;
+  for (const p of r.filePaths) {
+    const a = dossiersmod.ajouter(liste, p);
+    liste = a.liste;
+    if (a.ajoute) bouge = true; else refuses.push({ path: p, raison: a.raison });
+  }
+  if (!bouge) return { annule: false, ajoute: 0, refuses: refuses };
+
+  config.dossiers = liste; saveConfig();
+  /* On relit tout : la fusion et les doublons se jouent sur
+     l'ensemble des sources, pas sur le dernier dossier. */
+  await autoImport(config.source);
+  return { annule: false, ajoute: r.filePaths.length - refuses.length,
+           refuses: refuses, n: library.length };
+});
+
+ipcMain.handle('dossiers:retirer', async (e, p) => {
+  const r = dossiersmod.retirer(config.dossiers, p);
+  if (!r.retire) return { retire: false };
+  config.dossiers = r.liste; saveConfig();
+  await autoImport(config.source);
+  return { retire: true, n: library.length };
 });
 
 ipcMain.handle('source:pickFile', async () => {
