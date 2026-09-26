@@ -49,7 +49,7 @@ function decodeAll(file) {
       if (fini) return;
       fini = true;
       try { p.kill('SIGKILL'); } catch (e) {}
-      reject(new Error('ffmpeg : delai depasse (' + path.basename(file) + ')'));
+      reject(new Error('ffmpeg : délai dépassé (' + path.basename(file) + ')'));
     }, DELAI_FFMPEG);
     const terminer = (fn) => (...a) => {
       if (fini) return;
@@ -59,7 +59,7 @@ function decodeAll(file) {
     };
     p.on('error', terminer(reject));
     p.on('close', terminer(() => {
-      if (!bytes) return reject(new Error('ffmpeg : aucun echantillon (' + path.basename(file) + ')'));
+      if (!bytes) return reject(new Error('ffmpeg : aucun échantillon (' + path.basename(file) + ')'));
       const buf = Buffer.concat(chunks, bytes - (bytes % 4));
       resolve(new Float32Array(buf.buffer, buf.byteOffset, buf.length / 4));
     }));
@@ -454,7 +454,7 @@ class StructurePool {
         const cb = this.pending.get(w.jobId);
         this.pending.delete(w.jobId);
         w.jobId = null;
-        if (cb) cb.reject(new Error('fil de structure arrete'));
+        if (cb) cb.reject(new Error('fil de structure arrêté'));
       }
       this.workers = this.workers.filter(x => x !== w);
       this._drain();
@@ -501,7 +501,7 @@ class StructurePool {
     const restants = [];
     for (const job of this.queue) {
       if (garder(job)) restants.push(job);
-      else job.reject(new Error('structure abandonnee : le morceau n\'est plus propose'));
+      else job.reject(new Error('structure abandonnée : le morceau n\'est plus proposé'));
     }
     this.queue = restants;
     return avant - this.queue.length;
@@ -571,7 +571,7 @@ class StructurePool {
       if (this.queue.length > PLAFOND_FILE) {
         this.queue.sort((a, b) => (b.priorite - a.priorite) || (a.id - b.id));
         for (const perdu of this.queue.slice(PLAFOND_FILE))
-          perdu.reject(new Error('structure abandonnee : file saturee'));
+          perdu.reject(new Error('structure abandonnée : file saturée'));
         this.queue.length = PLAFOND_FILE;
       }
       this._drain();

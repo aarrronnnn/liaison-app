@@ -172,8 +172,8 @@ function parseRekordboxXML(xmlPath) {
   try { xml = fs.readFileSync(xmlPath, 'utf8'); }
   catch (e) {
     throw new Error('Impossible de lire ' + xmlPath +
-      ' — le fichier a peut-etre ete deplace ou renomme. Reexporte ta collection depuis rekordbox, ' +
-      'ou choisis le nouveau chemin dans les reglages.');
+      ' — le fichier a peut-peut-être été déplacé ou renommé. Réexporte ta collection depuis rekordbox, ' +
+      'ou choisis le nouveau chemin dans les réglages.');
   }
   const out = [];
   const re = /<TRACK\s([^>]*?)\/?>/g;

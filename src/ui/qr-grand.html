@@ -1,0 +1,77 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<title>Liaison — QR</title>
+<link rel="stylesheet" href="./da.css">
+<script src="./i18n-en.js"></script>
+<script src="./i18n.js"></script>
+<!-- ============================================================
+     LE QR EN GRAND.
+
+     Pour un second ecran, un videoprojecteur, ou l'ordinateur qu'on
+     retourne vers la salle le temps d'un morceau. Lisible a cinq
+     metres : le QR prend la hauteur, le reste s'efface. A cote, les
+     plus demandes — uniquement des titres de la bibliotheque du DJ,
+     jamais un texte tape par un invite.
+     ============================================================ -->
+<style>
+html,body{height:100%;margin:0;background:#101114;color:#EFEAE0;overflow:hidden;cursor:default}
+body{display:flex;align-items:center;justify-content:center;gap:6vw;padding:5vh 5vw;box-sizing:border-box;font-family:var(--b)}
+.q{height:min(78vh,56vw);aspect-ratio:1;background:#fff;border-radius:2.2vh;padding:2.4vh;box-shadow:0 3vh 8vh -3vh rgba(68,89,255,.45)}
+.q img{width:100%;height:100%;display:block;image-rendering:pixelated}
+.c{max-width:34vw;min-width:0}
+.m{display:flex;align-items:center;gap:1.2vh;font-family:var(--m);font-size:1.6vh;letter-spacing:.3em;color:#8A8E97}
+.m svg{width:2.6vh;height:2.6vh}
+h1{font-family:var(--d);font-weight:400;text-transform:uppercase;font-size:clamp(34px,8.5vh,110px);line-height:.95;margin:3vh 0 1.6vh;letter-spacing:.01em}
+.n{font-family:var(--m);font-size:2.2vh;letter-spacing:.16em;text-transform:uppercase;color:#8390FF;margin-bottom:3vh;overflow-wrap:anywhere}
+.s{font-size:2.6vh;line-height:1.4;color:#C9CBD1;margin:0 0 4vh}
+.t{font-family:var(--m);font-size:1.5vh;letter-spacing:.2em;text-transform:uppercase;color:#8A8E97;margin:0 0 1.4vh}
+ol{list-style:none;margin:0;padding:0}
+li{display:flex;align-items:baseline;gap:1.6vh;padding:1.1vh 0;border-top:1px solid #26282E;font-size:2.4vh;min-width:0}
+li b{font-family:var(--d);font-weight:400;font-size:3vh;color:#8A8E97;width:3vh;flex:none}
+li span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+li i{font-style:normal;color:#8A8E97;font-size:2vh}
+li.joue span{color:#3DDC84}
+.u{position:fixed;left:0;right:0;bottom:2.4vh;text-align:center;font-family:var(--m);font-size:1.5vh;color:#63666D}
+.x{position:fixed;top:2vh;right:2vw;font-family:var(--m);font-size:1.4vh;letter-spacing:.14em;color:#63666D;background:none;border:1px solid #33363E;border-radius:.6vh;padding:1vh 1.4vh;cursor:pointer}
+@media (max-aspect-ratio:1/1){body{flex-direction:column;gap:4vh}.c{max-width:90vw;text-align:center}.m{justify-content:center}.q{height:min(52vh,86vw)}}
+</style></head><body>
+<div class="q"><img id="qr" alt=""></div>
+<div class="c">
+  <div class="m"><svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M3.4 3.4 10 12l-6.6 8.6" stroke="#4459FF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><path d="M20.6 3.4 14 12l6.6 8.6" stroke="#FF5A42" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="12" cy="12" r="2.4" fill="#EFEAE0"/></svg><span>LIAISON</span></div>
+  <h1>Demande ton morceau</h1>
+  <div class="n" id="nom" data-brut></div>
+  <p class="s" id="sous">Scanne avec l'appareil photo — choisis un titre, le DJ le voit.</p>
+  <p class="t" id="topT">Les plus demandés</p>
+  <ol id="top"></ol>
+</div>
+<div class="u" id="url" data-brut></div>
+<button class="x" id="fermer" type="button">Échap pour fermer</button>
+<script>
+const $ = s => document.querySelector(s);
+const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+async function etat() {
+  let e = null;
+  try { e = await window.liaison.sessionEtat(); } catch (x) {}
+  if (!e || !e.ouvert) { window.liaison.qrFermerGrand && window.liaison.qrFermerGrand(); return; }
+  if ($('#qr').src !== e.qr) $('#qr').src = e.qr;
+  $('#nom').textContent = e.nom || '';
+  $('#url').textContent = e.url || '';
+  if (e.mode !== 'relais') $('#sous').textContent = 'Connecte-toi au Wi-Fi du lieu, puis scanne avec l\'appareil photo.';
+}
+async function majTop() {
+  let r = [];
+  try { r = await window.liaison.requests(); } catch (x) {}
+  const l = (r || []).filter(x => x.have && x.match).slice(0, 5);
+  $('#topT').style.display = l.length ? '' : 'none';
+  $('#top').innerHTML = l.map((x, i) => '<li class="' + (x.joue ? 'joue' : '') + '"><b>' + (i + 1) + '</b><span data-brut>' +
+    esc(x.match.title) + ' <i>' + esc(x.match.artist || '') + '</i></span></li>').join('');
+}
+etat(); majTop();
+setInterval(etat, 10000);
+setInterval(majTop, 5000);
+window.liaison.on && window.liaison.on('requests', majTop);
+const fermer = () => window.liaison.qrFermerGrand && window.liaison.qrFermerGrand();
+$('#fermer').onclick = fermer;
+document.addEventListener('keydown', e => { if (e.key === 'Escape') fermer(); });
+</script>
+</body></html>

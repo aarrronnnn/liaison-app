@@ -76,7 +76,7 @@ async function preparer(o) {
   o = o || {};
   const duree = Math.max(15, Math.round(o.dureeMin || 0));
   const library = (o.library || []).filter(t => t.bpm > 0);
-  if (!duree) return { ok: false, note: 'Annonce la duree de la soiree.' };
+  if (!duree) return { ok: false, note: 'Annonce la durée de la soirée.' };
   if (library.length < 10)
     return { ok: false, note: 'Pas assez de morceaux jouables : ' + library.length + ' seulement.' };
 
@@ -239,8 +239,8 @@ async function preparer(o) {
     clients: clients,
     voulus: voulus,
     note: dansLeTemps + ' morceaux pour tenir ' + duree + ' minutes, plus ' +
-          (lignes.length - dansLeTemps) + ' de reserve.' +
-          (voulus ? ' ' + clients + ' des ' + voulus + ' titres du client sont places.' : '')
+          (lignes.length - dansLeTemps) + ' de réserve.' +
+          (voulus ? ' ' + clients + ' des ' + voulus + ' titres du client sont placés.' : '')
   };
 }
 
@@ -271,13 +271,13 @@ function m3u(plan) {
 
 function texte(plan, titre) {
   if (!plan || !plan.ok) return '';
-  const entete = (titre || 'Preparation') + ' — ' + plan.duree + ' min';
+  const entete = (titre || 'Préparation') + ' — ' + plan.duree + ' min';
   const l = [entete, '-'.repeat(entete.length)];
   for (const x of plan.ordre) {
     l.push(String(x.n).padStart(3) + '  ' + x.a.padStart(6) + '  ' +
       (x.artist ? x.artist + ' — ' : '') + x.title +
       '  [' + (x.key || '?') + ' · ' + x.bpm + ']' +
-      (x.client ? '  (client)' : '') + (x.reserve ? '  (reserve)' : ''));
+      (x.client ? '  (client)' : '') + (x.reserve ? '  (réserve)' : ''));
   }
   l.push('', plan.note);
   return l.join('\n') + '\n';

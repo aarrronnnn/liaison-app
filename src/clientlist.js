@@ -113,7 +113,7 @@ function request(opt, body) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(12000, () => req.destroy(new Error('Spotify ne repond pas')));
+    req.setTimeout(12000, () => req.destroy(new Error('Spotify ne répond pas')));
     if (body) req.write(body);
     req.end();
   });
@@ -130,7 +130,7 @@ async function spotifyToken(id, secret) {
     }
   }, body);
   if (r.code !== 200 || !r.body.access_token)
-    throw new Error(r.body.error_description || 'Identifiants Spotify refuses');
+    throw new Error(r.body.error_description || 'Identifiants Spotify refusés');
   return r.body.access_token;
 }
 
@@ -138,7 +138,7 @@ async function spotifyToken(id, secret) {
 async function fromSpotify(url, id, secret) {
   const pid = playlistId(url);
   if (!pid) throw new Error("Ce lien n'est pas une playlist Spotify");
-  if (!id || !secret) throw new Error('Identifiants Spotify absents — voir les reglages');
+  if (!id || !secret) throw new Error('Identifiants Spotify absents — voir les réglages');
   const token = await spotifyToken(id, secret);
 
   const out = [];

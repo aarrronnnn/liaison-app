@@ -189,7 +189,7 @@ function crowdScore(track, dna, dnaPret) {
 
 function transitionOf(cur, nx, tp, h) {
   if (tp.ratio !== 1)
-    return { n: 'Bascule tempo x' + (tp.ratio === 2 ? '2' : '0,5'), d: 'Double ou moitie tempo — la grille rythmique reste alignee.' };
+    return { n: 'Bascule tempo x' + (tp.ratio === 2 ? '2' : '0,5'), d: 'Double ou moitié tempo — la grille rythmique reste alignée.' };
   /* ------------------------------------------------------------
      Ne pas prescrire une technique harmonique sans tonalite.
 
@@ -214,22 +214,22 @@ function transitionOf(cur, nx, tp, h) {
     const ecart = Math.abs(tp.delta);
     if (ecart > 2.2)
       return { n: 'Echo out + pitch ride',
-               d: 'Ecart de tempo reel, et tonalite inconnue : sortir en echo et rattraper au pitch.' };
+               d: 'Écart de tempo réel, et tonalité inconnue : sortir en écho et rattraper au pitch.' };
     if (ecart < 1)
       return { n: 'Fondu au tempo',
-               d: 'Les tempos se calent. Tonalite inconnue des deux cotes : ecoute au casque avant de lancer, ou fais analyser tes titres dans ton logiciel.' };
+               d: 'Les tempos se calent. Tonalité inconnue des deux côtés : écoute au casque avant de lancer, ou fais analyser tes titres dans ton logiciel.' };
     return { n: 'Fondu filtre',
-             d: 'Tonalite inconnue : fondu passe-haut pour liberer les basses, sans superposer les melodies.' };
+             d: 'Tonalité inconnue : fondu passe-haut pour libérer les basses, sans superposer les mélodies.' };
   }
   if (h >= 93 && Math.abs(tp.delta) < 1 && (nx.out || 32) >= 32)
-    return { n: 'Blend long — 32 temps', d: 'Tonalites compatibles et intro longue : superposition franche sur deux phrases.' };
+    return { n: 'Blend long — 32 temps', d: 'Tonalités compatibles et intro longue : superposition franche sur deux phrases.' };
   if (h >= 89 && nx.energy - cur.energy >= 2)
-    return { n: 'Cut sur le drop', d: "Saut d'energie net : couper au premier temps de la phrase plutot que fondre." };
+    return { n: 'Cut sur le drop', d: "Saut d'énergie net : couper au premier temps de la phrase plutôt que fondre." };
   if (h >= 72 && h < 93)
-    return { n: 'Bass swap — 16 temps', d: 'Tonalites voisines : basculer les basses en 16 temps.' };
+    return { n: 'Bass swap — 16 temps', d: 'Tonalités voisines : basculer les basses en 16 temps.' };
   if (Math.abs(tp.delta) > 2.2)
-    return { n: 'Echo out + pitch ride', d: 'Ecart de tempo reel : sortir en echo et rattraper au pitch.' };
-  return { n: 'Fondu filtre — 24 temps', d: 'Fondu passe-haut sur la sortie pour liberer les basses.' };
+    return { n: 'Echo out + pitch ride', d: 'Écart de tempo réel : sortir en écho et rattraper au pitch.' };
+  return { n: 'Fondu filtre — 24 temps', d: 'Fondu passe-haut sur la sortie pour libérer les basses.' };
 }
 
 /* Construite des milliers de fois par suggestion : on la garde
@@ -1176,7 +1176,7 @@ function mixPlan(cur, next, curS, nextS, tp) {
   const bA = cur && cur.bpm > 0 ? cur.bpm : (curS && curS.bpm > 0 ? curS.bpm : 0);
   const bB = next && next.bpm > 0 ? next.bpm : (nextS && nextS.bpm > 0 ? nextS.bpm : 0);
   if (!(bA > 0) || !(bB > 0)) {
-    return { ok: false, note: 'Tempo inconnu — pas de repere de mix tant qu\'il n\'est pas mesure.' };
+    return { ok: false, note: 'Tempo inconnu — pas de repère de mix tant qu\'il n\'est pas mesuré.' };
   }
   if (!(cur.bpm > 0) || !(next.bpm > 0)) {
     cur = Object.assign({}, cur, { bpm: bA });
@@ -1191,7 +1191,7 @@ function mixPlan(cur, next, curS, nextS, tp) {
   if (!curS || !curS.ok || !nextS || !nextS.ok) {
     return {
       ok: false,
-      note: 'Analyse des points de mix en cours — les reperes arrivent dans un instant.'
+      note: 'Analyse des points de mix en cours — les repères arrivent dans un instant.'
     };
   }
 
@@ -1235,8 +1235,8 @@ function mixPlan(cur, next, curS, nextS, tp) {
     tight: tight,
     stretch: Math.round(stretch * 1000) / 1000,
     text: tight
-      ? 'Lance a ' + mmss(start) + ', B entre vite — coupe A a ' + mmss(swap) + '.'
-      : 'Lance a ' + mmss(start) + ', bascule les basses a ' + mmss(swap) + ', sors A a ' + mmss(outAt) + '.'
+      ? 'Lance à ' + mmss(start) + ', B entre vite — coupe A à ' + mmss(swap) + '.'
+      : 'Lance à ' + mmss(start) + ', bascule les basses à ' + mmss(swap) + ', sors A à ' + mmss(outAt) + '.'
   };
 }
 
@@ -1371,11 +1371,11 @@ function rescue(cur, library, opt) {
       bulle: nb ? nb.note : null, dansBulle: nb ? nb.dedans : true,
       tempo: tp, h: h, fam: Math.round(fam), energy: e, plancher: pl,
       introBars: introBars, client: wanted.has(t.id),
-      why: wanted.has(t.id) ? 'Demande par le client'
+      why: wanted.has(t.id) ? 'Demandé par le client'
         : (introBars != null && introBars <= 4
             ? 'Entre en ' + introBars + ' mesures'
-            : (t.pop >= 70 ? 'La salle la connait'
-               : (mesuree ? 'Energie ' + e + '/10' : 'Valeur sure'))),
+            : (t.pop >= 70 ? 'La salle la connaît'
+               : (mesuree ? 'Énergie ' + e + '/10' : 'Valeur sûre'))),
       transition: transitionOf(cur, t, tp, h)
     });
   }

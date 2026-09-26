@@ -190,13 +190,13 @@ function lierPartage(port, pret, echec) {
 
 const CONSEIL_CEDE = {
   cle: 'prolink-cede', quand: 'deck',
-  titre: 'Liaison a laisse le reseau a rekordbox',
-  texte: 'rekordbox a besoin du reseau Pro DJ Link pour parler a tes platines. ' +
+  titre: 'Liaison a laissé le réseau à rekordbox',
+  texte: 'rekordbox a besoin du réseau Pro DJ Link pour parler à tes platines. ' +
          'Liaison lui laisse la place et lit tes decks autrement : ton bouton LINK ' +
          'reste disponible.',
   marche: [
-    'Tu n\'as rien a faire : la detection continue par les fichiers',
-    'Ferme rekordbox si tu joues uniquement sur cles USB, Liaison reprendra le reseau'
+    'Tu n\'as rien à faire : la détection continue par les fichiers',
+    'Ferme rekordbox si tu joues uniquement sur clés USB, Liaison reprendra le réseau'
   ]
 };
 
@@ -259,7 +259,7 @@ function start(opts, cb) {
           cb.onStatus({ ok: false, msg: 'Pro DJ Link interrompu', conseil: CONSEIL_CEDE }); });
         try { sock.setBroadcast(true); } catch (e) {}
         cb.onStatus({ ok: true,
-          msg: 'Pro DJ Link : ecoute sur ' + PORT_STATUS + ' (' + choix.cle + ')' });
+          msg: 'Pro DJ Link : écoute sur ' + PORT_STATUS + ' (' + choix.cle + ')' });
         demarrerAnnonce();
       },
       (code) => {
@@ -268,7 +268,7 @@ function start(opts, cb) {
         cede = true;
         cb.onStatus({
           ok: false,
-          msg: 'Pro DJ Link : le port ' + PORT_STATUS + ' n\'a pas pu etre ouvert (' + code + ')',
+          msg: 'Pro DJ Link : le port ' + PORT_STATUS + ' n\'a pas pu être ouvert (' + code + ')',
           conseil: CONSEIL_CEDE
         });
       });
@@ -343,10 +343,10 @@ function start(opts, cb) {
     if (!libre && sock) {
       liberer();
       cede = true;
-      cb.onStatus({ ok: true, msg: 'Pro DJ Link : place laissee a rekordbox', conseil: CONSEIL_CEDE });
+      cb.onStatus({ ok: true, msg: 'Pro DJ Link : place laissée à rekordbox', conseil: CONSEIL_CEDE });
     } else if (libre && !sock && cede) {
       lier();
-      if (sock) cb.onStatus({ ok: true, msg: 'Pro DJ Link : reseau repris' });
+      if (sock) cb.onStatus({ ok: true, msg: 'Pro DJ Link : réseau repris' });
     }
     regler();
   };
@@ -369,7 +369,7 @@ function start(opts, cb) {
   if (cede) {
     cb.onStatus({
       ok: true,
-      msg: 'Pro DJ Link : rekordbox tient le reseau, Liaison n\'y touche pas',
+      msg: 'Pro DJ Link : rekordbox tient le réseau, Liaison n\'y touche pas',
       conseil: CONSEIL_CEDE
     });
   }
@@ -393,18 +393,18 @@ function start(opts, cb) {
     if (packets || cede) return;
     cb.onStatus({
       ok: false,
-      msg: 'Pro DJ Link silencieux — aucun materiel sur le reseau',
+      msg: 'Pro DJ Link silencieux — aucun matériel sur le réseau',
       conseil: {
         cle: 'prolink-muet', quand: 'deck',
-        titre: 'Aucun materiel sur le reseau',
-        texte: 'Pro DJ Link n\'est diffuse que par un CDJ, un XDJ ou un DJM. ' +
-               'rekordbox seul sur un portable n\'annonce rien : il n\'y a rien a reparer.',
+        titre: 'Aucun matériel sur le réseau',
+        texte: 'Pro DJ Link n\'est diffusé que par un CDJ, un XDJ ou un DJM. ' +
+               'rekordbox seul sur un portable n\'annonce rien : il n\'y a rien à réparer.',
         marche: [
-          'Avec du materiel : branche-le en reseau et relance rekordbox',
-          'Sans materiel : clique la loupe en haut et tape deux lettres du titre',
-          'Liaison enchaine ensuite normalement'
+          'Avec du matériel : branche-le en réseau et relance rekordbox',
+          'Sans matériel : clique la loupe en haut et tape deux lettres du titre',
+          'Liaison enchaîne ensuite normalement'
         ],
-        repli: 'Serato, Traktor et VirtualDJ sont detectes sans materiel, eux.'
+        repli: 'Serato, Traktor et VirtualDJ sont détectés sans matériel, eux.'
       }
     });
   }, 15000);

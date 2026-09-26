@@ -124,6 +124,12 @@
         if (!r) continue;
         const valeurs = {};
         m.noms.forEach((n, i) => { valeurs[n] = (r[i + 1] || '').normalize('NFC'); });
+        /* Garde-fou : « {0} titres{1} » ne doit pas attraper une phrase
+           entiere qui contient le mot « titres ». Si le texte fixe pese
+           moins de 15 % de la phrase et qu'une valeur attrapee est longue,
+           ce n'est pas ce motif-la. */
+        const fixe = m.indice.length;
+        if (fixe < t.length * 0.15 && Object.keys(valeurs).some(x => valeurs[x].length > 40)) continue;
         return m.en.replace(/\{(\d+)\}/g, (x, n) => {
           const v = valeurs[n];
           if (v == null) return '';

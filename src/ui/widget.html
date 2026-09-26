@@ -437,10 +437,28 @@ border-radius:2px;border:1px solid var(--wire2);color:var(--cream3);white-space:
 .reqbar.on{display:flex}
 .reqbar .t{font-family:var(--d);font-size:13px;text-transform:uppercase}
 .reqbar .lbl{color:#fff;opacity:.85;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.reqbar button{margin-left:auto;font-family:var(--m);font-size:9px;letter-spacing:.12em;
+.reqbar button{font-family:var(--m);font-size:9px;letter-spacing:.12em;
 text-transform:uppercase;border:1px solid rgba(255,255,255,.5);padding:5px 8px;border-radius:2px}
 .reqbar button:hover{background:#fff;color:var(--blue)}
+#reqQr{margin-left:auto}
 .row.req .sc{font-size:19px;color:var(--blueLit)}
+.row.req.joue{opacity:.55}
+.row.req.joue .sc{color:#3DDC84}
+.row .joueEtq{font-family:var(--m);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:#3DDC84}
+.row.req .fin{display:flex;align-items:center;gap:2px;flex:none}
+.list.qrmode{max-height:none!important}
+.row.req .cache{font-family:var(--m);font-size:13px;line-height:1;color:var(--cream3);background:none;border:0;padding:4px 6px;cursor:pointer;position:relative}
+.row.req .cache::after{content:"";position:absolute;inset:-6px -4px}
+.row.req .cache:hover{color:var(--redLit)}
+/* Le QR dans le widget : on retourne l'ordinateur vers la personne. */
+.qrw{display:flex;flex-direction:column;align-items:center;gap:8px;padding:12px 10px 10px;text-align:center}
+.qrw img{width:210px;height:210px;background:#fff;border-radius:6px;padding:8px}
+.qrw .u{font-family:var(--m);font-size:9px;color:var(--cream3);word-break:break-all;max-width:300px}
+.qrw .md{font-family:var(--m);font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--cream3)}
+.qrw .md.ok{color:#3DDC84}
+.qrw .acts{display:flex;gap:6px}
+.empty .ouvrir{margin-top:10px;font-family:var(--m);font-size:9.5px;letter-spacing:.12em;text-transform:uppercase;
+padding:9px 12px;border-radius:3px;border:1px solid var(--blueLit);background:var(--blue);color:#fff;cursor:pointer}
 .row.req.hot .sc{color:var(--redLit)}
 .row .miss{font-family:var(--m);font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--cream3)}
 .chip.req{position:relative}
@@ -1036,6 +1054,105 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
 .row:hover::before{top:5px;bottom:5px}
 .row.best::before{content:"";top:4px;bottom:4px;background:var(--blueLit)}
 @media(prefers-reduced-motion:reduce){.row::before{transition:none}}
+
+/* ============================================================
+   LA COUCHE 1.6 — MONTEE EN GAMME.
+
+   « design clean, pro, et que ca donne envie ». La matiere est
+   deja la (grain, relief, filet de signature) : ce qui manquait,
+   c'etait la LUMIERE et le GESTE. Trois idees, rien de plus :
+
+   1. Des angles doux partout. Les coins a 2 px disaient
+      « formulaire » ; 6 a 10 px disent « objet fini ».
+   2. La lumiere suit l'importance. La ligne en tete, le bouton
+      enclenche et le morceau en cours rayonnent un peu de bleu ;
+      le reste reste mat. Une seule chose brille a la fois.
+   3. Chaque geste repond. Survol, appui, copie : une reponse
+      courte (moins de 200 ms), elastique, jamais decorative.
+
+   Rien ici ne touche aux tailles de texte (la maquette du site les
+   recopie) ni a l'animation « arrivee » (elle est eprouvee).
+   ============================================================ */
+:root{--lzEase:cubic-bezier(.2,.8,.2,1);--lzRessort:cubic-bezier(.34,1.56,.64,1);
+  --lzHalo:0 0 0 1px rgba(68,89,255,.38),0 10px 30px -12px rgba(68,89,255,.65);
+  --lzHaloRouge:0 0 0 1px rgba(255,90,66,.4),0 10px 26px -12px rgba(255,90,66,.6)}
+[data-theme="jour"]{--lzHalo:0 0 0 1px rgba(31,53,216,.28),0 10px 24px -14px rgba(31,53,216,.55);
+  --lzHaloRouge:0 0 0 1px rgba(196,50,31,.3),0 10px 22px -14px rgba(196,50,31,.5)}
+
+/* la poignee : des boutons ronds, un nom qui respire moins fort */
+.grip .nm{letter-spacing:.24em}
+.grip .act button{border-radius:8px;transition:background-color .15s,color .15s,transform .12s var(--lzRessort)}
+.grip .act button:active{transform:scale(.9)}
+
+/* le morceau en cours : un temoin qui bat quand un deck tourne,
+   et un halo bleu qui monte du coin, comme une lampe de cabine */
+.ref{overflow:hidden}
+.ref::after{content:"";position:absolute;left:-40px;top:-60px;width:220px;height:160px;pointer-events:none;
+  background:radial-gradient(closest-side,rgba(68,89,255,.16),rgba(68,89,255,0));opacity:0;transition:opacity .6s var(--lzEase)}
+.ref.live::after{opacity:1}
+[data-theme="jour"] .ref::after{background:radial-gradient(closest-side,rgba(31,53,216,.08),rgba(31,53,216,0))}
+.ref .top .lbl{display:inline-flex;align-items:center;gap:7px}
+.ref.live .top .lbl::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--blueLit);flex:none;
+  box-shadow:0 0 0 0 rgba(68,89,255,.6);animation:lzBat 1.8s ease-out infinite}
+@keyframes lzBat{0%{box-shadow:0 0 0 0 rgba(68,89,255,.55)}70%{box-shadow:0 0 0 7px rgba(68,89,255,0)}100%{box-shadow:0 0 0 0 rgba(68,89,255,0)}}
+.ref .t{position:relative}
+.strip{border-radius:4px}
+.strip .cur{box-shadow:0 0 6px 1px rgba(255,255,255,.55)}
+
+/* le rail de filtres et le pied : des pastilles arrondies */
+.rail .p,.chip,.gwrap button,.tiroir .lignes .f,.filt .f,.land .ask .f,.land .cl button{border-radius:7px}
+.seg .chip:first-child{border-radius:7px 0 0 7px}
+.seg .chip:last-child{border-radius:0 7px 7px 0}
+.ecells button{border-radius:5px}
+.rail .p[aria-pressed=true],.gwrap button[aria-pressed=true],.ecells button[aria-pressed=true]{
+  background:linear-gradient(180deg,#566AFF,var(--blueLit));box-shadow:var(--lzHalo)}
+[data-theme="jour"] .rail .p[aria-pressed=true],[data-theme="jour"] .gwrap button[aria-pressed=true],
+[data-theme="jour"] .ecells button[aria-pressed=true]{background:linear-gradient(180deg,#3148E6,var(--blueLit))}
+.chip[aria-pressed=true]{background:linear-gradient(180deg,#566AFF,var(--blueLit));border-color:var(--blueLit);color:#fff;box-shadow:var(--lzHalo)}
+[data-theme="jour"] .chip[aria-pressed=true]{background:linear-gradient(180deg,#3148E6,var(--blueLit))}
+.chip.sos{transition:transform .08s ease-out,background-color .15s,border-color .15s,color .15s,box-shadow .2s}
+.chip.sos:hover{box-shadow:var(--lzHaloRouge)}
+
+/* les lignes : des cartes, la premiere eclairee */
+.list{padding:5px;display:flex;flex-direction:column;gap:3px}
+.row + .row{border-top-color:transparent}
+.row:not(.best):not(:hover){background:linear-gradient(90deg,rgba(255,255,255,.018),rgba(255,255,255,0))}
+.row{border-radius:9px;transition:background-color .15s,box-shadow .2s,transform .12s ease-out}
+.row.best{border-radius:10px;box-shadow:var(--ombreCarte),inset 0 0 0 1px rgba(68,89,255,.28)}
+[data-theme="jour"] .row.best{box-shadow:var(--ombreCarte),inset 0 0 0 1px rgba(31,53,216,.16)}
+.row.best .sc{text-shadow:0 0 18px rgba(68,89,255,.55)}
+[data-theme="jour"] .row.best .sc{text-shadow:none}
+.row.best::before{background:linear-gradient(180deg,var(--blueLit),#8A5BFF 60%,var(--redLit));width:3px}
+
+/* la jauge sous la note : la note se VOIT avant de se lire */
+.sc{display:block;position:relative}
+.sc::after{content:"";display:block;height:2px;border-radius:2px;margin:6px 0 0 auto;
+  width:calc(var(--v, 0) * .3px);max-width:30px;background:currentColor;opacity:.55;
+  transform-origin:right;animation:lzJauge .5s var(--lzEase) backwards;animation-delay:inherit}
+.row.req .sc::after,.row.sos .sc::after{display:none}
+@keyframes lzJauge{from{transform:scaleX(0)}}
+body[data-densite="barre"] .sc::after{display:none}
+
+/* Copier : un vrai bouton, qui s'allume sous le doigt */
+.go{border-radius:7px;transition:transform .12s var(--lzRessort),background-color .15s,border-color .15s,color .15s,box-shadow .2s}
+.go:hover{box-shadow:var(--lzHalo)}
+.row.sos .go:hover{box-shadow:var(--lzHaloRouge)}
+.go.fait{box-shadow:var(--lzHalo)}
+
+/* la barre des demandes, le toast, la recherche */
+.reqbar,.sosbar{background-image:linear-gradient(90deg,rgba(255,255,255,.08),rgba(255,255,255,0))}
+.reqbar button,.sosbar button{border-radius:7px}
+.toast{border-radius:10px;box-shadow:0 14px 34px -12px rgba(0,0,0,.7);backdrop-filter:blur(8px)}
+.search input{border-radius:8px;transition:border-color .15s,box-shadow .2s}
+.search input:focus{box-shadow:0 0 0 3px rgba(68,89,255,.22)}
+.sres div{border-radius:7px}
+.qrw img{border-radius:12px;box-shadow:0 16px 40px -18px rgba(68,89,255,.7)}
+button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--blueLit);outline-offset:2px;border-radius:7px}
+
+@media (prefers-reduced-motion:reduce){
+  .ref.live .top .lbl::before,.sc::after{animation:none}
+  .row,.go,.grip .act button{transition:none}
+}
 </style></head><body>
 
 <div class="grip">
@@ -1058,9 +1175,9 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
     <button class="dens" id="btnDens" title="Hauteur du widget : barre / cabine / grand">
       <svg viewBox="0 0 16 16" aria-hidden="true" id="densIcon"><rect x="2.4" y="2.4" width="11.2" height="11.2" rx="1.6"/><rect x="4.4" y="7.2" width="7.2" height="4.4" rx="0.6" fill="currentColor" stroke="none"/></svg>
     </button>
-    <button id="btnSearch" title="Declarer le morceau en cours">⌕</button>
+    <button id="btnSearch" title="Déclarer le morceau en cours">⌕</button>
     <button id="btnTheme" title="Mode jour / mode nuit">☾</button>
-    <button id="btnSettings" title="Reglages">≡</button>
+    <button id="btnSettings" title="Réglages">≡</button>
     <button id="btnHide" title="Masquer">×</button>
   </span>
 </div>
@@ -1087,7 +1204,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
      La quatrieme porte les filtres de SOIREE, qui tiennent.
      ============================================================ -->
 <div class="rail" id="rail">
-  <button class="p" id="pGenre" aria-pressed="false" title="Ne proposer que ces styles — remis a zero au morceau suivant">
+  <button class="p" id="pGenre" aria-pressed="false" title="Ne proposer que ces styles — remis à zéro au morceau suivant">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 4h11M4.5 8h7M6.5 12h3"/></svg>
     <b class="w">Style</b>
   </button>
@@ -1095,15 +1212,15 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2 8h12M4.5 5.5 2 8l2.5 2.5M11.5 5.5 14 8l-2.5 2.5"/></svg>
     <b class="w">Tempo</b>
   </button>
-  <button class="p" id="pEnergie" aria-pressed="false" title="Ne proposer que cette plage d'energie">
+  <button class="p" id="pEnergie" aria-pressed="false" title="Ne proposer que cette plage d'énergie">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M9 1.5 3.5 9H8l-1 5.5L12.5 7H8z"/></svg>
     <b class="w">Énergie</b>
   </button>
-  <button class="p" id="pListe" aria-pressed="false" title="Liste, deja joue, gros mots — ces filtres-la tiennent toute la soiree">
+  <button class="p" id="pListe" aria-pressed="false" title="Liste, déjà joué, gros mots — ces filtres-là tiennent toute la soirée">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M2.5 3.5h11v9h-11zM2.5 6.5h11M6 6.5v6"/></svg>
     <b class="w">Liste</b>
   </button>
-  <button class="raz" id="railRaz" title="Tout rendre : toute la bibliotheque redevient proposable">Vider</button>
+  <button class="raz" id="railRaz" title="Tout rendre : toute la bibliothèque redevient proposable">Vider</button>
   <span class="n" id="fN"></span>
 </div>
 
@@ -1147,6 +1264,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
 <div class="reqbar" id="reqbar">
   <span class="t">Demandes</span>
   <span class="lbl" id="reqSub">Ce que la salle réclame</span>
+  <button id="reqQr" title="Montrer le QR des invités">QR</button>
   <button id="reqBack">Revenir</button>
 </div>
 
@@ -1248,7 +1366,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
     <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="5.5"/><circle cx="8" cy="8" r="1.6"/></svg><span class="w">Bulle</span></button>
   <button class="chip mini" id="btnLand" aria-pressed="false" title="Fin de set — temps restant et descente">
     <svg viewBox="0 0 16 16" aria-hidden="true"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.5 1.8"/></svg><span class="w">Fin</span></button>
-  <button class="chip req mini" id="btnReq" title="Demandes des invites">
+  <button class="chip req mini" id="btnReq" title="Demandes des invités">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 13.5S2.5 10.2 2.5 6.4A3.1 3.1 0 0 1 8 4.6a3.1 3.1 0 0 1 5.5 1.8c0 3.8-5.5 7.1-5.5 7.1z"/></svg><span class="w">Demandes</span><span class="badge" id="reqN" style="display:none">0</span></button>
   <button class="chip sos" id="btnSos" title="SOS — le dancefloor se vide">
     <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2.2 14.5 13.4h-13z"/><path d="M8 6.4v3.1M8 11.4v.1"/></svg><span class="w">SOS</span></button>
@@ -1397,6 +1515,8 @@ function renderStrip(st, plan) {
 let curNow = null;
 function renderNow(n) {
   curNow = n;
+  const carte = document.querySelector('.ref');
+  if (carte) carte.classList.toggle('live', !!n);
   $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Déclaré à la main' : 'Sur le deck')
     : (etatAn.library ? 'Lance un morceau' : 'En attente');
   $('#refT').textContent = n ? n.title : '—';
@@ -1437,10 +1557,10 @@ function renderNow(n) {
        n'y est pas, et il s'etonnera de ne jamais le voir propose.
        ------------------------------------------------------------ */
     if (n.horsBiblio) dit.push(n.sansFichier ? 'hors bibliothèque' : 'hors bibliothèque, analyse en cours');
-    if (n.tempoDeduit) dit.push('tempo mesure par Liaison');
-    else if (n.tempoCorrige) dit.push('tempo corrige par Liaison');
-    if (n.tonaliteDeduite) dit.push('tonalite mesuree');
-    else if (n.tonaliteCorrigee) dit.push('tonalite corrigee');
+    if (n.tempoDeduit) dit.push('tempo mesuré par Liaison');
+    else if (n.tempoCorrige) dit.push('tempo corrigé par Liaison');
+    if (n.tonaliteDeduite) dit.push('tonalité mesurée');
+    else if (n.tonaliteCorrigee) dit.push('tonalité corrigée');
     $('#refLbl').textContent = dit.length
       ? (n.how === 'manuel' ? 'Déclaré à la main' : 'Sur le deck') + ' · ' + dit.join(' · ')
       : $('#refLbl').textContent;
@@ -1537,17 +1657,17 @@ function etatVide() {
   if (!etatAn.library)
     return conseilHTML(conseilPour('biblio') || {
       titre: 'Aucune bibliothèque',
-      texte: 'Liaison n\'a trouve aucune base a lire.',
-      marche: ['Ouvre les réglages et lance la detection',
+      texte: 'Liaison n\'a trouvé aucune base à lire.',
+      marche: ['Ouvre les réglages et lance la détection',
                'Ou pointe directement ton dossier de musique'] });
   if (!curNow)
     return conseilHTML(conseilPour('deck') || {
-      titre: 'Aucun morceau detecte',
+      titre: 'Aucun morceau détecté',
       texte: 'Liaison attend de savoir ce qui tourne.',
       marche: ['Lance un titre dans ton logiciel de mix',
                'Ou clique la loupe en haut et tape deux lettres du titre'] });
   if (etatAn.offline >= etatAn.library * 0.5 && etatAn.offline > 10)
-    return '<div class="empty"><b>Disque introuvable</b>' + etatAn.offline + ' morceaux pointent un disque<br>qui n\'est pas branche.</div>';
+    return '<div class="empty"><b>Disque introuvable</b>' + etatAn.offline + ' morceaux pointent un disque<br>qui n\'est pas branché.</div>';
   /* ------------------------------------------------------------
      « Rien ne se cale » servait de reponse a TOUTES les listes
      vides. C'est faux neuf fois sur dix : la vraie cause est un
@@ -1560,7 +1680,7 @@ function etatVide() {
      garde l'ancienne phrase comme dernier recours. */
   return conseilHTML(conseilPour('vide') || {
     titre: 'Rien ne se cale',
-    texte: 'Aucun titre ne s\'enchaine sur ce tempo.',
+    texte: 'Aucun titre ne s\'enchaîne sur ce tempo.',
     marche: ['Desserre les filtres en bas du widget',
              'Ou passe par un morceau relais'] });
 }
@@ -1632,7 +1752,7 @@ function renderSug(list) {
   }
   box.innerHTML = list.map((r, i) => `
     <div class="row tempo ${i === 0 ? 'best' : ''}" draggable="true" data-drag="${r.id}" title="Glisse-le sur un deck de ton logiciel" style="animation-delay:${Math.min(i, 5) * 45}ms">
-      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
+      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}" style="--v:${Math.max(0, Math.min(100, Number(r.total) || 0))}">${r.total}</span>
       ${bpmHTML(r)}
       <span style="min-width:0">
         <span class="n" data-brut>${esc(r.title)}</span>
@@ -1652,12 +1772,12 @@ function renderSos(list) {
   if (!list || !list.length) {
     box.innerHTML = curNow
       ? '<div class="empty"><b>Rien de mixable</b>Aucun titre assez fort ne se cale sur ce tempo.<br>Passe par un morceau relais.</div>'
-      : '<div class="empty"><b>Aucun morceau detecte</b>Le sauvetage part de ce qui tourne :<br>lance un titre, ou declare-le avec la loupe.</div>';
+      : '<div class="empty"><b>Aucun morceau détecté</b>Le sauvetage part de ce qui tourne :<br>lance un titre, ou déclare-le avec la loupe.</div>';
     return;
   }
   box.innerHTML = list.map(r => `
     <div class="row tempo sos">
-      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
+      <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}" style="--v:${Math.max(0, Math.min(100, Number(r.total) || 0))}">${r.total}</span>
       ${bpmHTML(r)}
       <span style="min-width:0">
         <span class="n" data-brut>${esc(r.title)}</span>
@@ -1682,7 +1802,7 @@ $('#list').addEventListener('click', async e => {
     b.textContent = '✓';
     clearTimeout(b._t);
     b._t = setTimeout(() => { b.classList.remove('fait'); b.textContent = b.dataset.txt; b.style.minWidth = ''; }, 1300);
-    toast('« ' + r.copied + ' » copie — colle dans ta recherche', view === 'sos');
+    toast('« ' + r.copied + ' » copié — colle dans ta recherche', view === 'sos');
   }
 });
 
@@ -1728,7 +1848,7 @@ function renderBulle(b) {
          le dit au lieu de laisser croire que l'epoque est prise en
          compte. */
       (bulEtat.epoquePerdue
-        ? '<span style="opacity:.62"> · epoque non lue (' + bulEtat.partAnnees +
+        ? '<span style="opacity:.62"> · époque non lue (' + bulEtat.partAnnees +
           ' % de ta bibliothèque est datée) — « Tout relire » dans les réglages</span>'
         : '');
   }
@@ -1742,7 +1862,7 @@ function renderBulle(b) {
     /* Pendant l'atterrissage, c'est le plan de fin de set qui
        commande la courbe, bulle ou pas : la phrase ne promet donc
        que ce qui est vrai dans les deux cas. */
-    o.title = on ? 'En bulle, la pente est tenue — sauf pendant l\'atterrissage, ou le plan de fin commande'
+    o.title = on ? 'En bulle, la pente est tenue — sauf pendant l\'atterrissage, où le plan de fin commande'
                  : (o.dataset.arc === 'auto' ? 'Liaison suit la pente que tu joues'
                     : 'Forcer : ' + ({ up: 'monter', hold: 'tenir le niveau', down: 'redescendre' }[o.dataset.arc]));
     /* Laisser « ↑ Monter » visiblement enfonce pendant que le moteur
@@ -1764,8 +1884,8 @@ async function basculerBulle() {
   if (b && b.impossible) { toast(b.raison, true); return; }
   renderBulle(b);
   if (avant) toast('Bulle levée');
-  else if (b) toast('Bulle posee — ' + b.etiquette +
-                    (b.epoquePerdue ? ' (epoque indisponible)' : ''));
+  else if (b) toast('Bulle posée — ' + b.etiquette +
+                    (b.epoquePerdue ? ' (époque indisponible)' : ''));
 }
 $('#btnBulle').onclick = basculerBulle;
 $('#bulOff').onclick = basculerBulle;
@@ -1773,7 +1893,7 @@ $('#bulRe').onclick = async () => {
   const b = await window.liaison.bulleRecentrer();
   if (b && b.impossible) { toast(b.raison, true); return; }
   renderBulle(b);
-  if (b) toast('Bulle recentree — ' + b.etiquette);
+  if (b) toast('Bulle recentrée — ' + b.etiquette);
 };
 window.liaison.on('bulle', renderBulle);
 
@@ -1793,7 +1913,7 @@ async function enterSos() {
   try { renderSos(await window.liaison.rescue()); }
   catch (e) { $('#list').innerHTML = '<div class="empty"><b>Indisponible</b>Charge d\'abord un morceau.</div>'; }
 }
-function backToSug() { setView('sug'); renderSug(lastSug); fitHeight(); }
+function backToSug() { qrVisible = false; $('#list').classList.remove('qrmode'); setView('sug'); renderSug(lastSug); fitHeight(); }
 $('#btnSos').onclick = () => (view === 'sos' ? backToSug() : enterSos());
 $('#sosBack').onclick = backToSug;
 
@@ -1802,37 +1922,93 @@ $('#sosBack').onclick = backToSug;
    « 4 demandes » veut dire quatre personnes, et ca se lit autrement. */
 function renderReq(list) {
   lastReq = list || [];
-  const hot = lastReq.filter(r => r.n >= 3).length;
+  const actives = lastReq.filter(r => !r.joue);
+  const hot = actives.filter(r => r.n >= 3).length;
   const b = $('#reqN');
-  b.style.display = lastReq.length ? 'block' : 'none';
-  b.textContent = lastReq.length;
+  b.style.display = actives.length ? 'block' : 'none';
+  b.textContent = actives.length;
   b.style.background = hot ? 'var(--red)' : 'var(--wire2)';
-  if (view !== 'req') return;
+  /* Une nouvelle demande pendant qu'on regarde les suggestions : un
+     mot, pas une interruption. */
+  const total = lastReq.reduce((a, r) => a + r.n, 0);
+  if (total > (renderReq._total || 0) && renderReq._total != null && view !== 'req' && actives[0])
+    toast('Nouvelle demande : « ' + actives[0].title + ' »');
+  renderReq._total = total;
+  if (view !== 'req' || qrVisible) return;
 
   const box = $('#list');
+  box.classList.remove('qrmode');
   if (!lastReq.length) {
-    box.innerHTML = '<div class="empty"><b>Aucune demande</b>Ouvre une session dans les réglages,<br>puis affiche le QR au bar.</div>';
+    box.innerHTML = invitesEtat && invitesEtat.ouvert
+      ? '<div class="empty"><b>Aucune demande pour l\'instant</b>Montre le QR : les invités demandent depuis leur téléphone.</div>'
+      : '<div class="empty"><b>Aucune demande</b>Ouvre la session des invités : ils scannent le QR et demandent depuis leur téléphone.' +
+        '<br><button class="ouvrir" id="reqOuvrir">Ouvrir la session</button></div>';
     fitHeight(); return;
   }
-  $('#reqSub').textContent = lastReq.length + ' titre' + (lastReq.length > 1 ? 's' : '') +
+  $('#reqSub').textContent = actives.length + ' titre' + (actives.length > 1 ? 's' : '') +
     (hot ? ' · ' + hot + ' très demandé' + (hot > 1 ? 's' : '') : '');
   box.innerHTML = lastReq.map(r => `
-    <div class="row req ${r.n >= 3 ? 'hot' : ''}">
-      <span class="sc">${r.n}</span>
+    <div class="row req ${r.n >= 3 && !r.joue ? 'hot' : ''} ${r.joue ? 'joue' : ''}">
+      <span class="sc">${r.joue ? '✓' : r.n}</span>
       <span style="min-width:0">
         <span class="n" data-brut>${esc(r.title)}</span>
-        <span class="mm"><span class="fx">${r.have
+        <span class="mm"><span class="fx">${r.joue ? '<span class="joueEtq">passé</span> · ' : ''}${r.have
           ? esc(r.match.key || '?') + ' · ' + (r.match.bpm > 0 ? Number(r.match.bpm).toFixed(1).replace('.', ',') : '—')
           : '<span class="miss">pas dans ta bibliothèque</span>'}</span><span class="ar" data-brut>${esc(r.artist || '')}</span></span>
       </span>
-      ${r.have ? `<button class="go" data-id="${r.id}">Copier</button>` : '<span class="go" style="opacity:.35">—</span>'}
+      <span class="fin">
+        ${r.have && !r.joue ? `<button class="go" data-id="${r.id}">Copier</button>` : ''}
+        <button class="cache" data-k="${esc(r.k || '')}" title="Retirer (aussi des téléphones)" aria-label="Retirer">×</button>
+      </span>
     </div>`).join('');
   fitHeight();
 }
 
+/* ---------- le QR, dans le widget ---------- */
+let invitesEtat = null, qrVisible = false;
+async function lireInvites() {
+  try { invitesEtat = await window.liaison.sessionEtat(); } catch (e) { invitesEtat = null; }
+  return invitesEtat;
+}
+function renderQr() {
+  const e = invitesEtat;
+  const box = $('#list');
+  if (!e || !e.ouvert) { qrVisible = false; renderReq(lastReq); return; }
+  const enLigne = e.mode === 'relais' && (!e.relais || e.relais.ok !== false);
+  box.classList.add('qrmode');
+  box.innerHTML = '<div class="qrw"><img src="' + e.qr + '" alt="QR">' +
+    '<span class="md' + (enLigne ? ' ok' : '') + '">' + (enLigne ? 'En ligne · marche en 4G' : 'Wi-Fi du lieu seulement') + '</span>' +
+    '<span class="u" data-brut>' + esc(e.url) + '</span>' +
+    '<span class="acts"><button class="chip" id="qrPlein">Plein écran</button><button class="chip" id="qrFerme">Fermer la session</button></span></div>';
+  fitHeight();
+}
+$('#reqQr').onclick = async () => {
+  if (qrVisible) { qrVisible = false; renderReq(lastReq); return; }
+  await lireInvites();
+  if (!invitesEtat || !invitesEtat.ouvert) { toast('Ouvre d\'abord la session des invités'); return; }
+  qrVisible = true; renderQr();
+};
+$('#list').addEventListener('click', async e => {
+  const cache = e.target.closest('.cache');
+  if (cache) { renderReq(await window.liaison.requestHide(cache.dataset.k)); return; }
+  if (e.target.closest('#reqOuvrir')) {
+    const r = await window.liaison.startSession();
+    if (r && r.error) { toast(r.error, true); return; }
+    invitesEtat = r; qrVisible = true; renderQr(); return;
+  }
+  if (e.target.closest('#qrPlein')) { window.liaison.qrGrand(); return; }
+  if (e.target.closest('#qrFerme')) {
+    invitesEtat = await window.liaison.stopSession(); qrVisible = false; renderReq(lastReq); return;
+  }
+});
+window.liaison.on('invites', e => { invitesEtat = e; if (qrVisible) renderQr(); });
+
 async function enterReq() {
   setView('req');
+  qrVisible = false;
+  $('#list').classList.remove('qrmode');
   $('#list').innerHTML = '<div class="empty"><b>Demandes</b>Lecture…</div>';
+  await lireInvites();
   try { renderReq(await window.liaison.requests()); }
   catch (e) { renderReq([]); }
 }
@@ -2084,7 +2260,7 @@ function peindreTempo() {
   out.textContent = v ? '± ' + v + ' %' : 'Auto';
   /* En tete du volet, ce que le reglet vaut en pratique — la meme
      place que « 10 styles » et « 6 a 9 » dans les deux autres. */
-  $('#mInfo').textContent = v ? 'reglee a la main' : 'apprise par Liaison';
+  $('#mInfo').textContent = v ? 'réglée à la main' : 'apprise par Liaison';
   out.className = v ? 'v' : 'v auto';
   const b = fBpmJoue || 0;
   $('#mHint').textContent = !v
@@ -2316,7 +2492,7 @@ $('#btnLand').onclick = () => {
   if (landData && landData.ok) {
     window.liaison.landingClear();
     renderLand(null);
-    toast('Plan de fin efface — retour a la courbe de la soiree');
+    toast('Plan de fin effacé — retour à la courbe de la soirée');
     return;
   }
   const on = !(box.classList.contains('on') && box.classList.contains('asking'));
@@ -2450,7 +2626,7 @@ window.liaison.on('library', async l => {
   if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
 });
 window.liaison.on('license', st => { licState(st); fitHeight(); });
-window.liaison.on('app', a => { $('#st').textContent = a.open ? '● ' + a.label : '○ ' + a.label + ' ferme'; });
+window.liaison.on('app', a => { $('#st').textContent = a.open ? '● ' + a.label : '○ ' + a.label + ' fermé'; });
 window.liaison.on('raw', r => { if (!r.matched) $('#st').textContent = r.text; });
 $('#licBuy').onclick = () => window.liaison.openLicence('plans');
 

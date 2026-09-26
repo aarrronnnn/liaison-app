@@ -180,29 +180,29 @@ function enPhrases(D) {
     ' de musique. Un morceau toutes les ' + Math.floor(D.dureeMoyenne / 60) + ' min ' +
     String(D.dureeMoyenne % 60).padStart(2, '0') + ' s en moyenne.' });
 
-  if (D.pic) p.push({ t: 'Le pic', d: 'L\'energie la plus haute est tombee entre ' + D.pic.h +
-    ' h et ' + ((D.pic.h + 1) % 24) + ' h, a ' + D.pic.e + ' sur 10, sur ' + D.pic.n + ' morceaux.' });
+  if (D.pic) p.push({ t: 'Le pic', d: 'L\'énergie la plus haute est tombée entre ' + D.pic.h +
+    ' h et ' + ((D.pic.h + 1) % 24) + ' h, à ' + D.pic.e + ' sur 10, sur ' + D.pic.n + ' morceaux.' });
 
-  if (D.tempo) p.push({ t: 'Le tempo', d: 'De ' + Math.round(D.tempo.min) + ' a ' +
-    Math.round(D.tempo.max) + ' BPM, mediane a ' + Math.round(D.tempo.median) + '. ' +
-    'Ecart median entre deux morceaux enchaines : ' + D.enchainements.medianeTempo + ' %.' });
+  if (D.tempo) p.push({ t: 'Le tempo', d: 'De ' + Math.round(D.tempo.min) + ' à ' +
+    Math.round(D.tempo.max) + ' BPM, médiane à ' + Math.round(D.tempo.median) + '. ' +
+    'Écart médian entre deux morceaux enchaînés : ' + D.enchainements.medianeTempo + ' %.' });
 
-  if (D.variete.dominante) p.push({ t: 'La variete', d: D.variete.familles +
-    ' familles de genres traversees. La plus presente : ' + D.variete.dominante.nom +
-    ', a ' + D.variete.dominante.part + ' % du set. Plus longue serie sans changer de famille : ' +
+  if (D.variete.dominante) p.push({ t: 'La variété', d: D.variete.familles +
+    ' familles de genres traversées. La plus présente : ' + D.variete.dominante.nom +
+    ', à ' + D.variete.dominante.part + ' % du set. Plus longue série sans changer de famille : ' +
     D.variete.plusLongueSerie + ' morceaux' + (D.variete.serieFamille ? ' de ' + D.variete.serieFamille : '') + '.' });
 
-  p.push({ t: 'Les artistes', d: D.artistes + ' artistes differents sur ' + D.morceaux +
+  p.push({ t: 'Les artistes', d: D.artistes + ' artistes différents sur ' + D.morceaux +
     ' morceaux, soit ' + Math.round(D.artistes / D.morceaux * 100) + ' % de noms uniques.' });
 
   if (D.enchainements.medianeHarmonie != null) p.push({ t: 'L\'harmonie',
-    d: 'Accord median entre deux morceaux : ' + D.enchainements.medianeHarmonie + ' sur 100. ' +
-       '100 = meme tonalite, 93 = voisine sur la roue, 50 = tonalite inconnue.' });
+    d: 'Accord médian entre deux morceaux : ' + D.enchainements.medianeHarmonie + ' sur 100. ' +
+       '100 = même tonalité, 93 = voisine sur la roue, 50 = tonalité inconnue.' });
 
   if (D.demandes.recues) {
     const n = D.demandes.recues, j = D.demandes.jouees;
-    p.push({ t: 'La salle', d: n + ' demande' + (n > 1 ? 's' : '') + ' recue' + (n > 1 ? 's' : '') +
-      ', ' + j + ' jouee' + (j > 1 ? 's' : '') + '.' });
+    p.push({ t: 'La salle', d: n + ' demande' + (n > 1 ? 's' : '') + ' reçue' + (n > 1 ? 's' : '') +
+      ', ' + j + ' jouée' + (j > 1 ? 's' : '') + '.' });
   }
 
   return p;

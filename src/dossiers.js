@@ -102,7 +102,7 @@ function sources(liste, existe) {
   });
   return (liste || []).map(normaliser).filter(Boolean).map(d => ({
     kind: 'folder', path: d, manuel: true, present: voir(d),
-    label: 'Dossier ajoute — ' + (path.basename(d) || d)
+    label: 'Dossier ajouté — ' + (path.basename(d) || d)
   }));
 }
 

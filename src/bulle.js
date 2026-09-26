@@ -80,8 +80,8 @@ function familleLisible(t) {
 function decennie(an) {
   if (an == null) return null;
   const d = Math.floor(an / 10) * 10;
-  if (d >= 2000) return 'annees ' + d;
-  return 'annees ' + String(d).slice(2);      /* 1980 -> « annees 80 » */
+  if (d >= 2000) return 'années ' + d;
+  return 'années ' + String(d).slice(2);      /* 1980 -> « annees 80 » */
 }
 
 /**
@@ -137,8 +137,8 @@ function ancrer(cur, library) {
   if (!fam && !avecAnnees) {
     return { impossible: true,
              raison: an != null
-               ? 'Ce morceau n\'a pas de genre reconnu, et ta bibliotheque ne porte pas assez d\'annees.'
-               : 'Ce morceau n\'a ni genre ni annee : Liaison n\'a rien a quoi se raccrocher.' };
+               ? 'Ce morceau n\'a pas de genre reconnu, et ta bibliothèque ne porte pas assez d\'années.'
+               : 'Ce morceau n\'a ni genre ni année : Liaison n\'a rien à quoi se raccrocher.' };
   }
 
   const morceaux = [];

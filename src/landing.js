@@ -37,7 +37,7 @@ function phases(restant, moyenne) {
   /* Moins de deux morceaux : il n'y a plus de plan, il y a une sortie. */
   if (titres <= 2) {
     return [{ k: 'poser', nom: 'La sortie', de: 0, a: restant, titres: titres,
-              texte: 'Il reste la place d\'un ou deux morceaux : joue la cloture.' }];
+              texte: 'Il reste la place d\'un ou deux morceaux : joue la clôture.' }];
   }
 
   /* La descente prend le dernier tiers, jamais moins de deux morceaux
@@ -57,11 +57,11 @@ function phases(restant, moyenne) {
   });
   out.push({
     k: 'dernier', nom: 'Le dernier gros', de: tTenir, a: tTenir + tDernier, titres: nDernier,
-    texte: 'C\'est ici que passe la carte que tu gardais. Apres, on redescend.'
+    texte: 'C\'est ici que passe la carte que tu gardais. Après, on redescend.'
   });
   out.push({
     k: 'poser', nom: 'Poser la salle', de: tTenir + tDernier, a: restant, titres: nPoser,
-    texte: nPoser + ' morceaux pour redescendre et finir sur la cloture. Les gens doivent partir debout, pas surpris.'
+    texte: nPoser + ' morceaux pour redescendre et finir sur la clôture. Les gens doivent partir debout, pas surpris.'
   });
   return out;
 }
@@ -112,7 +112,7 @@ function closer(library, opt) {
 function plan(o) {
   o = o || {};
   const restant = Math.max(0, Math.round(o.restantMin || 0));
-  if (!restant) return { ok: false, note: 'Annonce le temps qu\'il te reste et Liaison prepare la descente.' };
+  if (!restant) return { ok: false, note: 'Annonce le temps qu\'il te reste et Liaison prépare la descente.' };
 
   /* duree moyenne : celle observee ce soir si on l'a, sinon celle de la
      bibliotheque, sinon 4 min 12 — la mediane d'un morceau club. */
@@ -149,9 +149,9 @@ function plan(o) {
                    energy: cl.energy, duration: cl.duration } : null,
     arc: arc,
     note: cl
-      ? 'Cloture reservee : ' + (cl.artist ? cl.artist + ' — ' : '') + cl.title +
+      ? 'Clôture réservée : ' + (cl.artist ? cl.artist + ' — ' : '') + cl.title +
         '. Elle ne remontera plus dans les suggestions avant la fin.'
-      : 'Aucune cloture evidente dans ce qui reste — choisis-la toi-meme, Liaison gardera la descente.'
+      : 'Aucune clôture évidente dans ce qui reste — choisis-la toi-même, Liaison gardera la descente.'
   };
 }
 

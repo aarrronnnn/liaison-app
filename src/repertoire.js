@@ -222,7 +222,7 @@ function raison(track, c) {
   const e = ecritureDe1(track);
   if (e && c.nEcriture >= MINI) {
     const part = (c.ecritures.get(e) || 0) / c.nEcriture;
-    if (part < SEUIL) return 'rare dans ta bibliotheque';
+    if (part < SEUIL) return 'rare dans ta bibliothèque';
   }
   const f = familleDe(track);
   if (f && c.nFamille >= MINI) {

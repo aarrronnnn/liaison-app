@@ -53,7 +53,7 @@ p.sub{color:var(--ink2);margin:0 0 26px;font-size:14.5px}
    colonne doit tenir dans une fenetre de 900 px. */
 .plans{display:flex;flex-direction:column;gap:7px;margin-bottom:8px}
 .plan{display:flex;align-items:center;gap:14px;width:100%;text-align:left;padding:12px 16px;border:1px solid var(--line);
-border-radius:5px;background:var(--card);cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,background .15s}
+border-radius:12px;background:var(--card);cursor:pointer;font:inherit;color:inherit;transition:border-color .15s,background .15s,transform .2s,box-shadow .2s}
 .plan:hover{border-color:var(--ink3)}
 .plan.feat{border-color:var(--blue);background:var(--card2)}
 .plan .n{flex:1;min-width:0}
@@ -103,6 +103,21 @@ color:var(--ink3);cursor:pointer}
 .macnote b{color:var(--ink)}
 .macnote a{display:inline-block;margin-top:7px;color:var(--blue);text-decoration:underline;
   text-underline-offset:3px}
+
+/* LA COUCHE 1.6 — la meme finition que les reglages : boutons en
+   Grotesk, angles doux, un seul halo sur l'action principale. */
+.btn{font-family:var(--b);font-size:14px;font-weight:600;letter-spacing:.005em;text-transform:none;border-radius:11px;
+  transition:background-color .15s,border-color .15s,color .15s,box-shadow .2s,transform .12s cubic-bezier(.34,1.56,.64,1)}
+.btn:not(.g){background:linear-gradient(180deg,color-mix(in srgb,var(--blue) 82%,#fff),var(--blue));
+  box-shadow:0 1px 0 rgba(255,255,255,.2) inset,0 12px 28px -12px rgba(31,53,216,.75)}
+.btn:not(.g):hover{background:linear-gradient(180deg,var(--blue),var(--blue2));transform:translateY(-1px)}
+.btn:active{transform:scale(.97)}
+.btn.g{border-radius:11px}
+.btn.g:hover{border-color:var(--blue);color:var(--blueTxt,var(--blue))}
+input{border-radius:11px}
+input:focus{box-shadow:0 0 0 3px color-mix(in srgb,var(--blue) 22%,transparent)}
+.macnote{border-radius:12px}
+@media(prefers-reduced-motion:reduce){.btn{transition:none}.btn:not(.g):hover{transform:none}}
 </style></head><body>
 <div class="drag"></div>
 <div class="wrap">
@@ -317,7 +332,7 @@ $('#activate').onclick = async () => {
     /* Une erreur reseau brute (« getaddrinfo ENOTFOUND … ») ne dit
        rien a un DJ : on dit ce qui se passe et quoi faire. */
     const brut = String(r.error || '');
-    let m = !brut || /ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|getaddrinfo|socket|Delai depasse|injoignable|network/i.test(brut)
+    let m = !brut || /ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|getaddrinfo|socket|D[eé]lai d[eé]pass[eé]|injoignable|network/i.test(brut)
       ? 'Pas de connexion au serveur de licences. L\'activation demande internet une seule fois — ' +
         'réessaie une fois connecté (ensuite, Liaison marche hors ligne).'
       : brut;
@@ -337,11 +352,11 @@ if (surMac || surWin) {
   const n = $('#macNote');
   n.hidden = false;
   if (surWin) {
-    n.innerHTML = '<b>L\'ecran bleu que Windows vient d\'afficher est normal.</b> ' +
-      'Liaison n\'a pas de certificat d\'editeur payant : SmartScreen affiche cet ecran pour ' +
-      'toute application encore peu telechargee, et il ne dit rien sur ce que fait le logiciel. ' +
-      'Rien ne quitte ta machine — l\'analyse est entierement locale. ' +
-      '<a href="#" id="macPlus">Pourquoi ce message, en detail</a>';
+    n.innerHTML = '<b>L\'écran bleu que Windows vient d\'afficher est normal.</b> ' +
+      'Liaison n\'a pas de certificat d\'éditeur payant : SmartScreen affiche cet écran pour ' +
+      'toute application encore peu téléchargée, et il ne dit rien sur ce que fait le logiciel. ' +
+      'Rien ne quitte ta machine — l\'analyse est entièrement locale. ' +
+      '<a href="#" id="macPlus">Pourquoi ce message, en détail</a>';
   }
   $('#macPlus').onclick = e => {
     e.preventDefault();

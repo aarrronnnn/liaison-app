@@ -25,11 +25,11 @@ function buyLinks(entry) {
   const both = (a ? a + ' ' : '') + t;
   return [
     { id: 'beatport', name: 'Beatport',  url: 'https://www.beatport.com/search?q=' + q(both),
-      note: 'electronique, WAV et AIFF' },
+      note: 'électronique, WAV et AIFF' },
     { id: 'qobuz',    name: 'Qobuz',     url: 'https://www.qobuz.com/fr-fr/search?q=' + q(both),
-      note: 'francais, achat en FLAC' },
+      note: 'français, achat en FLAC' },
     { id: 'bandcamp', name: 'Bandcamp',  url: 'https://bandcamp.com/search?q=' + q(both),
-      note: 'independants, sans DRM' },
+      note: 'indépendants, sans DRM' },
     { id: 'itunes',   name: 'iTunes',    url: 'https://music.apple.com/fr/search?term=' + q(both),
       note: 'catalogue grand public' },
     { id: 'juno',     name: 'Juno',      url: 'https://www.junodownload.com/search/?q%5Ball%5D%5B%5D=' + q(both),
@@ -40,9 +40,9 @@ function buyLinks(entry) {
 /** Les abonnements qui jouent directement dans le logiciel de mix. */
 const POOLS = [
   { name: 'Beatsource LINK', url: 'https://www.beatsource.com/link',
-    note: "Open format — le repertoire mariage et club. Joue dans Serato et rekordbox, avec un cache hors ligne." },
+    note: "Open format — le répertoire mariage et club. Joue dans Serato et rekordbox, avec un cache hors ligne." },
   { name: 'Beatport LINK', url: 'https://www.beatport.com/link',
-    note: 'Electronique. Meme principe, meme integration.' }
+    note: 'Électronique. Même principe, même intégration.' }
 ];
 
 /**

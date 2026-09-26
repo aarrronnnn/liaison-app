@@ -386,17 +386,17 @@ function conseils(sources, opt) {
   if (!kinds.has('rekordbox') && rekordboxInstalle()) {
     out.push({
       cle: 'rekordbox-sans-xml', quand: 'biblio',
-      titre: 'rekordbox est la, mais sa bibliotheque est fermee',
-      texte: 'rekordbox garde sa collection dans une base chiffree. Exporte-la une fois ' +
-             'et Liaison la lira en une seconde, avec tes BPM et tes tonalites.',
+      titre: 'rekordbox est là, mais sa bibliothèque est fermée',
+      texte: 'rekordbox garde sa collection dans une base chiffrée. Exporte-la une fois ' +
+             'et Liaison la lira en une seconde, avec tes BPM et tes tonalités.',
       marche: [
         'Dans rekordbox : Fichier > Exporter la collection au format xml',
         'Enregistre le fichier dans Musique ou sur le Bureau',
-        'Reviens ici et relance la detection'
+        'Reviens ici et relance la détection'
       ],
       /* Sans ca, il reste le scan de dossier : il marche, mais il
          lit les tags des fichiers un par un. */
-      repli: 'Sinon Liaison lit ton dossier de musique — plus long, et moins precis.'
+      repli: 'Sinon Liaison lit ton dossier de musique — plus long, et moins précis.'
     });
   }
 
@@ -438,18 +438,18 @@ function conseils(sources, opt) {
     if (!(opt && opt.tournent && opt.tournent.indexOf(kind) >= 0)) continue;
     out.push({
       cle: 'base-introuvable-' + kind, quand: 'biblio',
-      titre: nom + ' tourne, mais je n\'ai pas trouve sa bibliotheque',
-      texte: 'Liaison a cherche aux emplacements habituels, sur le disque interne et sur les ' +
-             'disques branches, et n\'a rien trouve. Tes morceaux ' + nom + ' ne sont donc pas ' +
-             'dans la bibliotheque — et un morceau absent de la bibliotheque ne peut pas etre ' +
+      titre: nom + ' tourne, mais je n\'ai pas trouvé sa bibliothèque',
+      texte: 'Liaison a cherché aux emplacements habituels, sur le disque interne et sur les ' +
+             'disques branchés, et n\'a rien trouvé. Tes morceaux ' + nom + ' ne sont donc pas ' +
+             'dans la bibliothèque — et un morceau absent de la bibliothèque ne peut pas être ' +
              'reconnu quand tu le joues.',
       marche: [
-        'Verifie que le disque qui porte ta musique est bien branche',
-        'Ouvre les reglages de Liaison et designe le dossier a la main',
-        kind === 'serato' ? 'Le dossier cherche s\'appelle « _Serato_ », a la racine du disque'
+        'Vérifie que le disque qui porte ta musique est bien branché',
+        'Ouvre les réglages de Liaison et désigne le dossier à la main',
+        kind === 'serato' ? 'Le dossier cherché s\'appelle « _Serato_ », à la racine du disque'
                           : 'Indique le fichier de collection de ' + nom
       ],
-      repli: 'En attendant, Liaison travaille avec les autres sources qu\'il a trouvees — ce qui ' +
+      repli: 'En attendant, Liaison travaille avec les autres sources qu\'il a trouvées — ce qui ' +
              'explique que certains morceaux soient reconnus et d\'autres non.'
     });
   }
@@ -463,16 +463,16 @@ function conseils(sources, opt) {
     out.push({
       cle: 'rekordbox-xml-perime', quand: 'biblio',
       titre: 'Ton export rekordbox date de ' + Math.round(age) + ' jours',
-      texte: 'Un export XML est une photo, pas un lien : ce que tu as ajoute ou supprime ' +
-             'dans rekordbox depuis n\'y est pas. C\'est la raison la plus frequente d\'un ' +
-             'morceau propose alors que tu l\'as retire de ta collection.',
+      texte: 'Un export XML est une photo, pas un lien : ce que tu as ajouté ou supprimé ' +
+             'dans rekordbox depuis n\'y est pas. C\'est la raison la plus fréquente d\'un ' +
+             'morceau proposé alors que tu l\'as retiré de ta collection.',
       marche: [
         'Dans rekordbox : Fichier > Exporter la collection au format xml',
-        'Ecrase le fichier precedent, au meme endroit',
+        'Écrase le fichier précédent, au même endroit',
         'Liaison le relit tout seul dans les secondes qui suivent'
       ],
       repli: 'Tant que tu ne le refais pas, Liaison travaille sur la collection telle ' +
-             'qu\'elle etait a cette date.'
+             'qu\'elle était à cette date.'
     });
     break;
   }

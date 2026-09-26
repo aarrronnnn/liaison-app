@@ -127,7 +127,7 @@ function raison(track, anneeRef) {
   const p = perissabilite(track);
   if (p < 0.2) return age > 18 ? 'un classique' : null;
   if (usure(age) < 0.25) return null;
-  if (age >= RETOUR) return 'vintage assume';
+  if (age >= RETOUR) return 'vintage assumé';
   return 'date (' + an + ')';
 }
 

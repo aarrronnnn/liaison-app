@@ -73,19 +73,15 @@ console.log('bilan de sante : soiree, invites, detection\n');
 {
   /* 1.5.1 servait une page dont le script ne se lancait pas : une
      apostrophe echappee (\') dans un gabarit `...` perdait son
-     antislash, et « l'a pas » refermait la chaine. Recherche et
-     demandes mortes sur tous les telephones. On compile ici chaque
-     script de la page, dans les deux langues. */
+     antislash. Recherche et demandes mortes sur tous les telephones.
+     La page est maintenant un fichier (ui/invites.html) : on en
+     compile chaque script. */
   const vm = require('vm');
-  const genere = require('../src/session.js').guestPage;
-  verifier('la page des invites existe', typeof genere === 'function');
-  for (const langue of ['fr', 'en']) {
-    const html = genere('Soirée d\'essai', 'jeton', { cooldown: 90, maxPerDevice: 5, langue });
-    const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
-    let err = null;
-    for (const s of scripts) { try { new vm.Script(s); } catch (e) { err = e.message; } }
-    verifier('page des invites (' + langue + ') : chaque script compile', scripts.length > 0 && !err, err);
-  }
+  const html = fs.readFileSync(path.join(__dirname, '..', 'src', 'ui', 'invites.html'), 'utf8');
+  const scripts = [...html.matchAll(/<script>([\s\S]*?)<\/script>/g)].map(x => x[1]);
+  let err = null;
+  for (const s of scripts) { try { new vm.Script(s); } catch (e) { err = e.message; } }
+  verifier('page des invites : chaque script compile', scripts.length > 0 && !err, err);
 }
 
 fs.rmSync(tmp, { recursive: true, force: true });

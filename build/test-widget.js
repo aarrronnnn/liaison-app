@@ -74,12 +74,12 @@ const SUG = [
     energy: 8, total: 73, transition: 'Enchainement', why: 'x', delta: 1.5,
     trend: 75, h: 89, tempoS: 90, crowd: 55, timbre: 70, plan: null, introBars: 16,
     client: false, cloture: false, bulle: null, horsBulle: false,
-    pourquoi: 'tu l’as deja enchaine', age: null, relance: true, deja: null },
+    pourquoi: 'tu l’as déjà enchaîné', age: null, relance: true, deja: null },
   { id: 3, title: 'Bella ciao', artist: 'Hugel', key: '9A', bpm: 124, energy: 9,
     total: 69, transition: 'Coupe', why: 'x', delta: -4.6, trend: 30, h: 64, tempoS: 55,
     crowd: 70, timbre: 60, plan: null, introBars: 4, client: true, cloture: true,
     bulle: 88, horsBulle: true, pourquoi: null, age: 'date', relance: true,
-    deja: { texte: 'DEJA PASSE', grave: true } }
+    deja: { texte: 'DÉJÀ PASSÉ', grave: true } }
 ];
 
 const SOS = [
@@ -130,7 +130,7 @@ const SOS = [
       'rescanLibrary rescue runningApps saveQR scanInfo searchTrack setConfig setDebrief ' +
       'setFilters setHeight soireeActiver soireeCreer soireeDesactiver soireeDupliquer ' +
       'soireeModifier soireeSupprimer soireesListe startSession structure suggest tarifs ' +
-      'tracklist').split(' ');
+      'tracklist sessionEtat stopSession requestHide qrGrand qrFermerGrand qrAffiche').split(' ');
     const api = {};
     for (const k of SURFACE) api[k] = async () => null;
     Object.assign(api, {
@@ -189,7 +189,7 @@ const SOS = [
     verifier('3bis. TENDANCE et RELANCE sortent ensemble',
              r.e1.includes('TENDANCE') && r.e1.includes('RELANCE'), r.e1.join(' · '));
     verifier('3ter. et les cinq etiquettes cohabitent',
-             ['CLÔTURE', 'HORS BULLE', 'DEMANDÉ', 'DEJA PASSE', 'RELANCE']
+             ['CLÔTURE', 'HORS BULLE', 'DEMANDÉ', 'DÉJÀ PASSÉ', 'RELANCE']
                .every(x => r.e2.includes(x)), r.e2.join(' · '));
     verifier('4. rien ne deborde en largeur', r.debord <= LARGEUR,
              r.debord + ' px pour ' + LARGEUR + ' px de fenetre');
@@ -306,7 +306,7 @@ const SOS = [
     const b = await etat(mesure);
     verifier('8quater. le tempo mesure apparait', b.bpm === '125,4', 'affiche « ' + b.bpm + ' »');
     verifier('8quinquies. et Liaison dit que la mesure vient de lui',
-             /mesure par Liaison/.test(b.ref), b.ref);
+             /mesur[eé] par Liaison/.test(b.ref), b.ref);
     verifier('8sexies. le ruban cesse d\'annoncer une analyse',
              !/Analyse de la structure/.test(b.ruban), b.ruban.slice(0, 40));
 

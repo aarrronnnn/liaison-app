@@ -39,7 +39,7 @@ function vide(nom) {
        preparation jusqu'a la fin de la nuit, et il est different pour
        chaque soiree — les demandes du samedi ne reviennent pas dimanche. */
     jeton: crypto.randomBytes(9).toString('base64url'),
-    nom: nom || 'Nouvelle soiree',
+    nom: nom || 'Nouvelle soirée',
     date: '',            /* AAAA-MM-JJ, libre */
     lieu: '',
     pays: 'fr',

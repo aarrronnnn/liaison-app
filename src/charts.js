@@ -334,7 +334,7 @@ async function charger(opt) {
   const nom = String(o.fournisseur || '').toLowerCase();
   if (!nom || nom === 'aucun')
     return { etat: 'non-configure', titres: [],
-             note: 'Aucun fournisseur de classements n\'est configure.' };
+             note: 'Aucun fournisseur de classements n\'est configuré.' };
 
   const f = FOURNISSEURS[nom];
   if (!f) return { etat: 'non-configure', titres: [],
@@ -346,19 +346,19 @@ async function charger(opt) {
   const cle = cleLastfm(o);
   if (f.besoinCle && !cle)
     return { etat: 'sans-cle', titres: [], fournisseur: f.nom,
-             note: 'Cette version a ete construite sans cle ' + f.nom + '.' };
+             note: 'Cette version a été construite sans clé ' + f.nom + '.' };
 
   try {
     const r = await f.charger(Object.assign({ limite: 50, timeout: 6000 }, o, { cle: cle }));
     if (!r || r.etat !== 'ok')
       return Object.assign({ etat: 'muet', titres: [], fournisseur: f.nom,
-        note: 'Pas de reponse utilisable de ' + f.nom + '.' }, r || {});
+        note: 'Pas de réponse utilisable de ' + f.nom + '.' }, r || {});
     return Object.assign({ fournisseur: f.nom }, r);
   } catch (e) {
     /* Une panne de reseau n'est pas une erreur du DJ : on le dit
        et on rend la main. La preparation continue sans. */
     return { etat: 'injoignable', titres: [], fournisseur: f.nom,
-             note: f.nom + ' est injoignable. Verifie ta connexion.' };
+             note: f.nom + ' est injoignable. Vérifie ta connexion.' };
   }
 }
 

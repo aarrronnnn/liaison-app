@@ -788,27 +788,27 @@ class AnalysisService {
     if (this.sansFils)
       return { cle: 'analyse-sans-fils',
         quoi: 'Liaison ne peut pas lancer ses fils d\'analyse',
-        pourquoi: 'Aucun tempo, aucune tonalite et aucune energie ne seront mesures.',
-        quoiFaire: ['Redemarre Liaison', 'Si ca persiste, reinstalle l\'application'] };
+        pourquoi: 'Aucun tempo, aucune tonalité et aucune énergie ne seront mesurés.',
+        quoiFaire: ['Redémarre Liaison', 'Si ça persiste, réinstalle l\'application'] };
 
     const tentes = this.rates + this.reussis;
     if (tentes < 20) return null;
 
     if (this.rates >= tentes * 0.8)
       return { cle: 'analyse-echoue',
-        quoi: 'L\'analyse echoue sur presque tous tes morceaux',
+        quoi: 'L\'analyse échoue sur presque tous tes morceaux',
         pourquoi: this.derniereErreur
-          ? 'Derniere erreur : ' + this.derniereErreur
-          : 'Liaison n\'arrive pas a decoder tes fichiers audio.',
+          ? 'Dernière erreur : ' + this.derniereErreur
+          : 'Liaison n\'arrive pas à décoder tes fichiers audio.',
         quoiFaire: ['Lance « node build/diagnostic.js » pour savoir pourquoi',
-                    'C\'est presque toujours ffmpeg qui manque ou n\'est pas executable'],
+                    'C\'est presque toujours ffmpeg qui manque ou n\'est pas exécutable'],
         rates: this.rates, tentes: tentes };
 
     /* Le cas plus vicieux : ca « reussit », mais rien n'en sort. */
     if (this.reussis >= 20 && this.mesuresUtiles < this.reussis * 0.1)
       return { cle: 'analyse-sans-resultat',
         quoi: 'L\'analyse tourne mais ne trouve aucun tempo',
-        pourquoi: this.reussis + ' morceaux analyses, ' + this.mesuresUtiles + ' tempos trouves.',
+        pourquoi: this.reussis + ' morceaux analysés, ' + this.mesuresUtiles + ' tempos trouvés.',
         quoiFaire: ['Lance « node build/diagnostic.js » et envoie la sortie'],
         rates: this.rates, tentes: tentes };
     return null;

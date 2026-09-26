@@ -143,8 +143,8 @@ function score(cur, cand, M) {
 function explication(cur, cand, M) {
   if (!M || !M.assez) return null;
   const vues = M.paires.get(cur.id + '>' + cand.id) || 0;
-  if (vues >= 3) return 'tu l\'enchaines souvent';
-  if (vues > 0) return 'tu l\'as deja enchaine';
+  if (vues >= 3) return 'tu l\'enchaînes souvent';
+  if (vues > 0) return 'tu l\'as déjà enchaîné';
   return null;
 }
 

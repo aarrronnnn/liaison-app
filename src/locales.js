@@ -21,7 +21,7 @@ const COUNTRIES = [
     langBias: { fr:1.0, en:0.92, es:0.5 },
     decades: { '2020':1.0,'2010':0.92,'2000':0.8,'1990':0.72,'1980':0.66,'1970':0.5 },
     avoid: ['country', 'schlager'],
-    tips: "Un refrain en francais rattrape une salle plus vite que n'importe quel drop." },
+    tips: "Un refrain en français rattrape une salle plus vite que n'importe quel drop." },
 
   { id: 'be', label: 'Belgique', flag: '\u{1F1E7}\u{1F1EA}',
     dna: { 'house':84,'techno':78,'new beat':70,'variete':66,'rap fr':66,'disco':72,'pop':72,
@@ -29,7 +29,7 @@ const COUNTRIES = [
     langBias: { fr:0.95, en:0.95, nl:0.7 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.82,'1990':0.8,'1980':0.7 },
     avoid: ['country'],
-    tips: "Public bilingue : alterner FR et EN evite de perdre la moitie de la salle." },
+    tips: "Public bilingue : alterner FR et EN évite de perdre la moitié de la salle." },
 
   { id: 'ch', label: 'Suisse', flag: '\u{1F1E8}\u{1F1ED}',
     dna: { 'house':84,'tech house':78,'pop':76,'variete':60,'disco':70,'techno':66,'rnb':58,
@@ -45,7 +45,7 @@ const COUNTRIES = [
     langBias: { en:1.0, fr:0.35 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.85,'1990':0.85,'1980':0.7 },
     avoid: ['variete', 'schlager'],
-    tips: "Le garage et la jungle passent partout, meme en mariage. Les tempos montent vite." },
+    tips: "Le garage et la jungle passent partout, même en mariage. Les tempos montent vite." },
 
   { id: 'us', label: 'États-Unis', flag: '\u{1F1FA}\u{1F1F8}',
     dna: { 'hip-hop':92,'rnb':86,'pop':84,'country':70,'house':70,'motown':74,'funk':72,
@@ -53,7 +53,7 @@ const COUNTRIES = [
     langBias: { en:1.0, es:0.55, fr:0.2 },
     decades: { '2020':1.0,'2010':0.95,'2000':0.9,'1990':0.85,'1980':0.78,'1970':0.7 },
     avoid: ['variete', 'eurodance'],
-    tips: "Le hip-hop et la Motown font le pont entre les generations. La country n'est pas un gag." },
+    tips: "Le hip-hop et la Motown font le pont entre les générations. La country n'est pas un gag." },
 
   { id: 'es', label: 'Espagne', flag: '\u{1F1EA}\u{1F1F8}',
     dna: { 'reggaeton':92,'latin pop':88,'flamenco pop':76,'house':78,'tech house':74,
@@ -61,7 +61,7 @@ const COUNTRIES = [
     langBias: { es:1.0, en:0.85, fr:0.3 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.85,'1990':0.8,'1980':0.7 },
     avoid: ['schlager'],
-    tips: "Tout part beaucoup plus tard. Le pic reel est souvent apres 3 h." },
+    tips: "Tout part beaucoup plus tard. Le pic réel est souvent après 3 h." },
 
   { id: 'it', label: 'Italie', flag: '\u{1F1EE}\u{1F1F9}',
     dna: { 'italo disco':88,'house':82,'pop it':84,'tech house':78,'latin pop':66,'disco':78,
@@ -69,7 +69,7 @@ const COUNTRIES = [
     langBias: { it:1.0, en:0.9, es:0.6 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.85,'1990':0.85,'1980':0.85 },
     avoid: ['country'],
-    tips: "L'italo des annees 80 n'est pas nostalgique ici : elle est encore jouee au premier degre." },
+    tips: "L'italo des années 80 n'est pas nostalgique ici : elle est encore jouée au premier degré." },
 
   { id: 'de', label: 'Allemagne', flag: '\u{1F1E9}\u{1F1EA}',
     dna: { 'techno':94,'minimal':82,'house':80,'trance':70,'hard techno':76,'tech house':78,
@@ -77,7 +77,7 @@ const COUNTRIES = [
     langBias: { de:0.8, en:1.0 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.75,'1990':0.8,'1980':0.6 },
     avoid: ['variete', 'country'],
-    tips: "Les sets sont longs et lineaires. Un vocal trop connu casse la transe plus qu'il ne l'aide." },
+    tips: "Les sets sont longs et linéaires. Un vocal trop connu casse la transe plus qu'il ne l'aide." },
 
   { id: 'nl', label: 'Pays-Bas', flag: '\u{1F1F3}\u{1F1F1}',
     dna: { 'house':86,'tech house':82,'techno':76,'hardstyle':70,'edm':76,'disco':70,'pop':72,
@@ -85,7 +85,7 @@ const COUNTRIES = [
     langBias: { nl:0.75, en:1.0 },
     decades: { '2020':1.0,'2010':0.95,'2000':0.8,'1990':0.72,'1980':0.62 },
     avoid: ['country'],
-    tips: "Public tres habitue aux gros festivals : les breaks longs sont acceptes." },
+    tips: "Public très habitué aux gros festivals : les breaks longs sont acceptés." },
 
   { id: 'pt', label: 'Portugal', flag: '\u{1F1F5}\u{1F1F9}',
     dna: { 'kizomba':78,'afro house':84,'house':80,'latin pop':74,'pop pt':76,'reggaeton':76,
@@ -93,7 +93,7 @@ const COUNTRIES = [
     langBias: { pt:1.0, en:0.85, es:0.7 },
     decades: { '2020':1.0,'2010':0.9,'2000':0.82,'1990':0.75,'1980':0.65 },
     avoid: ['schlager', 'country'],
-    tips: "L'afro house lusophone tient toute une nuit sans que la salle decroche." },
+    tips: "L'afro house lusophone tient toute une nuit sans que la salle décroche." },
 
   { id: 'br', label: 'Brésil', flag: '\u{1F1E7}\u{1F1F7}',
     dna: { 'funk carioca':90,'pagode':80,'sertanejo':82,'latin pop':78,'house':70,'samba':74,
@@ -101,7 +101,7 @@ const COUNTRIES = [
     langBias: { pt:1.0, en:0.7, es:0.6 },
     decades: { '2020':1.0,'2010':0.92,'2000':0.85,'1990':0.78,'1980':0.7 },
     avoid: ['schlager', 'country'],
-    tips: "Le sertanejo n'est pas un genre de repli : c'est souvent le pic de la soiree." },
+    tips: "Le sertanejo n'est pas un genre de repli : c'est souvent le pic de la soirée." },
 
   { id: 'ca', label: 'Canada', flag: '\u{1F1E8}\u{1F1E6}',
     dna: { 'hip-hop':84,'pop':84,'house':76,'rnb':78,'variete':56,'rap fr':58,'country':60,
@@ -109,7 +109,7 @@ const COUNTRIES = [
     langBias: { en:1.0, fr:0.75 },
     decades: { '2020':1.0,'2010':0.95,'2000':0.88,'1990':0.82,'1980':0.72 },
     avoid: [],
-    tips: "Au Quebec, un titre francophone connu vaut deux tubes internationaux." }
+    tips: "Au Québec, un titre francophone connu vaut deux tubes internationaux." }
 ];
 
 /* ---------------- axe 2 : le type d'evenement ---------------- */
@@ -122,11 +122,11 @@ const EVENTS = [
            'rnb':32,'reggaeton':52,'latin pop':40,'minimal':72,'drum and bass':62,'funk':48 },
     moments: [
       { at: 0, label: 'Ouverture', brief: 'Deep et groove, la salle se remplit. Rien de connu.' },
-      { at: 4, label: 'Pic', brief: 'Le gros du set, energie 9-10, pas de variete.' },
-      { at: 6, label: 'Descente', brief: 'On relache pour garder les derniers.' }
+      { at: 4, label: 'Pic', brief: 'Le gros du set, énergie 9-10, pas de variété.' },
+      { at: 6, label: 'Descente', brief: 'On relâche pour garder les derniers.' }
     ],
     avoid: ['variete', 'slow', 'mariage'],
-    tips: "Un edit maison passe mieux qu'un original trop identifie." },
+    tips: "Un edit maison passe mieux qu'un original trop identifié." },
 
   { id: 'mariage', label: 'Mariage', short: 'mariage',
     hours: ['19h','20h','21h','22h','23h','00h','01h','02h','03h'],
@@ -137,12 +137,12 @@ const EVENTS = [
     moments: [
       { at: 0, label: "Vin d'honneur", brief: 'Jazz, bossa, soul douce. On parle par-dessus.' },
       { at: 2, label: 'Dîner', brief: 'Volume bas, rien de dansant, aucun refrain connu.' },
-      { at: 4, label: 'Ouverture de bal', brief: 'Le slow des maries, puis on enchaine vite.' },
-      { at: 6, label: 'Pic', brief: 'Hymnes, toutes generations, personne ne s\'assoit.' },
+      { at: 4, label: 'Ouverture de bal', brief: 'Le slow des mariés, puis on enchaîne vite.' },
+      { at: 6, label: 'Pic', brief: 'Hymnes, toutes générations, personne ne s\'assoit.' },
       { at: 8, label: 'Fin de nuit', brief: 'Les 20 derniers, plus club.' }
     ],
     avoid: ['drill', 'hard techno', 'explicit'],
-    tips: "Trois generations dans la salle : un titre par decennie toutes les quatre pistes." },
+    tips: "Trois générations dans la salle : un titre par décennie toutes les quatre pistes." },
 
   { id: 'anniversaire', label: 'Anniversaire', short: 'anniv',
     hours: ['21h','22h','23h','00h','01h','02h','03h'],
@@ -151,13 +151,13 @@ const EVENTS = [
            'club':64,'variete':60,'techno':30,
            'reggaeton':70,'latin pop':66,'trap':62,'minimal':18,'slow':30 },
     moments: [
-      { at: 0, label: 'Arrivees', brief: 'Ambiance, volume moyen, on laisse parler.' },
-      { at: 2, label: 'Ca part', brief: 'Premiers refrains connus, tout le monde debout.' },
+      { at: 0, label: 'Arrivées', brief: 'Ambiance, volume moyen, on laisse parler.' },
+      { at: 2, label: 'Ça part', brief: 'Premiers refrains connus, tout le monde debout.' },
       { at: 4, label: 'Pic', brief: 'Hymnes et gros singalongs.' },
       { at: 6, label: 'Fin', brief: 'On descend doucement.' }
     ],
     avoid: ['hard techno'],
-    tips: "Demander trois titres a la personne fetee et les placer au pic : effet garanti." },
+    tips: "Demander trois titres à la personne fêtée et les placer au pic : effet garanti." },
 
   { id: 'privee', label: 'Soirée privée', short: 'privee',
     hours: ['21h','22h','23h','00h','01h','02h','03h','04h'],
@@ -166,12 +166,12 @@ const EVENTS = [
            'rnb':66,'club':70,'variete':40,
            'reggaeton':64,'latin pop':60,'minimal':46,'slow':20,'hymne':60 },
     moments: [
-      { at: 0, label: 'Debut', brief: 'Disco et funk, ca met a l\'aise sans forcer.' },
-      { at: 4, label: 'Coeur de soiree', brief: 'House et titres qui rassemblent.' },
+      { at: 0, label: 'Début', brief: 'Disco et funk, ça met à l\'aise sans forcer.' },
+      { at: 4, label: 'Cœur de soirée', brief: 'House et titres qui rassemblent.' },
       { at: 7, label: 'Fin', brief: 'Plus deep, pour ceux qui restent.' }
     ],
     avoid: ['hard techno'],
-    tips: "Salon ou jardin : la basse porte mal, privilegier des morceaux qui tiennent en medium." },
+    tips: "Salon ou jardin : la basse porte mal, privilégier des morceaux qui tiennent en medium." },
 
   { id: 'corporate', label: 'Cocktail / entreprise', short: 'corporate',
     hours: ['18h','19h','20h','21h','22h','23h'],
@@ -181,12 +181,12 @@ const EVENTS = [
            'hip-hop':34,'rnb':56,'reggaeton':30,'latin pop':44,'minimal':40,'hymne':30,'slow':40 },
     moments: [
       { at: 0, label: 'Accueil', brief: 'Jazz, soul, bossa. Le fond, pas le devant.' },
-      { at: 2, label: 'Discours', brief: 'Coupure ou volume tres bas.' },
+      { at: 2, label: 'Discours', brief: 'Coupure ou volume très bas.' },
       { at: 3, label: 'Cocktail', brief: 'Nu disco et deep, on peut bouger sans danser.' },
       { at: 5, label: 'Bascule', brief: 'Si la salle veut danser : disco puis house.' }
     ],
     avoid: ['explicit', 'drill', 'hard techno'],
-    tips: "Aucun texte explicite : c'est le seul contexte ou une parole rate tout." },
+    tips: "Aucun texte explicite : c'est le seul contexte où une parole rate tout." },
 
   { id: 'festival', label: 'Festival / plein air', short: 'festival',
     hours: ['16h','17h','18h','19h','20h','21h','22h','23h'],
@@ -196,11 +196,11 @@ const EVENTS = [
            'hip-hop':58,'reggaeton':60,'latin pop':50,'minimal':62,'hymne':52,'pop':52 },
     moments: [
       { at: 0, label: 'Jour', brief: 'Groove lisible, la foule circule.' },
-      { at: 3, label: 'Coucher de soleil', brief: 'Le creneau qui marque : melodique et large.' },
-      { at: 5, label: 'Pic', brief: 'Plein regime, pas de creux.' }
+      { at: 3, label: 'Coucher de soleil', brief: 'Le créneau qui marque : mélodique et large.' },
+      { at: 5, label: 'Pic', brief: 'Plein régime, pas de creux.' }
     ],
     avoid: ['variete', 'slow'],
-    tips: "En plein air les aigus se perdent : les morceaux trop fins passent inapercus." },
+    tips: "En plein air les aigus se perdent : les morceaux trop fins passent inaperçus." },
 
   { id: 'bar', label: 'Bar / restaurant', short: 'bar',
     hours: ['19h','20h','21h','22h','23h','00h'],
@@ -210,11 +210,11 @@ const EVENTS = [
            'hip-hop':40,'reggaeton':36,'latin pop':52,'minimal':46,'hymne':24,'slow':46 },
     moments: [
       { at: 0, label: 'Service', brief: 'On accompagne, on ne prend pas la place.' },
-      { at: 3, label: 'Apres le service', brief: 'On monte, les tables se vident.' },
+      { at: 3, label: 'Après le service', brief: 'On monte, les tables se vident.' },
       { at: 5, label: 'Fin', brief: 'Presque club, si le lieu le permet.' }
     ],
     avoid: ['hard techno', 'drill'],
-    tips: "Le volume decide de tout : au-dessus d'un certain seuil, les gens partent." },
+    tips: "Le volume décide de tout : au-dessus d'un certain seuil, les gens partent." },
 
   { id: 'after', label: 'After', short: 'after',
     hours: ['05h','06h','07h','08h','09h','10h'],
@@ -224,11 +224,11 @@ const EVENTS = [
            'hip-hop':6,'reggaeton':6,'latin pop':6,'uk garage':40,'funk':10,'disco':20,'edit':40 },
     moments: [
       { at: 0, label: 'Reprise', brief: 'Hypnotique, on ne relance pas trop vite.' },
-      { at: 2, label: 'Plateau', brief: 'On tient le meme niveau tres longtemps.' },
+      { at: 2, label: 'Plateau', brief: 'On tient le même niveau très longtemps.' },
       { at: 4, label: 'Sortie', brief: 'On adoucit sans casser.' }
     ],
     avoid: ['hymne', 'variete', 'pop'],
-    tips: "Personne ne veut de surprise a 7 h : la continuite vaut mieux que les pics." }
+    tips: "Personne ne veut de surprise à 7 h : la continuité vaut mieux que les pics." }
 ];
 
 /* ---------------- composition des deux axes ---------------- */

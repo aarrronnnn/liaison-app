@@ -33,18 +33,18 @@ class NowPlaying extends EventEmitter {
          ------------------------------------------------------------ */
       this.emit('status', {
         kind: kind, ok: false,
-        msg: 'Ce logiciel n\'annonce pas ce qu\'il joue — declare le morceau a la main',
+        msg: 'Ce logiciel n\'annonce pas ce qu\'il joue — déclare le morceau à la main',
         conseil: {
           cle: 'source-non-lisible', quand: 'deck',
           titre: 'Ce logiciel ne publie pas le morceau en cours',
-          texte: 'Liaison sait lire Serato, Traktor, VirtualDJ et rekordbox avec du materiel ' +
-                 'sur le reseau. Ton logiciel, lui, n\'annonce rien : ce n\'est pas une panne, ' +
-                 'c\'est une limite de son cote.',
+          texte: 'Liaison sait lire Serato, Traktor, VirtualDJ et rekordbox avec du matériel ' +
+                 'sur le réseau. Ton logiciel, lui, n\'annonce rien : ce n\'est pas une panne, ' +
+                 'c\'est une limite de son côté.',
           marche: ['Clique la loupe en haut, tape deux lettres du titre',
                    'Liaison propose la suite, avec les points de mix',
                    'Une seule frappe par morceau, pas plus'],
           repli: 'Si tu joues aussi sur Serato, Traktor ou VirtualDJ, la lecture y est ' +
-                 'automatique et sans materiel.'
+                 'automatique et sans matériel.'
         }
       });
       return;

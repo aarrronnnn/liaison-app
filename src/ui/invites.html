@@ -1,0 +1,571 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#101114">
+<meta name="robots" content="noindex">
+<meta name="referrer" content="no-referrer">
+<title>Demande ton morceau · Liaison</title>
+<!-- ============================================================
+     LA PAGE DES INVITES.
+
+     Une seule page, deux facons d'arriver :
+       — /s/<jeton>  servie par l'ordinateur du DJ, sur le Wi-Fi du lieu ;
+       — /d/<code>   servie par liaisondj.app, qui marche en 4G et dont
+                     le QR reste valable d'une soiree a l'autre.
+     Le meme code, la meme apparence : seul l'adaptateur change (voir
+     « API » plus bas). Rien d'autre n'est charge que les polices du
+     site, servies par le meme hote.
+
+     Ce que cette page doit etre, pour un invite qui a un verre dans
+     l'autre main : trouver un morceau en trois lettres, l'envoyer en
+     un geste, SAVOIR que c'est parti — et, plus tard, voir qu'il est
+     passe. Rien a installer, aucun compte, aucune donnee personnelle.
+     ============================================================ -->
+<style>
+@font-face{font-family:Anton;src:url('/fonts/anton-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Space Grotesk';src:url('/fonts/grotesk-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Space Grotesk';src:url('/fonts/grotesk-700.woff2') format('woff2');font-weight:700;font-display:swap}
+@font-face{font-family:'Space Mono';src:url('/fonts/mono-400.woff2') format('woff2');font-weight:400;font-display:swap}
+@font-face{font-family:'Space Mono';src:url('/fonts/mono-700.woff2') format('woff2');font-weight:700;font-display:swap}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+:root{
+  --deep:#101114;--deep2:#17181C;--deep3:#1D1F24;--wire:#26282E;--wire2:#33363E;
+  --cream:#EFEAE0;--cream2:#A9ACB3;--cream3:#8A8E97;
+  --blue:#4459FF;--blueTxt:#8390FF;--red:#FF5A42;--green:#3DDC84;
+  --d:Anton,'Arial Narrow',Impact,sans-serif;
+  --b:'Space Grotesk',-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
+  --m:'Space Mono',ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+}
+html{background:var(--deep)}
+body{margin:0 auto;max-width:560px;background:var(--deep);color:var(--cream);font-family:var(--b);
+  font-size:16px;line-height:1.5;-webkit-font-smoothing:antialiased;
+  padding:calc(18px + env(safe-area-inset-top)) 18px calc(40px + env(safe-area-inset-bottom))}
+button{font:inherit;color:inherit;cursor:pointer;-webkit-appearance:none;appearance:none}
+.hide{display:none!important}
+
+/* ---------- en-tete ---------- */
+.tete{display:flex;align-items:center;gap:10px;margin-bottom:18px}
+.tete svg{width:20px;height:20px;flex:none}
+.tete .mq{font-family:var(--m);font-size:10px;letter-spacing:.3em;color:var(--cream3)}
+.etat{margin-left:auto;display:inline-flex;align-items:center;gap:7px;font-family:var(--m);font-size:10px;
+  letter-spacing:.14em;text-transform:uppercase;color:var(--cream3);white-space:nowrap}
+.etat i{width:8px;height:8px;border-radius:50%;background:var(--cream3);flex:none}
+.etat.direct{color:var(--green)}
+.etat.direct i{background:var(--green);box-shadow:0 0 0 0 rgba(61,220,132,.6);animation:pouls 2.2s infinite}
+.etat.ferme{color:var(--red)}
+.etat.ferme i{background:var(--red)}
+@keyframes pouls{0%{box-shadow:0 0 0 0 rgba(61,220,132,.55)}70%{box-shadow:0 0 0 8px rgba(61,220,132,0)}100%{box-shadow:0 0 0 0 rgba(61,220,132,0)}}
+h1{font-family:var(--d);font-weight:400;font-size:clamp(30px,9vw,42px);line-height:1.02;letter-spacing:.01em;
+  text-transform:uppercase;margin:0 0 8px;overflow-wrap:anywhere}
+.sous{color:var(--cream2);font-size:15px;margin:0 0 20px}
+
+/* ---------- en ce moment ---------- */
+.encours{display:flex;align-items:center;gap:13px;padding:13px 14px;border-radius:6px;margin:0 0 18px;
+  background:linear-gradient(90deg,rgba(68,89,255,.16),rgba(68,89,255,.03));border:1px solid rgba(68,89,255,.35)}
+.eq{display:flex;align-items:flex-end;gap:3px;height:18px;flex:none}
+.eq span{width:3px;background:var(--blueTxt);border-radius:1px;animation:eq 1s ease-in-out infinite}
+.eq span:nth-child(2){animation-delay:-.35s}.eq span:nth-child(3){animation-delay:-.7s}.eq span:nth-child(4){animation-delay:-.2s}
+@keyframes eq{0%,100%{height:4px}50%{height:18px}}
+.encours .l{font-family:var(--m);font-size:9.5px;letter-spacing:.18em;text-transform:uppercase;color:var(--blueTxt)}
+.encours b{display:block;font-size:15px;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.encours small{display:block;color:var(--cream2);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.encours>div{min-width:0}
+
+/* ---------- recherche ---------- */
+.champ{position:relative}
+.champ svg{position:absolute;left:15px;top:50%;transform:translateY(-50%);width:18px;height:18px;
+  stroke:var(--cream3);fill:none;stroke-width:2;pointer-events:none}
+#q{width:100%;padding:17px 44px 17px 45px;border-radius:6px;border:1.5px solid var(--wire2);background:var(--deep2);
+  color:var(--cream);font-size:17px;font-family:var(--b)}
+#q::placeholder{color:var(--cream3)}
+#q:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(68,89,255,.25)}
+#vider{position:absolute;right:6px;top:50%;transform:translateY(-50%);width:36px;height:36px;border:0;
+  background:transparent;color:var(--cream3);font-size:20px;border-radius:50%}
+.info{font-family:var(--m);font-size:11px;color:var(--cream3);margin:9px 2px 0;letter-spacing:.02em}
+
+/* ---------- lignes ---------- */
+.r{display:flex;align-items:center;gap:12px;padding:12px 12px 12px 14px;border:1px solid var(--wire);
+  border-radius:6px;margin-top:8px;background:var(--deep2);animation:entre .22s ease-out both}
+@keyframes entre{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.r .tx{min-width:0;flex:1}
+.r b{font-weight:700;font-size:15px;display:block;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r small{display:block;color:var(--cream2);font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.r.libre{border-style:dashed}
+.r.libre small{white-space:normal}
+.go{flex:none;min-width:92px;min-height:44px;font-family:var(--m);font-size:11px;font-weight:700;letter-spacing:.1em;
+  text-transform:uppercase;padding:0 14px;border-radius:5px;border:1.5px solid var(--blue);background:var(--blue);color:#fff;
+  transition:transform .08s,background .15s,border-color .15s}
+.go:active{transform:scale(.95)}
+.go.plus{background:transparent;color:var(--blueTxt);min-width:72px}
+.go:disabled{opacity:.45}
+.go.ok{background:var(--green);border-color:var(--green);color:#0B1B12}
+.n{flex:none;font-family:var(--m);font-size:12px;color:var(--cream2);text-align:right;min-width:30px}
+.n.chaud{color:var(--red);font-weight:700}
+.rang{flex:none;font-family:var(--d);font-size:22px;width:24px;text-align:center;color:var(--cream3)}
+
+/* ---------- message ---------- */
+#msg{position:fixed;left:50%;bottom:calc(18px + env(safe-area-inset-bottom));transform:translate(-50%,20px);
+  width:min(520px,calc(100% - 28px));padding:14px 16px;border-radius:8px;background:var(--blue);color:#fff;
+  font-size:15px;font-weight:700;box-shadow:0 12px 30px -10px rgba(0,0,0,.8);opacity:0;pointer-events:none;
+  transition:opacity .2s,transform .25s cubic-bezier(.2,1.2,.4,1);z-index:10;display:flex;gap:10px;align-items:center}
+#msg.on{opacity:1;transform:translate(-50%,0)}
+#msg.rouge{background:#C4321F}
+#msg.vert{background:var(--green);color:#0B1B12}
+
+/* ---------- ma jauge ---------- */
+.jauge{display:flex;align-items:center;gap:12px;margin:18px 0 0;padding:12px 14px;border-radius:6px;
+  background:var(--deep2);border:1px solid var(--wire)}
+.jauge svg{width:34px;height:34px;flex:none;transform:rotate(-90deg)}
+.jauge circle{fill:none;stroke-width:3.5}
+.jauge .fond{stroke:var(--wire2)}
+.jauge .arc{stroke:var(--blue);stroke-linecap:round;transition:stroke-dashoffset .9s linear}
+.jauge .t{font-size:14px;color:var(--cream)}
+.jauge .t small{display:block;color:var(--cream3);font-size:12px}
+
+/* ---------- sections ---------- */
+.lbl{font-family:var(--m);font-size:10px;letter-spacing:.2em;text-transform:uppercase;color:var(--cream3);
+  margin:28px 0 4px;display:flex;align-items:center;gap:8px}
+.lbl::after{content:"";flex:1;height:1px;background:var(--wire)}
+.statut{flex:none;font-family:var(--m);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+  padding:6px 9px;border-radius:4px;border:1px solid var(--wire2);color:var(--cream2);white-space:nowrap}
+.statut.joue{border-color:var(--green);color:var(--green)}
+.statut.manque{border-color:var(--wire2);color:var(--cream3)}
+.r.joue{border-color:rgba(61,220,132,.45);background:linear-gradient(90deg,rgba(61,220,132,.10),var(--deep2) 70%)}
+.vide{color:var(--cream3);font-size:14px;margin:10px 2px 0}
+.pied{margin-top:34px;font-family:var(--m);font-size:10.5px;color:var(--cream3);line-height:1.9}
+.pied a{color:var(--cream2)}
+.ferme-box{margin-top:6px;padding:18px;border:1.5px dashed var(--wire2);border-radius:8px;color:var(--cream2);font-size:15px}
+.ferme-box b{display:block;color:var(--cream);font-size:17px;margin-bottom:4px}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<header class="tete">
+  <svg viewBox="0 0 24 24" fill="none" aria-hidden="true">
+    <path d="M3.4 3.4 10 12l-6.6 8.6" stroke="#4459FF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M20.6 3.4 14 12l6.6 8.6" stroke="#FF5A42" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="12" cy="12" r="2.4" fill="#EFEAE0"/></svg>
+  <span class="mq">LIAISON</span>
+  <span class="etat" id="etat" role="status"><i></i><span id="etatTx">…</span></span>
+</header>
+
+<h1 id="nom">&nbsp;</h1>
+<p class="sous" id="sous"></p>
+
+<div class="encours hide" id="encours" aria-live="polite">
+  <div class="eq" aria-hidden="true"><span></span><span></span><span></span><span></span></div>
+  <div><span class="l" id="encoursL"></span><b id="encoursT"></b><small id="encoursA"></small></div>
+</div>
+
+<div id="zone">
+  <div class="champ">
+    <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
+    <input id="q" type="search" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false"
+           enterkeyhint="search" aria-describedby="info">
+    <button id="vider" class="hide" type="button" aria-label="×">×</button>
+  </div>
+  <p class="info" id="info"></p>
+  <div id="res" aria-live="polite"></div>
+
+  <div class="jauge hide" id="jauge">
+    <svg viewBox="0 0 36 36" aria-hidden="true"><circle class="fond" cx="18" cy="18" r="15"/>
+      <circle class="arc" id="arc" cx="18" cy="18" r="15" stroke-dasharray="94.25" stroke-dashoffset="0"/></svg>
+    <div class="t" id="jaugeT"></div>
+  </div>
+</div>
+
+<div id="mesBox" class="hide">
+  <span class="lbl" id="mesL"></span>
+  <div id="mes"></div>
+</div>
+
+<span class="lbl" id="topL"></span>
+<div id="top"></div>
+
+<p class="pied" id="pied"></p>
+
+<div id="msg" role="status" aria-live="assertive"></div>
+
+<script>
+(function () {
+'use strict';
+
+/* ============================================================
+   LES MOTS — francais et anglais, selon la langue du telephone.
+   ============================================================ */
+var EN = !/^fr\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || 'fr');
+var M = EN ? {
+  titre: 'Request a song', sous: 'Pick a track — if it fits the moment, the DJ plays it.',
+  place: 'Song or artist…', direct: 'Live', attente: 'Connecting…', horsLigne: 'DJ offline', ferme: 'Closed',
+  encours: 'Now playing', demander: 'Request', envoye: 'Sent', plus: '+1',
+  tel: function (q) { return 'Request “' + q + '” as typed'; }, telSous: 'Not in the DJ’s library — they’ll still see it',
+  info: 'Type 2 letters: title, artist, or both.', aucun: 'Nothing matches in the DJ’s library.',
+  charge: 'Loading the DJ’s library…', nb: function (n) { return n.toLocaleString('en') + ' tracks in the DJ’s crate'; },
+  ok: 'Sent! The DJ can see it.', okPlus: 'Counted. The more requests, the higher it climbs.',
+  deja: 'You already requested this one — it’s on the list.', attendre: 'One sec before the next one.',
+  quota: function (m) { return 'You’ve used your ' + m + ' requests. Leave some room for the others!'; },
+  reste: function (n) { return n + (n > 1 ? ' requests' : ' request') + ' left tonight'; },
+  prochaine: function (s) { return 'Next one in ' + s; }, pret: 'Ready for the next one',
+  mes: 'Your requests', attenteS: 'Pending', joue: 'Played ✓', manque: 'Noted',
+  top: 'Most requested', personne: 'Nobody has asked yet — be the first.',
+  regles: function (c, m) { return 'One request at a time, then ' + c + ' s wait · ' + m + ' per person for the night.'; },
+  ferme1: 'Requests are closed', ferme2: 'The session is over. Thanks for being there!',
+  hors1: 'The DJ isn’t connected right now', hors2: 'Your request will be sent as soon as they’re back.',
+  reseau: 'Connection lost — check your Wi-Fi or data.', joueToast: function (t) { return '“' + t + '” is playing — you asked for it! 🎉'; },
+  lien: 'Liaison — the DJ’s next-track assistant', demandes: function (n) { return n > 1 ? n + ' requests' : '1 request'; }
+} : {
+  titre: 'Demande ton morceau', sous: 'Choisis un titre — s’il colle au moment, le DJ le passe.',
+  place: 'Titre ou artiste…', direct: 'En direct', attente: 'Connexion…', horsLigne: 'DJ hors ligne', ferme: 'Fermé',
+  encours: 'En ce moment', demander: 'Demander', envoye: 'Envoyé', plus: '+1',
+  tel: function (q) { return 'Demander « ' + q + ' » tel quel'; }, telSous: 'Pas dans la bibliothèque du DJ — il le verra quand même',
+  info: 'Tape 2 lettres : titre, artiste, ou les deux.', aucun: 'Rien de proche dans la bibliothèque du DJ.',
+  charge: 'Chargement de la bibliothèque du DJ…', nb: function (n) { return n.toLocaleString('fr-FR') + ' titres dans la valise du DJ'; },
+  ok: 'C’est envoyé ! Le DJ la voit.', okPlus: 'Compté. Plus il y a de demandes, plus il monte.',
+  deja: 'Tu l’as déjà demandé — il est dans la liste.', attendre: 'Encore un instant avant la prochaine.',
+  quota: function (m) { return 'Tu as utilisé tes ' + m + ' demandes. Laisse la place aux autres !'; },
+  reste: function (n) { return n + (n > 1 ? ' demandes restantes' : ' demande restante') + ' ce soir'; },
+  prochaine: function (s) { return 'Prochaine dans ' + s; }, pret: 'Prêt pour la suivante',
+  mes: 'Tes demandes', attenteS: 'En attente', joue: 'Passé ✓', manque: 'Noté',
+  top: 'Les plus demandés', personne: 'Personne n’a encore demandé — lance-toi.',
+  regles: function (c, m) { return 'Une demande à la fois, puis ' + c + ' s d’attente · ' + m + ' par personne pour la soirée.'; },
+  ferme1: 'Les demandes sont fermées', ferme2: 'La soirée est terminée. Merci d’être venu !',
+  hors1: 'Le DJ n’est pas connecté en ce moment', hors2: 'Ta demande partira dès qu’il revient.',
+  reseau: 'Connexion perdue — vérifie ton Wi-Fi ou tes données.', joueToast: function (t) { return '« ' + t + ' » passe — c’était ta demande ! 🎉'; },
+  lien: 'Liaison — l’assistant du DJ', demandes: function (n) { return n > 1 ? n + ' demandes' : '1 demande'; }
+};
+document.documentElement.lang = EN ? 'en' : 'fr';
+
+/* ============================================================
+   L'ADAPTATEUR : ordinateur du DJ (/s/<jeton>) ou liaisondj.app (/d/<code>).
+   ============================================================ */
+var chemin = location.pathname;
+var RELAIS = chemin.indexOf('/d/') === 0;
+var CLE = decodeURIComponent(chemin.replace(/^\/(s|d)\//, '').replace(/\/.*$/, ''));
+/* La mesure d'audience du site (sans cookie), seulement sur liaisondj.app :
+   combien de telephones ont scanne un QR. Jamais sur l'ordinateur du DJ. */
+if (RELAIS) { var va = document.createElement('script'); va.defer = true; va.src = '/_vercel/insights/script.js'; document.head.appendChild(va); }
+function url(f, extra) {
+  return RELAIS
+    ? '/api/soiree?c=' + encodeURIComponent(CLE) + '&f=' + f + (extra || '')
+    : '/api/' + f + '?t=' + encodeURIComponent(CLE) + (extra || '');
+}
+
+/* Un identifiant anonyme, tire sur ce telephone : il ne sert qu'a
+   compter une demande par personne. Rien d'autre ne sort. */
+function stock(k, v) {
+  try { if (v === undefined) return localStorage.getItem(k); localStorage.setItem(k, v); } catch (e) { return null; }
+}
+var DEV = stock('lz-dev');
+if (!DEV || !/^[A-Za-z0-9_-]{12,40}$/.test(DEV)) {
+  var a = new Uint8Array(12); (window.crypto || {}).getRandomValues ? crypto.getRandomValues(a) : a.forEach(function (x, i) { a[i] = Math.random() * 256; });
+  DEV = Array.prototype.map.call(a, function (x) { return ('0' + x.toString(16)).slice(-2); }).join('');
+  stock('lz-dev', DEV);
+}
+
+function obtenir(u, ms) {
+  var ctl = window.AbortController ? new AbortController() : null;
+  var tm = setTimeout(function () { if (ctl) ctl.abort(); }, ms || 9000);
+  return fetch(u, { cache: 'no-store', credentials: 'same-origin', signal: ctl && ctl.signal })
+    .then(function (r) { clearTimeout(tm); if (!r.ok && r.status !== 429) throw new Error('http ' + r.status); return r.json(); })
+    .catch(function (e) { clearTimeout(tm); throw e; });
+}
+function poster(f, corps) {
+  return fetch(url(f), { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(corps) }).then(function (r) { return r.json().catch(function () { return { ok: false }; }); });
+}
+
+/* ============================================================
+   UTILITAIRES
+   ============================================================ */
+var $ = function (id) { return document.getElementById(id); };
+function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+/* La meme mise a plat que l'application : c'est elle qui relie une
+   demande a son « passe ✓ ». */
+function plat(s) {
+  return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[œ]/g, 'oe').replace(/[æ]/g, 'ae').replace(/[^a-z0-9]+/g, ' ').trim();
+}
+function cle(t, a) { return plat(t) + '|' + plat(a); }
+var toastT = null;
+function dire(txt, genre) {
+  var m = $('msg');
+  m.textContent = txt;
+  m.className = 'on' + (genre ? ' ' + genre : '');
+  clearTimeout(toastT);
+  toastT = setTimeout(function () { m.className = genre || ''; }, genre === 'rouge' ? 4200 : 3000);
+}
+function vibrer(ms) { try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {} }
+function mmss(s) { s = Math.max(0, Math.ceil(s)); return Math.floor(s / 60) + ':' + ('0' + (s % 60)).slice(-2); }
+
+$('q').placeholder = M.place;
+$('info').textContent = M.info;
+$('sous').textContent = M.sous;
+$('topL').textContent = M.top;
+$('mesL').textContent = M.mes;
+$('vider').setAttribute('aria-label', EN ? 'Clear' : 'Effacer');
+
+/* ============================================================
+   L'ETAT DE LA SOIREE — publie par l'application du DJ.
+   ============================================================ */
+var E = null;            /* dernier etat recu */
+var SOIREE = null;
+var mes = [];            /* mes demandes : { t, a, k, at } */
+var dernierJoueVu = {};
+
+function chargerMes() {
+  try { var o = JSON.parse(stock('lz-mes') || '{}'); if (o && o.s === SOIREE && Array.isArray(o.l)) return o.l; } catch (e) {}
+  return [];
+}
+function garderMes() { stock('lz-mes', JSON.stringify({ s: SOIREE, l: mes.slice(-20) })); }
+
+var decalage = 0;           /* horloge de l'ordinateur du DJ - horloge du telephone */
+function afficherEtat() {
+  if (!E) return;
+  if (E.maintenant) decalage = E.maintenant - Date.now();
+  if (E.soiree && E.soiree !== SOIREE) { SOIREE = E.soiree; mes = chargerMes(); try { dernierJoueVu = JSON.parse(stock('lz-joue-' + SOIREE) || '{}'); } catch (e) { dernierJoueVu = {}; } }
+  document.title = (E.nom || M.titre) + ' · ' + M.titre;
+  $('nom').textContent = E.nom || M.titre;
+  var st = $('etat'), tx = $('etatTx');
+  if (!E.ouvert) { st.className = 'etat ferme'; tx.textContent = M.ferme; }
+  else if (E.enLigne === false) { st.className = 'etat'; tx.textContent = M.horsLigne; }
+  else { st.className = 'etat direct'; tx.textContent = M.direct; }
+
+  /* Fermee : on remplace la zone de demande, on garde le reste. */
+  var zone = $('zone');
+  var fb = $('fermeBox');
+  if (!E.ouvert) {
+    zone.classList.add('hide');
+    if (!fb) { fb = document.createElement('div'); fb.id = 'fermeBox'; fb.className = 'ferme-box'; zone.parentNode.insertBefore(fb, zone); }
+    fb.innerHTML = '<b>' + esc(M.ferme1) + '</b>' + esc(M.ferme2);
+  } else {
+    zone.classList.remove('hide');
+    if (fb) fb.remove();
+  }
+
+  /* En ce moment */
+  var ec = $('encours');
+  if (E.now && E.now.t) {
+    ec.classList.remove('hide');
+    $('encoursL').textContent = M.encours;
+    $('encoursT').textContent = E.now.t;
+    $('encoursA').textContent = E.now.a || '';
+  } else ec.classList.add('hide');
+
+  /* Les plus demandes : seulement des titres de la bibliotheque du
+     DJ, a son orthographe — jamais un texte libre tape par un invite. */
+  var top = (E.top || []).slice(0, 10);
+  $('top').innerHTML = top.length ? top.map(function (x, i) {
+    var joue = (E.joues || []).indexOf(x.k) >= 0;
+    var moi = mes.some(function (m) { return m.k === x.k; });
+    return '<div class="r' + (joue ? ' joue' : '') + '"><span class="rang">' + (i + 1) + '</span><span class="tx"><b>' + esc(x.t) + '</b><small>' + esc(x.a || '') +
+      ' · ' + esc(M.demandes(x.n)) + '</small></span>' +
+      (joue ? '<span class="statut joue">' + esc(M.joue) + '</span>'
+            : '<button class="go plus" data-t="' + esc(x.t) + '" data-a="' + esc(x.a || '') + '"' + (moi ? ' disabled' : '') + '>' + (moi ? '✓' : esc(M.plus)) + '</button>') +
+      '</div>';
+  }).join('') : '<p class="vide">' + esc(M.personne) + '</p>';
+
+  /* Mes demandes, et le moment ou l'une d'elles passe. */
+  afficherMes();
+  $('pied').innerHTML = esc(M.regles(E.regles ? E.regles.cooldown : 90, E.regles ? E.regles.max : 5)) +
+    (RELAIS ? '<br><a href="https://liaisondj.app/?utm_source=invites&amp;utm_medium=qr" target="_blank" rel="noopener">' + esc(M.lien) + '</a>' : '');
+  if (E.idx && E.idx.v && (!INDEX || INDEX.v !== E.idx.v)) chargerIndex(E.idx);
+  majJauge();
+}
+
+function afficherMes() {
+  var box = $('mesBox');
+  if (!mes.length) { box.classList.add('hide'); return; }
+  box.classList.remove('hide');
+  var joues = (E && E.joues) || [], manques = (E && E.manques) || [];
+  $('mes').innerHTML = mes.slice().reverse().map(function (m) {
+    var quand = E && E.jouesA ? E.jouesA[m.k] : null;
+    /* Passee APRES ma demande (a cinq secondes pres) — sinon elle attend encore. */
+    var j = quand ? quand >= (m.at || 0) - 5000 : (!E || !E.jouesA) && joues.indexOf(m.k) >= 0;
+    var q = manques.indexOf(m.k) >= 0;
+    if (j && !dernierJoueVu[m.k]) {
+      dernierJoueVu[m.k] = Date.now();
+      stock('lz-joue-' + SOIREE, JSON.stringify(dernierJoueVu));
+      dire(M.joueToast(m.t), 'vert'); vibrer([40, 60, 40]);
+    }
+    return '<div class="r' + (j ? ' joue' : '') + '"><span class="tx"><b>' + esc(m.t) + '</b><small>' + esc(m.a || '') + '</small></span>' +
+      '<span class="statut' + (j ? ' joue' : q ? ' manque' : '') + '">' + esc(j ? M.joue : q ? M.manque : M.attenteS) + '</span></div>';
+  }).join('');
+}
+
+/* ---------- la jauge : demandes restantes et delai ---------- */
+var prochaine = 0, delaiTotal = 90, jaugeT = null;
+function restantes() { var max = E && E.regles ? E.regles.max : 5; return Math.max(0, max - mes.length); }
+function majJauge() {
+  var j = $('jauge');
+  if (!mes.length || !E || !E.ouvert) { j.classList.add('hide'); return; }
+  j.classList.remove('hide');
+  var s = (prochaine - Date.now()) / 1000;
+  var arc = $('arc');
+  var r = restantes();
+  if (r <= 0) {
+    arc.style.strokeDashoffset = 0;
+    $('jaugeT').innerHTML = esc(M.quota(E.regles ? E.regles.max : 5));
+    return;
+  }
+  if (s > 0) {
+    arc.style.strokeDashoffset = String(94.25 * (s / delaiTotal));
+    $('jaugeT').innerHTML = esc(M.prochaine(mmss(s))) + '<small>' + esc(M.reste(r)) + '</small>';
+  } else {
+    arc.style.strokeDashoffset = '0';
+    $('jaugeT').innerHTML = esc(M.pret) + '<small>' + esc(M.reste(r)) + '</small>';
+  }
+  clearTimeout(jaugeT);
+  if (s > 0) jaugeT = setTimeout(majJauge, 1000);
+}
+
+/* ============================================================
+   L'INDEX : la bibliotheque du DJ, titres et artistes seulement,
+   chargee une fois et cherchee ici, sur le telephone. Aucune
+   recherche ne passe par le reseau : c'est instantane, et ca ne
+   fait rien travailler l'ordinateur du DJ pendant qu'il mixe.
+   ============================================================ */
+var INDEX = null, indexEnCours = null;
+function chargerIndex(meta) {
+  if (indexEnCours === meta.v) return;
+  indexEnCours = meta.v;
+  var n = meta.n || 1, parts = [], faits = 0;
+  $('info').textContent = M.charge;
+  var promesses = [];
+  for (var i = 0; i < n; i++) (function (i) {
+    promesses.push(fetch(url('index', '&v=' + encodeURIComponent(meta.v) + '&i=' + i), { credentials: 'same-origin' })
+      .then(function (r) { if (!r.ok) throw new Error('index'); return r.text(); })
+      .then(function (t) { parts[i] = t; faits++; }));
+  })(i);
+  Promise.all(promesses).then(function () {
+    var j = JSON.parse(parts.join(''));
+    var A = j.a || [], T = j.t || [];
+    var lignes = new Array(T.length);
+    for (var k = 0; k < T.length; k++) {
+      var t = T[k][0], a = A[T[k][1]] || '';
+      lignes[k] = { t: t, a: a, s: ' ' + plat(t) + ' ' + plat(a) + ' ' };
+    }
+    INDEX = { v: meta.v, l: lignes };
+    $('info').textContent = M.nb(lignes.length);
+    if ($('q').value.trim().length >= 2) chercher();
+  }).catch(function () { indexEnCours = null; $('info').textContent = M.info; });
+}
+
+/* Chaque mot tape doit commencer un mot du titre ou de l'artiste ;
+   un mot de cinq lettres ou plus accepte aussi une faute de frappe
+   au milieu. Les titres dont un mot COMMENCE comme la requete passent
+   devant ceux qui la contiennent. */
+function proche(mot, s) {
+  if (s.indexOf(' ' + mot) >= 0) return 2;
+  if (mot.length >= 4 && s.indexOf(mot) >= 0) return 1;
+  if (mot.length >= 5) {
+    for (var i = 0; i < mot.length; i++) {
+      var sans = mot.slice(0, i) + mot.slice(i + 1);
+      if (s.indexOf(' ' + sans) >= 0) return 1;
+    }
+  }
+  return 0;
+}
+function chercher() {
+  var q = $('q').value.trim();
+  $('vider').classList.toggle('hide', !q);
+  var box = $('res');
+  if (q.length < 2) { box.innerHTML = ''; return; }
+  var mots = plat(q).split(' ').filter(Boolean);
+  var trouves = [];
+  if (INDEX && mots.length) {
+    var L = INDEX.l;
+    for (var i = 0; i < L.length && trouves.length < 400; i++) {
+      var s = L[i].s, note = 0, ok = true;
+      for (var w = 0; w < mots.length; w++) { var p = proche(mots[w], s); if (!p) { ok = false; break; } note += p; }
+      if (ok) {
+        if (s.indexOf(' ' + mots.join(' ')) >= 0) note += 3;
+        trouves.push({ x: L[i], n: note });
+      }
+    }
+    trouves.sort(function (a, b) { return b.n - a.n || a.x.t.length - b.x.t.length; });
+  }
+  var html = trouves.slice(0, 7).map(function (r) {
+    return '<div class="r"><span class="tx"><b>' + esc(r.x.t) + '</b><small>' + esc(r.x.a) + '</small></span>' +
+      '<button class="go" data-t="' + esc(r.x.t) + '" data-a="' + esc(r.x.a) + '">' + esc(M.demander) + '</button></div>';
+  }).join('');
+  if (INDEX && !trouves.length) html += '<p class="vide">' + esc(M.aucun) + '</p>';
+  /* Toujours une porte ouverte : la demande libre, telle que tapee. */
+  html += '<div class="r libre"><span class="tx"><b>' + esc(M.tel(q)) + '</b><small>' + esc(M.telSous) + '</small></span>' +
+    '<button class="go" data-t="' + esc(q) + '" data-a="" data-libre="1">' + esc(M.demander) + '</button></div>';
+  box.innerHTML = html;
+}
+var tq = null;
+$('q').addEventListener('input', function () { clearTimeout(tq); tq = setTimeout(chercher, INDEX ? 60 : 180); });
+$('q').addEventListener('keydown', function (e) {
+  if (e.key === 'Enter') { e.preventDefault(); var b = document.querySelector('#res .go'); if (b) b.click(); }
+});
+$('vider').addEventListener('click', function () { $('q').value = ''; chercher(); $('q').focus(); });
+
+/* ============================================================
+   DEMANDER
+   ============================================================ */
+function demander(b) {
+  var t = b.getAttribute('data-t'), a = b.getAttribute('data-a') || '';
+  if (!t || b.disabled) return;
+  var k = cle(t, a);
+  if (mes.some(function (m) { return m.k === k; })) { dire(M.deja); return; }
+  if (restantes() <= 0) { dire(M.quota(E && E.regles ? E.regles.max : 5), 'rouge'); return; }
+  if (prochaine > Date.now()) { dire(M.prochaine(mmss((prochaine - Date.now()) / 1000))); return; }
+  b.disabled = true;
+  var avant = b.textContent;
+  b.textContent = '…';
+  poster('demande', { t: t, a: a, d: DEV, libre: !!b.getAttribute('data-libre') }).then(function (r) {
+    if (r && r.ok) {
+      b.textContent = '✓ ' + M.envoye; b.classList.add('ok');
+      vibrer(35);
+      mes.push({ t: t, a: a, k: k, at: Date.now() + decalage });
+      garderMes();
+      delaiTotal = r.cooldown || (E && E.regles ? E.regles.cooldown : 90);
+      prochaine = Date.now() + delaiTotal * 1000;
+      dire(b.classList.contains('plus') ? M.okPlus : M.ok);
+      /* On vide la recherche — sauf si l'invite a deja commence la suivante. */
+      var tape = $('q').value;
+      setTimeout(function () { if ($('q').value === tape) { $('q').value = ''; chercher(); } }, 900);
+      afficherMes(); majJauge();
+      setTimeout(rafraichir, 1500);
+    } else {
+      b.disabled = false; b.textContent = avant;
+      if (r && r.code === 'deja') { mes.push({ t: t, a: a, k: k, at: Date.now() + decalage }); garderMes(); afficherMes(); dire(M.deja); }
+      else if (r && r.reste) { prochaine = Date.now() + r.reste * 1000; majJauge(); dire(M.attendre); }
+      else if (r && r.code === 'quota') dire(M.quota(E && E.regles ? E.regles.max : 5), 'rouge');
+      else if (r && r.code === 'ferme') { dire(M.ferme1, 'rouge'); rafraichir(); }
+      else dire((r && r.message) || M.reseau, 'rouge');
+    }
+  }).catch(function () { b.disabled = false; b.textContent = avant; dire(M.reseau, 'rouge'); });
+}
+document.addEventListener('click', function (e) {
+  var b = e.target.closest && e.target.closest('.go');
+  if (b) demander(b);
+});
+
+/* ============================================================
+   LE RAFRAICHISSEMENT — seulement quand la page est regardee.
+   ============================================================ */
+var echecs = 0, rafT = null;
+function rafraichir() {
+  clearTimeout(rafT);
+  obtenir(url('etat')).then(function (e) {
+    echecs = 0;
+    E = e || {};
+    afficherEtat();
+  }).catch(function () {
+    echecs++;
+    if (echecs === 2) dire(M.reseau, 'rouge');
+    if (!E) { $('etat').className = 'etat'; $('etatTx').textContent = M.attente; }
+  }).then(function () {
+    if (!document.hidden) rafT = setTimeout(rafraichir, echecs ? Math.min(30000, 5000 * echecs) : (RELAIS ? 12000 : 8000));
+  });
+}
+document.addEventListener('visibilitychange', function () { if (!document.hidden) rafraichir(); else clearTimeout(rafT); });
+rafraichir();
+})();
+</script>
+</body>
+</html>

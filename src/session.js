@@ -43,119 +43,26 @@ function lanIP() {
   return (cands[0] || { addr: '127.0.0.1' }).addr;
 }
 
-/* ---------- page mobile des invites ----------
-   Servie depuis le portable du DJ, sur le reseau du lieu. Aucune police
-   ni feuille de style distante : le telephone d'un invite n'a pas
-   toujours de reseau au fond d'une salle. Tout tient dans la page. */
-function guestPage(sessionName, token, opts) {
-  opts = opts || {};
-  /* Un invite dont le telephone n'est pas en francais recoit la page
-     en anglais : le meme traducteur que l'application, servi par ce
-     serveur (rien ne vient d'internet). */
-  const anglais = opts.langue === 'en'
-    ? '<script>window.LIAISON_LANGUE="en"</script><script src="/i18n-en.js?t=' + encodeURIComponent(token) + '"></script>' +
-      '<script src="/i18n.js?t=' + encodeURIComponent(token) + '"></script>'
-    : '';
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">${anglais}
-<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#101114">
-<title>${esc(sessionName)}</title>
-<style>
-*{box-sizing:border-box}
-:root{--deep:#101114;--deep2:#17181C;--wire:#26282E;--wire2:#33363E;
---cream:#EFEAE0;--cream2:#9A9DA4;--cream3:#63666D;--blue:#4459FF;--red:#FF5A42;
---b:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,system-ui,sans-serif;
---m:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-body{margin:0;background:var(--deep);color:var(--cream);font-family:var(--b);
-font-size:16px;line-height:1.5;padding:24px 18px 70px;-webkit-font-smoothing:antialiased}
-.mk{display:flex;align-items:center;gap:9px;margin-bottom:22px}
-.mk svg{width:19px;height:19px}
-.mk span{font-family:var(--m);font-size:10px;letter-spacing:.3em;color:var(--cream3)}
-h1{font-size:27px;letter-spacing:-.02em;margin:0 0 6px;font-weight:800}
-p.s{color:var(--cream2);font-size:14.5px;margin:0 0 22px}
-input{width:100%;padding:16px;border-radius:4px;border:1.5px solid var(--wire2);
-background:var(--deep2);color:var(--cream);font-size:16px;font-family:inherit}
-input:focus{outline:none;border-color:var(--blue)}
-.r{display:flex;align-items:center;gap:12px;padding:13px 14px;border:1px solid var(--wire);
-border-radius:4px;margin-top:8px;background:var(--deep2)}
-.r b{font-weight:600;font-size:14.5px;display:block}
-.r small{color:var(--cream3);font-size:12.5px}
-.r .go{margin-left:auto;flex:none;font-family:var(--m);font-size:11px;letter-spacing:.1em;
-padding:10px 13px;border-radius:3px;border:1.5px solid var(--blue);background:var(--blue);color:#fff;
-cursor:pointer;-webkit-appearance:none}
-.r .go:disabled{opacity:.4}
-.n{margin-left:auto;font-family:var(--m);font-size:12px;color:var(--cream3);flex:none}
-.n.hot{color:var(--red);font-weight:700}
-.msg{padding:14px;border:1.5px solid var(--blue);border-radius:4px;margin-top:14px;font-size:14px;color:#C3CBFF}
-.msg.warn{border-color:var(--red);color:#FFC0B4}
-.lbl{font-family:var(--m);font-size:10px;letter-spacing:.2em;text-transform:uppercase;
-color:var(--cream3);margin:28px 0 10px;display:block}
-.foot{margin-top:30px;font-family:var(--m);font-size:10.5px;color:var(--cream3);line-height:1.8}
-</style></head><body>
-<div class="mk"><svg viewBox="0 0 24 24" fill="none">
-<path d="M3.4 3.4 10 12l-6.6 8.6" stroke="#4459FF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-<path d="M20.6 3.4 14 12l6.6 8.6" stroke="#FF5A42" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
-<circle cx="12" cy="12" r="2.4" fill="#EFEAE0"/></svg><span>LIAISON</span></div>
-<h1 data-brut>${esc(sessionName)}</h1>
-<p class="s">Demande un morceau au DJ. S'il colle au moment, il le passe.</p>
-<input id="q" placeholder="Titre, ou artiste et titre…" autocomplete="off" enterkeyhint="search">
-<div id="res"></div>
-<div id="msg"></div>
-<span class="lbl">Les plus demandes</span>
-<div id="top"></div>
-<p class="foot">Une demande a la fois, puis ${(opts.cooldown || 90)} secondes d'attente.<br>
-${(opts.maxPerDevice || 5)} demandes par personne pour toute la soiree.</p>
-<script>
-const TOKEN=${JSON.stringify(String(token || ''))};
-const res=document.getElementById('res'),top_=document.getElementById('top'),msg=document.getElementById('msg');
-let t,cool=0,timer=null;
-function esc(s){return String(s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
-function say(txt,warn){msg.innerHTML='<div class="msg'+(warn?' warn':'')+'">'+esc(txt)+'</div>'}
-function tick(){
-  if(cool<=0){msg.innerHTML='';clearInterval(timer);timer=null;return}
-  say('Encore '+cool+' seconde'+(cool>1?'s':'')+' avant ta prochaine demande.');
-  cool--;
-}
-function startCool(sec){cool=sec;if(timer)clearInterval(timer);tick();timer=setInterval(tick,1000)}
-document.getElementById('q').addEventListener('input',e=>{
-  clearTimeout(t);const v=e.target.value.trim();
-  if(v.length<2){res.innerHTML='';return}
-  t=setTimeout(async()=>{
-    const r=await fetch('/api/search?t='+encodeURIComponent(TOKEN)+'&q='+encodeURIComponent(v));
-    const j=await r.json();
-    res.innerHTML=j.map(x=>'<div class="r"><span><b>'+esc(x.title)+'</b><small>'+esc(x.artist)+
-      (x.have?'':' · le DJ ne l’a pas, il peut quand meme noter')+'</small></span>'+
-      '<button class="go" data-t="'+esc(x.title)+'" data-a="'+esc(x.artist)+'">Demander</button></div>').join('');
-  },220);
-});
-res.addEventListener('click',async e=>{
-  const b=e.target.closest('.go');if(!b)return;
-  b.disabled=true;
-  const r=await fetch('/api/request?t='+encodeURIComponent(TOKEN),{method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({title:b.dataset.t,artist:b.dataset.a})});
-  const j=await r.json().catch(()=>({}));
-  res.innerHTML='';document.getElementById('q').value='';
-  if(j.ok){ say('C’est note. Le DJ voit ta demande.'); if(j.cooldown) startCool(j.cooldown); }
-  else if(j.reste!=null){ startCool(j.reste); }
-  else say(j.error||'Impossible pour le moment.',true);
-  load();
-});
-async function load(){
-  const r=await fetch('/api/top?t='+encodeURIComponent(TOKEN));const j=await r.json();
-  top_.innerHTML=j.length?j.map(x=>'<div class="r"><span><b>'+esc(x.title)+'</b><small>'+esc(x.artist)+
-    '</small></span><span class="n'+(x.n>=3?' hot':'')+'">'+x.n+' demande'+(x.n>1?'s':'')+'</span></div>').join('')
-    :'<p class="s">Personne n’a encore demande. Lance-toi.</p>';
-}
-load();setInterval(load,8000);
-</script></body></html>`;
-}
-
 function esc(s) {
   return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
 }
 
-/* ---------- serveur des demandes ---------- */
+/* ============================================================
+   LE SERVEUR DES INVITES, SUR L'ORDINATEUR DU DJ.
+
+   Il sert la page (ui/invites.html — la meme que celle du relais
+   liaisondj.app), l'etat de la soiree, l'index de la bibliotheque, et
+   il recoit les demandes. C'est le chemin des invites connectes au
+   meme Wi-Fi que l'ordinateur ; le relais (relais.js) sert tous les
+   autres, en 4G. Les deux alimentent la meme file.
+
+   Il tourne dans le processus principal : rien ici ne doit couter.
+   La recherche se fait sur le telephone ; l'etat est fabrique par
+   main.js et garde deux secondes ; l'index est prepare une fois.
+   ============================================================ */
+const PAGE = path.join(__dirname, 'ui', 'invites.html');
+const POLICES = path.join(__dirname, 'ui', 'fonts');
+
 class GuestServer {
   constructor() {
     this.requests = new Map();
@@ -163,26 +70,43 @@ class GuestServer {
     this.server = null; this.port = 0; this.token = '';
     this.cooldown = 90;                /* secondes entre deux demandes */
     this.maxPerDevice = 5;             /* pour toute la soiree */
+    this.masques = new Set();
   }
 
   start(opts) {
     const self = this;
+    this.opts = opts || {};
     this.getLibrary = opts.getLibrary || (() => []);
-    this.sessionName = opts.sessionName || 'Soiree';
+    this.sessionName = opts.sessionName || 'Soirée';
     this.token = opts.token || crypto.randomBytes(9).toString('base64url');
     if (opts.cooldown != null) this.cooldown = Math.max(0, opts.cooldown);
     if (opts.maxPerDevice != null) this.maxPerDevice = Math.max(1, opts.maxPerDevice);
     const port = opts.port || 7373;
 
     this.server = http.createServer((req, res) => {
-      const u = new URL(req.url, 'http://x');
-      const json = o => { res.writeHead(200, { 'Content-Type': 'application/json' }); res.end(JSON.stringify(o)); };
+      let u;
+      try { u = new URL(req.url, 'http://x'); } catch (e) { res.writeHead(400); return res.end(); }
+      const json = (o, code) => {
+        res.writeHead(code || 200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
+        res.end(JSON.stringify(o));
+      };
       const deny = () => { res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' }); res.end('Lien invalide'); };
+
+      /* Les polices du site : publiques, sans jeton. */
+      if (u.pathname.indexOf('/fonts/') === 0) {
+        const f = path.basename(u.pathname);
+        if (!/^[a-z0-9-]+\.woff2$/.test(f)) return deny();
+        try {
+          const b = fs.readFileSync(path.join(POLICES, f));
+          res.writeHead(200, { 'Content-Type': 'font/woff2', 'Cache-Control': 'public, max-age=604800' });
+          return res.end(b);
+        } catch (e) { return deny(); }
+      }
 
       /* Le jeton du QR est la seule cle d'entree : sans lui, rien ne repond.
          Sinon n'importe qui sur le wifi du lieu lirait la bibliotheque et
          pourrait bourrer les demandes. Comparaison a duree constante. */
-      const given = u.pathname.indexOf('/s/') === 0 ? u.pathname.slice(3) : (u.searchParams.get('t') || '');
+      const given = u.pathname.indexOf('/s/') === 0 ? u.pathname.slice(3).replace(/\/.*$/, '') : (u.searchParams.get('t') || '');
       if (!self.tokenOk(given)) return deny();
 
       /* Identite du telephone : un cookie anonyme pose a la premiere
@@ -193,71 +117,60 @@ class GuestServer {
       const fresh = !dev;
       /* Sans cookie, on derive une identite de l'adresse reseau plutot
          que d'en tirer une neuve : sinon il suffit de ne pas renvoyer le
-         cookie pour repartir a zero a chaque requete — donc plus de
-         plafond de cinq demandes, plus de delai de 90 secondes, et un
-         compteur qui affiche « 300 demandes » pour un seul telephone.
-         Sur le wifi d'un club, plusieurs invites peuvent partager une
-         adresse : c'est pour ca que le cookie reste prioritaire, et que
-         cette voie n'est qu'un filet. */
+         cookie pour repartir a zero a chaque requete. Sur le wifi d'un
+         club, plusieurs invites peuvent partager une adresse : c'est pour
+         ca que le cookie reste prioritaire, et que cette voie n'est
+         qu'un filet. */
       if (!dev) dev = 'a' + crypto.createHmac('sha256', self.token)
         .update(self._adresse(req)).digest('base64url').slice(0, 20);
-      const setCookie = () => 'lsn=' + dev + '; Path=/; Max-Age=86400; SameSite=Lax';
+      const setCookie = () => 'lsn=' + dev + '; Path=/; Max-Age=86400; SameSite=Lax; HttpOnly';
 
-      if (u.pathname === '/api/search') {
-        /* Un invite tape sur un telephone : fautes, pas d'accents, mots
-           dans le desordre. La recherche exacte ne trouverait rien.
-
-           MAIS : ce serveur tourne dans le processus principal de
-           l'application. Une recherche longue ne ralentit pas « la page
-           invite », elle GELE le widget, la detection du deck et tout le
-           reste. Sur 30 000 titres, une requete de 8 000 caracteres sans
-           correspondance bloquait 22 secondes d'affilee — et il suffisait
-           de la repeter pour tuer la soiree.
-
-           Donc : la requete est coupee a 64 caracteres, et une meme
-           adresse ne peut pas relancer une recherche plus de trois fois
-           par seconde. Aucun invite de bonne foi ne s'en apercoit. */
-        const q = String(u.searchParams.get('q') || '').slice(0, 64);
-        if (!self._peutChercher(req)) { res.writeHead(429); return res.end('[]'); }
-        const hits = search(q, self.getLibrary(), 6, 0.34)
-          .map(h => ({ title: h.track.title, artist: h.track.artist, have: true }));
-        /* On laisse toujours la porte ouverte : si le DJ ne l'a pas,
-           la demande compte quand meme — elle ira dans sa liste de courses. */
-        hits.push({ title: q.trim(), artist: 'Ma demande, telle que je l\'ecris', have: false });
-        return json(hits);
+      if (u.pathname === '/api/etat') {
+        let e = {};
+        try { e = self.opts.getEtat ? self.opts.getEtat() : {}; } catch (err) { e = {}; }
+        return json(Object.assign({ ouvert: true }, e, { enLigne: true, mode: 'local' }));
       }
-      if (u.pathname === '/api/request' && req.method === 'POST') {
+      if (u.pathname === '/api/index') {
+        let ix = null;
+        try { ix = self.opts.getIndex ? self.opts.getIndex() : null; } catch (err) {}
+        const i = Number(u.searchParams.get('i')) | 0;
+        if (!ix || !ix.parts || !ix.parts[i]) return deny();
+        res.writeHead(200, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'private, max-age=86400' });
+        return res.end(ix.parts[i]);
+      }
+      if (u.pathname === '/api/demande' && req.method === 'POST') {
         let body = '';
         req.on('data', d => { body += d; if (body.length > 4096) req.destroy(); });
         req.on('end', () => {
           let out;
-          try { out = self.accept(JSON.parse(body || '{}'), dev); }
-          catch (e) { out = { ok: false, error: 'Demande illisible' }; }
-          if (out.ok && opts.onRequest) opts.onRequest(self.top());
+          try {
+            const b = JSON.parse(body || '{}');
+            /* L'identifiant tire par le telephone passe devant le cookie :
+               derriere certains Wi-Fi, tous les telephones sortent par la
+               meme adresse et auraient partage un seul quota. Un plafond
+               par adresse et par heure garde le filet contre qui viderait
+               son stockage pour recommencer. */
+            const id = /^[A-Za-z0-9_-]{12,40}$/.test(String(b.d || '')) ? 'p' + b.d : dev;
+            if (!self._parAdresse(req)) out = { ok: false, code: 'trop', error: 'Trop de demandes depuis ce réseau.' };
+            else out = self.accept({ title: b.t, artist: b.a }, id);
+          } catch (e) { out = { ok: false, code: 'invalide', error: 'Demande illisible' }; }
+          if (out.ok && self.opts.onRequest) { try { self.opts.onRequest(self.top()); } catch (e) {} }
           res.writeHead(out.ok ? 200 : 429, {
-            'Content-Type': 'application/json', 'Set-Cookie': setCookie()
+            'Content-Type': 'application/json; charset=utf-8', 'Set-Cookie': setCookie(), 'Cache-Control': 'no-store'
           });
           res.end(JSON.stringify(out));
         });
         return;
       }
-      if (u.pathname === '/api/top') return json(self.top().slice(0, 8));
 
-      if (u.pathname === '/i18n.js' || u.pathname === '/i18n-en.js') {
-        try {
-          const f = require('path').join(__dirname, 'ui', u.pathname.slice(1));
-          res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=3600' });
-          return res.end(require('fs').readFileSync(f));
-        } catch (e) { return deny(); }
-      }
       if (u.pathname.indexOf('/s/') !== 0) return deny();
-      const head = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
-      const lg = String(req.headers['accept-language'] || '').trim().toLowerCase();
+      let page;
+      try { page = fs.readFileSync(PAGE); } catch (e) { return deny(); }
+      const head = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store',
+                     'X-Content-Type-Options': 'nosniff', 'Referrer-Policy': 'no-referrer' };
       if (fresh) head['Set-Cookie'] = setCookie();
       res.writeHead(200, head);
-      res.end(guestPage(self.sessionName, self.token,
-        { cooldown: self.cooldown, maxPerDevice: self.maxPerDevice,
-          langue: lg && !/^fr\b/.test(lg) ? 'en' : 'fr' }));
+      res.end(page);
     });
 
     return new Promise((resolve, reject) => {
@@ -274,7 +187,6 @@ class GuestServer {
     if (!b.length || a.length !== b.length) return false;
     return crypto.timingSafeEqual(a, b);
   }
-  /* L'adresse de l'appelant, derriere un eventuel relais. */
   /* Il n'y a AUCUN relais devant ce serveur : il tourne sur le
      portable du DJ. X-Forwarded-For etait donc ecrit par le client
      lui-meme — en le changeant a chaque requete, un seul telephone
@@ -284,8 +196,18 @@ class GuestServer {
     return (req.socket && req.socket.remoteAddress) || 'inconnu';
   }
 
-  /* Trois recherches par seconde et par adresse. Une frappe au clavier
-     en declenche une toutes les 220 ms : la marge est large. */
+  /* Soixante demandes par heure et par adresse, tous telephones confondus. */
+  _parAdresse(req) {
+    const ip = this._adresse(req), n = Date.now();
+    if (!this._adresses) this._adresses = new Map();
+    const e = this._adresses.get(ip);
+    if (!e || n - e.t > 3600000) { this._adresses.set(ip, { t: n, c: 1 }); return true; }
+    e.c++;
+    return e.c <= 60;
+  }
+
+  /* Trois recherches par seconde et par adresse (garde pour les bancs
+     et les appels directs ; la page cherche desormais sur le telephone). */
   _peutChercher(req) {
     const ip = this._adresse(req);
     const n = Date.now();
@@ -306,52 +228,73 @@ class GuestServer {
      enchainer les demandes, ni en deposer quinze dans la soiree.
      ============================================================ */
   accept(b, device) {
-    const title = String(b && b.title || '').trim().slice(0, 120);
-    const artist = String(b && b.artist || '').trim().slice(0, 120);
-    if (title.length < 2) return { ok: false, error: 'Il manque le titre' };
+    const title = String(b && b.title || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    const artist = String(b && b.artist || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    if (title.length < 2) return { ok: false, code: 'invalide', error: 'Il manque le titre' };
+    if (this.ferme) return { ok: false, code: 'ferme', error: 'Les demandes sont fermées.' };
 
     const now = Date.now();
     const d = this.devices.get(device) || { last: 0, n: 0, voted: new Set() };
 
     if (d.n >= this.maxPerDevice)
-      return { ok: false, error: 'Tu as utilise tes ' + this.maxPerDevice + ' demandes. Laisse la place aux autres.' };
+      return { ok: false, code: 'quota', error: 'Tu as utilisé tes ' + this.maxPerDevice + ' demandes. Laisse la place aux autres.' };
 
     /* Le doublon se verifie AVANT le delai. Dans l'autre ordre, on
        repond « attends 90 secondes » a quelqu'un dont la demande
-       sera refusee de toute facon : il attend pour rien, puis
-       apprend qu'il avait deja vote. Autant le lui dire tout de
-       suite — et lui laisser son delai intact pour un autre titre. */
+       sera refusee de toute facon. */
     const k = keyOf({ artist: artist, title: title });
     if (d.voted.has(k))
-      return { ok: false, error: 'Tu as deja demande ce morceau — il est dans la liste.' };
+      return { ok: false, code: 'deja', error: 'Tu as déjà demandé ce morceau — il est dans la liste.' };
 
     const since = (now - d.last) / 1000;
     if (d.last && since < this.cooldown)
-      return { ok: false, reste: Math.ceil(this.cooldown - since),
+      return { ok: false, code: 'attente', reste: Math.ceil(this.cooldown - since),
                error: 'Encore un instant avant la prochaine.' };
 
-    /* La file ne grossit pas indefiniment : sur une soiree de huit
-       heures, chaque titre distinct demande y reste, et rien ne l'en
-       sort. Deux cents lignes suffisent tres largement a « ce que la
-       salle reclame » ; au-dela, on oublie les plus anciennes et les
-       moins demandees. */
+    this._compter(k, title, artist, now);
+    d.last = now; d.n++; d.voted.add(k);
+    this.devices.set(device, d);
+    return { ok: true, n: this.requests.get(k).n, cooldown: this.cooldown, restantes: this.maxPerDevice - d.n };
+  }
+
+  /* Une demande arrivee par le relais : les regles ont deja ete
+     appliquees la-bas (delai, plafond, doublon par telephone). On la
+     compte, sans la juger une seconde fois. */
+  ajouterRelayee(r) {
+    const title = String(r && r.t || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    const artist = String(r && r.a || '').replace(/[\u0000-\u001f\u007f]/g, ' ').trim().slice(0, 120);
+    if (title.length < 2) return false;
+    this._compter(keyOf({ artist: artist, title: title }), title, artist, Number(r.at) || Date.now());
+    return true;
+  }
+
+  _compter(k, title, artist, now) {
+    /* La file ne grossit pas indefiniment : deux cents lignes suffisent
+       tres largement a « ce que la salle reclame » ; au-dela, on oublie
+       les plus anciennes et les moins demandees. */
     if (this.requests.size >= 200 && !this.requests.has(k)) {
       const vieilles = Array.from(this.requests.entries())
         .sort((a, b) => (a[1].n - b[1].n) || (a[1].at - b[1].at))
         .slice(0, 20);
       for (const [cle] of vieilles) this.requests.delete(cle);
     }
-    const cur = this.requests.get(k) || { title: title, artist: artist, n: 0, at: now, first: now };
-    cur.n++; cur.at = now;
+    const cur = this.requests.get(k) || { title: title, artist: artist, n: 0, at: now, first: now, k: k };
+    cur.n++; cur.at = Math.max(cur.at, now);
     this.requests.set(k, cur);
-
-    d.last = now; d.n++; d.voted.add(k);
-    this.devices.set(device, d);
-    return { ok: true, n: cur.n, cooldown: this.cooldown, restantes: this.maxPerDevice - d.n };
   }
 
-  top() { return Array.from(this.requests.values()).sort((a, b) => b.n - a.n || b.at - a.at); }
-  clear() { this.requests.clear(); this.devices.clear(); }
+  /* Le DJ ecarte une demande (deplacee, deja jouee autrement, ou qui
+     n'a rien a faire la) : elle disparait de son widget ET des
+     telephones. Elle reste comptee, pour qu'un doublon ne la ramene pas. */
+  masquer(k) { if (k) this.masques.add(k); }
+  demasquer(k) { this.masques.delete(k); }
+
+  top() {
+    return Array.from(this.requests.values())
+      .filter(r => !this.masques.has(r.k))
+      .sort((a, b) => b.n - a.n || b.at - a.at);
+  }
+  clear() { this.requests.clear(); this.devices.clear(); this.masques.clear(); }
   stop() { if (this.server) try { this.server.close(); } catch (e) {} this.server = null; }
   /* Le serveur tourne-t-il ? Utilise au reveil de veille, pour ne
      signaler le lien des invites que s'il y a un lien a signaler. */
@@ -363,14 +306,14 @@ async function qrPNG(url) { return QR.toDataURL(url, { margin: 1, width: 512, co
 async function qrSVG(url) { return QR.toString(url, { type: 'svg', margin: 1, color: { dark: '#0E1013', light: '#FFFFFF' } }); }
 
 function shareLinks(url, sessionName) {
-  const msg = 'Demande ton morceau pour ' + (sessionName || 'la soiree') + ' : ' + url;
+  const msg = 'Demande ton morceau pour ' + (sessionName || 'la soirée') + ' : ' + url;
   return {
     url: url,
     text: msg,
     whatsapp: 'https://wa.me/?text=' + encodeURIComponent(msg),
     telegram: 'https://t.me/share/url?url=' + encodeURIComponent(url) + '&text=' + encodeURIComponent(msg),
     sms: 'sms:?&body=' + encodeURIComponent(msg),
-    mail: 'mailto:?subject=' + encodeURIComponent(sessionName || 'Soiree') + '&body=' + encodeURIComponent(msg)
+    mail: 'mailto:?subject=' + encodeURIComponent(sessionName || 'Soirée') + '&body=' + encodeURIComponent(msg)
   };
 }
 
@@ -555,10 +498,10 @@ class SetLog {
       ceSoir: ceSoir, avant: avant,
       /* le texte du badge : court, il tient dans une ligne du widget */
       texte: ceSoir
-        ? (ceSoir.min < 1 ? 'A l’instant' : 'Joue il y a ' + ceSoir.min + ' min')
-        : (avant.jours === 1 ? 'Joue hier — ' + avant.set
-           : avant.jours < 30 ? 'Joue il y a ' + avant.jours + ' jours — ' + avant.set
-           : 'Joue il y a ' + Math.round(avant.jours / 30) + ' mois — ' + avant.set),
+        ? (ceSoir.min < 1 ? 'À l’instant' : 'Joué il y a ' + ceSoir.min + ' min')
+        : (avant.jours === 1 ? 'Joué hier — ' + avant.set
+           : avant.jours < 30 ? 'Joué il y a ' + avant.jours + ' jours — ' + avant.set
+           : 'Joué il y a ' + Math.round(avant.jours / 30) + ' mois — ' + avant.set),
       /* ce soir, c'est bloquant ; une autre soiree, c'est consultatif */
       grave: !!ceSoir
     };
@@ -649,8 +592,8 @@ class SetLog {
     /* point-virgule : c'est le separateur qu'attend un tableur
        configure en francais, et ces fichiers finissent tous dans
        un tableur francais. */
-    const head = ['N', 'Date', 'Lieu / soiree', 'Heure', 'Titre', 'Interprete',
-                  'Duree (mm:ss)', 'BPM', 'Tonalite', 'Enchainement'];
+    const head = ['N', 'Date', 'Lieu / soirée', 'Heure', 'Titre', 'Interprète',
+                  'Durée (mm:ss)', 'BPM', 'Tonalité', 'Enchaînement'];
     const rows = t.lignes.map(l => [
       l.n, date, t.name, l.heure, l.title, l.artist,
       l.secondes == null ? '' : Math.floor(l.secondes / 60) + ':' + String(l.secondes % 60).padStart(2, '0'),
@@ -672,5 +615,5 @@ class SetLog {
   }
 }
 
-module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP, guestPage,
+module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP,
                    SOIREE_TITRES, SOIREE_MINUTES };

@@ -148,13 +148,13 @@ const TRIAL_PLAFOND_J = 60;
    ------------------------------------------------------------ */
 const TIERS = {
   expire:    { suggestions: 0, sessions: false, replay: false, trends: false, seats: 1,
-               label: 'Essai termine', verrouille: true },
+               label: 'Essai terminé', verrouille: true },
   trial:     { suggestions: 5, sessions: true,  replay: true,  trends: true,  seats: 1,
                label: 'Essai' },
   pass:      { suggestions: 5, sessions: true,  replay: false, trends: true,  seats: 1,
-               label: 'Pass soiree' },
+               label: 'Pass soirée' },
   resident:  { suggestions: 5, sessions: true,  replay: true,  trends: true,  seats: 2,
-               label: 'Resident' },
+               label: 'Résident' },
   collectif: { suggestions: 7, sessions: true,  replay: true,  trends: true,  seats: 5,
                label: 'Collectif' },
   ami:       { suggestions: 7, sessions: true,  replay: true,  trends: true,  seats: 20,
@@ -264,7 +264,7 @@ function post(pathname, body, timeoutMs, base) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(timeoutMs || 8000, () => { req.destroy(new Error('Delai depasse')); });
+    req.setTimeout(timeoutMs || 8000, () => { req.destroy(new Error('Délai dépassé')); });
     req.end(data);
   });
 }
@@ -319,7 +319,7 @@ function get(pathname, timeoutMs, base) {
       });
     });
     req.on('error', reject);
-    req.setTimeout(timeoutMs || 6000, () => { req.destroy(new Error('Delai depasse')); });
+    req.setTimeout(timeoutMs || 6000, () => { req.destroy(new Error('Délai dépassé')); });
     req.end();
   });
 }
@@ -616,7 +616,7 @@ class License {
     if (r.code !== 200 || !r.body.license) {
       return { ok: false, error: r.body.error || ('Erreur ' + r.code), devices: r.body.devices };
     }
-    if (!this._verifier(r.body.license)) return { ok: false, error: 'Licence non verifiable — cle publique incorrecte' };
+    if (!this._verifier(r.body.license)) return { ok: false, error: 'Licence non vérifiable — clé publique incorrecte' };
     this.state.key = String(key).trim().toUpperCase();
     this.state.license = r.body.license;
     this.state.lastCheck = Date.now();
@@ -626,7 +626,7 @@ class License {
 
   /** Verification discrete, au plus une fois par jour. */
   async refresh(force) {
-    if (!this.state.key) return { ok: false, error: 'Aucune cle' };
+    if (!this.state.key) return { ok: false, error: 'Aucune clé' };
     if (!force && this.state.lastCheck && Date.now() - this.state.lastCheck < 86400000)
       return { ok: true, skipped: true };
     try {
@@ -662,7 +662,7 @@ class License {
 
   /** Libere le siege de cette machine. */
   async release() {
-    if (!this.state.key) return { ok: false, error: 'Aucune cle' };
+    if (!this.state.key) return { ok: false, error: 'Aucune clé' };
     try { await postAilleurs('/api/liberer', { key: this.state.key, device: this.device }); } catch (e) {}
     this.state = { trialStart: this.state.trialStart, device: this.state.device, hw: this.state.hw };
     this._save();

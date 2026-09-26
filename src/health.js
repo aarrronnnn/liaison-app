@@ -112,7 +112,7 @@ function bilan(library, opt) {
     analyses: 0,
     aAnalyser: 0
   };
-  if (!n) return Object.assign(R, { note: 'Aucune bibliotheque chargee.', score: null });
+  if (!n) return Object.assign(R, { note: 'Aucune bibliothèque chargée.', score: null });
 
   const bref = t => ({ id: t.id, title: t.title || '(sans titre)', artist: t.artist || '',
                        bpm: t.bpm || 0, key: t.key || '', path: t.path || '' });
@@ -201,48 +201,48 @@ function bilan(library, opt) {
   if (R.sansBpm.n)
     actions.push({ cle: 'bpm', n: R.sansBpm.n, gravite: 'haute',
       titre: R.sansBpm.n + ' morceaux sans BPM',
-      effet: 'Ils ne peuvent jamais etre proposes : sans tempo, aucun enchainement n\'est calculable.',
-      geste: 'Selectionne-les dans ton logiciel et lance son analyse. Liaison estimera le tempo en attendant, mais la grille de ton logiciel sera toujours meilleure.' });
+      effet: 'Ils ne peuvent jamais être proposés : sans tempo, aucun enchaînement n\'est calculable.',
+      geste: 'Sélectionne-les dans ton logiciel et lance son analyse. Liaison estimera le tempo en attendant, mais la grille de ton logiciel sera toujours meilleure.' });
   if (R.introuvables.n)
     actions.push({ cle: 'fichiers', n: R.introuvables.n, gravite: 'haute',
       titre: R.introuvables.n + ' fichiers introuvables',
       effet: 'Ta base les affiche encore, mais ils ne sont plus sur le disque. En cabine, tu les chercherais pour rien.',
-      geste: 'Disque externe non branche ? Rebranche-le. Sinon, retire-les de ta base.' });
+      geste: 'Disque externe non branché ? Rebranche-le. Sinon, retire-les de ta base.' });
   if (R.sansKey.n)
     actions.push({ cle: 'key', n: R.sansKey.n, gravite: 'moyenne',
-      titre: R.sansKey.n + ' morceaux sans tonalite',
-      effet: 'La roue de Camelot ne les note pas : ils remontent moins souvent qu\'ils ne le meritent.',
-      geste: 'Meme geste : analyse dans ton logiciel. Liaison comble en attendant, quand il est sur de lui.' });
+      titre: R.sansKey.n + ' morceaux sans tonalité',
+      effet: 'La roue de Camelot ne les note pas : ils remontent moins souvent qu\'ils ne le méritent.',
+      geste: 'Même geste : analyse dans ton logiciel. Liaison comble en attendant, quand il est sûr de lui.' });
   if (R.doublons.n)
     actions.push({ cle: 'doublons', n: R.doublons.n, gravite: 'basse',
       titre: R.doublons.n + ' copies en double',
-      effet: 'Le meme morceau occupe deux places dans les suggestions, au detriment d\'un autre.',
+      effet: 'Le même morceau occupe deux places dans les suggestions, au détriment d\'un autre.',
       geste: 'Compare les chemins ci-dessous et garde la meilleure version.' });
   if (R.tonaliteDouteuse.n)
     actions.push({ cle: 'tonalite', n: R.tonaliteDouteuse.n, gravite: 'basse',
-      titre: R.tonaliteDouteuse.n + ' tonalites en desaccord',
-      effet: 'Ton logiciel et Liaison ne lisent pas la meme tonalite. L\'un des deux se trompe — souvent sur un morceau au tag ancien ou recopie.',
-      geste: 'Reanalyse ces titres-la dans ton logiciel. Liaison garde la tonalite de ton logiciel en attendant : on ne decide pas a ta place.' });
+      titre: R.tonaliteDouteuse.n + ' tonalités en désaccord',
+      effet: 'Ton logiciel et Liaison ne lisent pas la même tonalité. L\'un des deux se trompe — souvent sur un morceau au tag ancien ou recopié.',
+      geste: 'Réanalyse ces titres-là dans ton logiciel. Liaison garde la tonalité de ton logiciel en attendant : on ne décide pas à ta place.' });
   if (R.tempoDouteux.n)
     actions.push({ cle: 'tempo', n: R.tempoDouteux.n, gravite: 'moyenne',
-      titre: R.tempoDouteux.n + ' tempos en desaccord',
-      effet: 'Un ecart de tempo qui n\'est ni un demi ni un double : l\'un des deux BPM est faux, et un BPM faux fait rater le calage.',
-      geste: 'A verifier en priorite : c\'est le defaut qui s\'entend le plus en cabine.' });
+      titre: R.tempoDouteux.n + ' tempos en désaccord',
+      effet: 'Un écart de tempo qui n\'est ni un demi ni un double : l\'un des deux BPM est faux, et un BPM faux fait rater le calage.',
+      geste: 'À vérifier en priorité : c\'est le défaut qui s\'entend le plus en cabine.' });
   if (R.sansArtiste.n)
     actions.push({ cle: 'artiste', n: R.sansArtiste.n, gravite: 'basse',
       titre: R.sansArtiste.n + ' morceaux sans artiste',
-      effet: 'Les invites qui tapent un nom d\'artiste ne les trouveront pas.',
-      geste: 'Souvent des fichiers nommes a la main. Le titre suffit au moteur, mais pas a la recherche.' });
+      effet: 'Les invités qui tapent un nom d\'artiste ne les trouveront pas.',
+      geste: 'Souvent des fichiers nommés à la main. Le titre suffit au moteur, mais pas à la recherche.' });
   if (R.illisibles.n)
     actions.push({ cle: 'illisibles', n: R.illisibles.n, gravite: 'moyenne',
       titre: R.illisibles.n + ' fichiers illisibles',
-      effet: 'Liaison n\'a pas reussi a les decoder : fichier tronque, format exotique, ou protection.',
+      effet: 'Liaison n\'a pas réussi à les décoder : fichier tronqué, format exotique, ou protection.',
       geste: 'Essaie de les ouvrir dans ton logiciel. S\'il n\'y arrive pas non plus, ils sont perdus.' });
 
   R.actions = actions;
   R.note = actions.length
-    ? actions.length + (actions.length > 1 ? ' points a regarder.' : ' point a regarder.')
-    : 'Rien a signaler : ta bibliotheque est propre.';
+    ? actions.length + (actions.length > 1 ? ' points à regarder.' : ' point à regarder.')
+    : 'Rien à signaler : ta bibliothèque est propre.';
   return R;
 }
 

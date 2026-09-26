@@ -74,7 +74,7 @@ function start(opts, cb) {
   const dir = sessionsDir(opts.dir);
   let file = newest(dir);
   let lastSize = 0, lastText = '';
-  if (!file) cb.onStatus({ ok: false, msg: 'Aucune session Serato trouvee dans ' + dir });
+  if (!file) cb.onStatus({ ok: false, msg: 'Aucune session Serato trouvée dans ' + dir });
   else cb.onStatus({ ok: true, msg: 'Serato : ' + path.basename(file) });
 
   const tick = () => {

@@ -9,7 +9,9 @@ const libmod = require('./library');
 const lib = libmod;
 const locales = require('./locales');
 const { NowPlaying } = require('./sources');
-const { GuestServer, SetLog, qrPNG, shareLinks } = require('./session');
+const { GuestServer, SetLog, qrPNG, qrSVG, shareLinks } = require('./session');
+const invitesmod = require('./invites');
+const { Relais } = require('./relais');
 const { reshuffle } = require('./setbuilder');
 const autolib = require('./autolibrary');
 const exterieur = require('./exterieur');
@@ -79,6 +81,10 @@ const DEFAULTS = {
   /* les listes du client : ce qu'il veut entendre, ce qu'il refuse */
   clientWanted: [], clientBanned: [], clientName: '',
   guestCooldown: 90, guestMax: 5,
+  /* Les invites : le morceau en cours leur est montre (le DJ peut le
+     cacher), et la page passe par liaisondj.app des qu'internet repond
+     — 'local' la garde sur le Wi-Fi du lieu, sans jamais sortir. */
+  guestNow: true, guestMode: 'auto', guestCode: '', guestSecret: '',
   spotifyId: '', spotifySecret: '',
   /* les filtres de cabine — l'etat des quatre interrupteurs */
   fCrate: null, fSkipPlayed: false, fNoExplicit: false, fBpmMin: 0, fBpmMax: 0,
@@ -119,6 +125,81 @@ const watcher = new AppWatcher(4000);
 let activeApp = null;
 const now = new NowPlaying();
 const guests = new GuestServer();
+/* ============================================================
+   LES INVITES — l'etat publie, l'index, le relais.
+   ============================================================ */
+let invitesOuvert = false, relais = null, sessionInfo = null;
+let _ixCache = null, _ixLib = null, _etatCache = null;
+const _matchCache = new Map(); let _matchLib = null;
+/* Le rapprochement d'une demande avec la bibliotheque est memorise :
+   l'etat est redemande par chaque telephone, et rapprocher deux cents
+   demandes a chaque fois ferait travailler le fil du widget pour rien. */
+function trackDeDemande(r) {
+  if (_matchLib !== library) { _matchCache.clear(); _matchLib = library; }
+  const k = r.k || ((r.artist || '') + '|' + r.title);
+  if (_matchCache.has(k)) return _matchCache.get(k);
+  let t = null;
+  try { const m = engine.match((r.artist ? r.artist + ' ' : '') + r.title, library, 0.5); t = m ? m.track : null; } catch (e) {}
+  _matchCache.set(k, t);
+  return t;
+}
+function indexInvites() {
+  if (_ixLib !== library || !_ixCache) { _ixCache = invitesmod.construireIndex(library); _ixLib = library; }
+  return _ixCache;
+}
+/* Quand un morceau a-t-il ete joue ce soir (le plus tard) ? */
+function joueCeSoir() {
+  const m = new Map();
+  for (const p of (setlog && setlog.current ? setlog.current.played : [])) m.set(p.id, Math.max(m.get(p.id) || 0, p.at || 0));
+  return m;
+}
+function etatInvites(force) {
+  const n = Date.now();
+  if (!force && _etatCache && n - _etatCache.t < 2000) return _etatCache.v;
+  const joues = joueCeSoir();
+  const top = new Map(), kJoues = new Set(), kManques = new Set(), jouesA = {};
+  for (const r of guests.top()) {
+    const t = trackDeDemande(r);
+    const kr = invitesmod.cle(r.title, r.artist);
+    if (!t) { kManques.add(kr); continue; }
+    const kt = invitesmod.cle(t.title, t.artist);
+    /* « Passe » seulement s'il est passe APRES la demande : un titre joue
+       a 22 h puis demande a minuit n'a pas encore repondu a cette demande. */
+    const quand = joues.get(t.id);
+    const joue = quand && quand >= (r.first || 0) - 5000;
+    if (joue) { kJoues.add(kr); kJoues.add(kt); jouesA[kr] = quand; jouesA[kt] = quand; }
+    const e = top.get(kt) || { t: t.title, a: t.artist || '', n: 0, k: kt };
+    e.n += r.n;
+    top.set(kt, e);
+  }
+  const ix = indexInvites();
+  const v = {
+    v: 1,
+    nom: String(config.sessionName || '').slice(0, 80),
+    ouvert: !!invitesOuvert,
+    soiree: setlog && setlog.current ? String(setlog.current.id) : 'aucune',
+    now: config.guestNow !== false && current && current.title
+      ? { t: String(current.title).slice(0, 160), a: String(current.artist || '').slice(0, 120) } : null,
+    top: Array.from(top.values()).sort((a, b) => b.n - a.n).slice(0, 10),
+    joues: Array.from(kJoues).slice(0, 150),
+    /* Quand : un telephone qui redemande un titre deja passe ne doit
+       pas lire « passe ✓ » sur SA demande, qui attend encore. */
+    jouesA: jouesA,
+    maintenant: n,
+    manques: Array.from(kManques).slice(0, 150),
+    regles: { cooldown: guests.cooldown, max: guests.maxPerDevice },
+    idx: { v: ix.v, n: ix.n }
+  };
+  _etatCache = { t: n, v: v };
+  return v;
+}
+function apresDemande() {
+  _etatCache = null;
+  majTendances();
+  send('requests', requestList());
+  if (current) send('suggestions', computeSuggestions(config.suggestCount));
+  if (relais) relais.bientot();
+}
 let setlog = null;
 let gout = null;
 const leGout = () => (gout || (gout = new Gout(GOUT())));
@@ -680,7 +761,7 @@ function openSettings() {
   settings = new BrowserWindow({
     width: Math.max(640, Math.min(940, zs.width - 24)), height: Math.max(460, Math.min(720, zs.height - 24)),
     minWidth: 640, minHeight: 460, center: true,
-    title: 'Liaison — reglages', backgroundColor: '#EDEDEF',
+    title: 'Liaison — réglages', backgroundColor: '#EDEDEF',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   settings.loadFile(path.join(__dirname, 'ui', 'settings.html'), avecLangue());
@@ -811,7 +892,7 @@ async function autoImport(preferKind) {
     const avis = autolib.conseils(librarySources, { tournent: tournent });
     if (avis.length) send('conseils', avis);
     if (!librarySources.length) {
-      send('status', { ok: false, msg: 'Aucune bibliotheque trouvee — ouvre les reglages' });
+      send('status', { ok: false, msg: 'Aucune bibliothèque trouvée — ouvre les réglages' });
       send('library', { n: 0, crates: 0, conseils: avis });
       return;
     }
@@ -845,16 +926,16 @@ async function autoImport(preferKind) {
       send('conseils', [{
         cle: 'source-muette', quand: 'import',
         titre: muettes.length === 1
-          ? 'Une source a ete lue mais n\'a donne aucun morceau'
-          : muettes.length + ' sources ont ete lues sans donner un seul morceau',
-        texte: 'Liaison a bien trouve ' + muettes.map(s => s.label || s.kind).join(', ') +
-               ' et a pu l\'ouvrir, mais rien n\'en est sorti. Ce n\'est donc pas un probleme ' +
-               'de detection : soit la base est vide, soit les fichiers qu\'elle designe ne sont ' +
-               'pas la ou elle le dit — un disque debranche, par exemple.',
-        marche: ['Verifie que le disque qui porte ta musique est bien branche',
-                 'Reglages > Bibliotheque > Tout relire',
-                 'Sinon, ajoute le dossier de ta musique a la main'],
-        repli: 'Les autres sources, elles, ont ete lues normalement.'
+          ? 'Une source a été lue mais n\'a donné aucun morceau'
+          : muettes.length + ' sources ont été lues sans donner un seul morceau',
+        texte: 'Liaison a bien trouvé ' + muettes.map(s => s.label || s.kind).join(', ') +
+               ' et a pu l\'ouvrir, mais rien n\'en est sorti. Ce n\'est donc pas un problème ' +
+               'de détection : soit la base est vide, soit les fichiers qu\'elle désigne ne sont ' +
+               'pas là où elle le dit — un disque débranché, par exemple.',
+        marche: ['Vérifie que le disque qui porte ta musique est bien branché',
+                 'Réglages > Bibliothèque > Tout relire',
+                 'Sinon, ajoute le dossier de ta musique à la main'],
+        repli: 'Les autres sources, elles, ont été lues normalement.'
       }]);
     }
     const sansDoublons = { replies: lu.replies };
@@ -862,7 +943,7 @@ async function autoImport(preferKind) {
     if (sansDoublons.replies)
       send('status', { ok: true, msg: sansDoublons.replies +
         ' doublon' + (sansDoublons.replies > 1 ? 's' : '') + ' replie' +
-        (sansDoublons.replies > 1 ? 's' : '') + ' (meme morceau dans deux bibliotheques)' });
+        (sansDoublons.replies > 1 ? 's' : '') + ' (même morceau dans deux bibliothèques)' });
     if (dernierImport) {
       dernierImport.retires = elagage.disparus.length;
       dernierImport.doublons = sansDoublons.replies || 0;
@@ -871,7 +952,7 @@ async function autoImport(preferKind) {
     }
     if (elagage.disparus.length)
       send('status', { ok: true, msg: elagage.disparus.length +
-        ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retire' +
+        ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retiré' +
         (elagage.disparus.length > 1 ? 's' : '') + ' : fichier introuvable' });
     library = lu.library;
     /* Le morceau en cours est rattache a sa nouvelle fiche. Sans ca,
@@ -956,8 +1037,8 @@ function startAnalysis() {
           dernierePanne = p.cle;
           send('conseils', [{ cle: p.cle, quand: 'biblio',
             titre: p.quoi, texte: p.pourquoi, marche: p.quoiFaire,
-            repli: 'Sans analyse, Liaison n\'a ni tempo ni energie : ses propositions ' +
-                   'perdent leurs deux criteres les plus lourds.' }]);
+            repli: 'Sans analyse, Liaison n\'a ni tempo ni énergie : ses propositions ' +
+                   'perdent leurs deux critères les plus lourds.' }]);
           send('toast', { texte: p.quoi, rouge: true });
         }
       } catch (e) { /* signaler ne doit jamais empecher de jouer */ }
@@ -979,13 +1060,13 @@ function startAnalysis() {
      de zero sans raison et croit a une panne. */
   if (r.mesurePerimee) {
     send('conseils', [{ cle: 'mesure-refaite', quand: 'biblio',
-      titre: 'Liaison reecoute ta bibliotheque',
-      texte: 'Cette version mesure l\'energie, la densite, le tempo et la tonalite ' +
-             'autrement — et beaucoup mieux. Les anciens resultats ne sont plus ' +
-             'comparables, ils ont donc ete jetes plutot que melanges aux nouveaux.',
-      marche: ['Rien a faire : ca tourne en fond',
-               'Le morceau que tu lances passe devant tout le monde, il est pret en quelques secondes'],
-      repli: 'Une grosse bibliotheque demande quelques heures pour etre entierement reecoutee.' }]);
+      titre: 'Liaison réécoute ta bibliothèque',
+      texte: 'Cette version mesure l\'énergie, la densité, le tempo et la tonalité ' +
+             'autrement — et beaucoup mieux. Les anciens résultats ne sont plus ' +
+             'comparables, ils ont donc été jetés plutôt que mélangés aux nouveaux.',
+      marche: ['Rien à faire : ça tourne en fond',
+               'Le morceau que tu lances passe devant tout le monde, il est prêt en quelques secondes'],
+      repli: 'Une grosse bibliothèque demande quelques heures pour être entièrement réécoutée.' }]);
   }
   analyse.demarrer();
   prioriserAnalyse();
@@ -1128,7 +1209,7 @@ function ensureStructure(track, priorite) {
      reperes estimes, sans rien decoder. */
   if (track.duration > 1200) {
     try {
-      structures.set(track.id, require('./structure').structureEstimee(track.duration, track.bpm, 'fichier tres long'));
+      structures.set(track.id, require('./structure').structureEstimee(track.duration, track.bpm, 'fichier très long'));
       scheduleStructRefresh();
     } catch (e) {}
     return;
@@ -1166,10 +1247,10 @@ function ensureStructure(track, priorite) {
       }
       structures.set(track.id, {
         ok: false,
-        abandonne: /abandonnee/.test(msg),
+        abandonne: /abandonn[eé]e/.test(msg),
         note: /aucun fil/.test(msg) ? 'Points de mix indisponibles sur cette machine'
-            : /delai depasse/.test(msg) ? 'Fichier trop lent a lire — points de mix abandonnes'
-            : /abandonnee/.test(msg) ? null
+            : /d[eé]lai d[eé]pass[eé]/.test(msg) ? 'Fichier trop lent à lire — points de mix abandonnés'
+            : /abandonn[eé]e/.test(msg) ? null
             : 'Liaison n\'a pas pu lire ce fichier'
       });
       scheduleStructRefresh();
@@ -1186,13 +1267,13 @@ function annoncerPanneStructure() {
   structSante.prevenu = true;
   send('conseils', [{
     cle: 'structure-echoue', quand: 'deck',
-    titre: 'Liaison n\'arrive pas a calculer tes points de mix',
+    titre: 'Liaison n\'arrive pas à calculer tes points de mix',
     texte: structSante.derniereErreur
-      ? 'Derniere erreur : ' + structSante.derniereErreur
-      : 'Le calcul de structure echoue sur presque tous tes morceaux.',
+      ? 'Dernière erreur : ' + structSante.derniereErreur
+      : 'Le calcul de structure échoue sur presque tous tes morceaux.',
     marche: ['Lance « node build/diagnostic.js » et envoie la sortie',
              'C\'est presque toujours ffmpeg qui manque ou qu\'un antivirus bloque',
-             'Contournement : demarre Liaison avec LIAISON_FFMPEG=/chemin/vers/ffmpeg'],
+             'Contournement : démarre Liaison avec LIAISON_FFMPEG=/chemin/vers/ffmpeg'],
     repli: 'Les suggestions continuent de fonctionner sans les points de mix.'
   }]);
 }
@@ -1253,7 +1334,7 @@ function planFor(nextTrack) {
   if (!a.ok || !b.ok) {
     const rate = !a.ok ? a : b;
     return { ok: false, etat: 'echec',
-             note: rate.note || 'Pas de reperes lisibles sur ce morceau' };
+             note: rate.note || 'Pas de repères lisibles sur ce morceau' };
   }
   const plan = engine.mixPlan(current, nextTrack, a, b);
   /* Un plan bati sur une structure deduite reste un plan — il porte
@@ -1309,15 +1390,21 @@ function bannedSet() {
    telephones distincts, et le morceau de la bibliotheque qui correspond
    — ou, s'il manque, de quoi l'acheter apres la soiree. */
 function requestList() {
-  return guests.top().slice(0, 12).map(r => {
-    const m = engine.match((r.artist ? r.artist + ' ' : '') + r.title, library, 0.5);
+  const joues = joueCeSoir();
+  return guests.top().slice(0, 30).map(r => {
+    const t = trackDeDemande(r);
+    const quand = t ? joues.get(t.id) : 0;
     return {
-      title: r.title, artist: r.artist, n: r.n, at: r.at,
-      id: m ? m.track.id : null,
-      have: !!m,
-      match: m ? { title: m.track.title, artist: m.track.artist, bpm: m.track.bpm, key: m.track.key } : null
+      k: r.k, title: r.title, artist: r.artist, n: r.n, at: r.at,
+      id: t ? t.id : null,
+      have: !!t,
+      joue: !!(quand && quand >= (r.first || 0) - 5000),
+      match: t ? { title: t.title, artist: t.artist, bpm: t.bpm, key: t.key } : null
     };
-  });
+  })
+  /* Ce qui reste a jouer d'abord ; ce qui est passe descend. */
+  .sort((a, b) => (a.joue - b.joue) || (b.n - a.n) || (b.at - a.at))
+  .slice(0, 12);
 }
 
 /* ------------------------------------------------------------
@@ -1578,8 +1665,8 @@ function raisonDuVide(cur, vivier, tam) {
   if (!(cur.bpm > 0) && !avecTempo) {
     return { cle: 'vide-sans-tempo', quand: 'vide',
       titre: 'Aucun tempo nulle part',
-      texte: 'Ni le morceau en cours ni ta bibliotheque n\'ont de tempo enregistre. ' +
-             'Liaison le mesure lui-meme, mais il lui faut le temps d\'ecouter chaque titre.',
+      texte: 'Ni le morceau en cours ni ta bibliothèque n\'ont de tempo enregistré. ' +
+             'Liaison le mesure lui-même, mais il lui faut le temps d\'écouter chaque titre.',
       marche: ['Laisse l\'analyse tourner quelques minutes',
                'Ou fais analyser ta collection dans ton logiciel de mix'] };
   }
@@ -1603,19 +1690,19 @@ function raisonDuVide(cur, vivier, tam) {
   const absents = vivier.filter(t => t.offline).length;
   if (absents > vivier.length * 0.5) {
     return { cle: 'vide-disque', quand: 'vide',
-      titre: 'Le disque n\'est pas la',
+      titre: 'Le disque n\'est pas là',
       texte: absents + ' morceaux sur ' + vivier.length + ' pointent un fichier introuvable.',
       marche: ['Rebranche le disque externe',
-               'Ou reexporte ta collection depuis ton logiciel'] };
+               'Ou réexporte ta collection depuis ton logiciel'] };
   }
 
   /* 4. tout a deja ete joue ce soir */
   const joues = setlog && setlog.current ? setlog.current.played.length : 0;
   if (joues && joues >= vivier.length - 1) {
     return { cle: 'vide-tout-joue', quand: 'vide',
-      titre: 'Tu as joue presque toute la selection',
-      texte: joues + ' titres joues sur ' + vivier.length + ' disponibles.',
-      marche: ['Desserre le crate pour ouvrir la selection',
+      titre: 'Tu as joué presque toute la sélection',
+      texte: joues + ' titres joués sur ' + vivier.length + ' disponibles.',
+      marche: ['Desserre le crate pour ouvrir la sélection',
                'Le bouton SOS, lui, a le droit de rejouer'] };
   }
 
@@ -1630,8 +1717,8 @@ function raisonDuVide(cur, vivier, tam) {
     if (proche) {
       return { cle: 'vide-tempo', quand: 'vide',
         titre: 'Rien ne se cale sur ' + Math.round(cur.bpm) + ' BPM',
-        texte: 'Le plus proche est « ' + proche.title + ' » a ' + Math.round(proche.bpm) +
-               ' BPM, soit ' + Math.round(ecart * 100) + ' % d\'ecart.',
+        texte: 'Le plus proche est « ' + proche.title + ' » à ' + Math.round(proche.bpm) +
+               ' BPM, soit ' + Math.round(ecart * 100) + ' % d\'écart.',
         marche: ['Passe par un morceau relais',
                  'Ou desserre la fourchette de tempo dans FILTRES'] };
     }
@@ -1669,10 +1756,10 @@ function computeSuggestions(limit) {
     send('conseils', [{
       cle: 'vide', quand: 'vide',
       titre: 'Liaison mesure ce morceau',
-      texte: 'Il n\'a pas de tempo enregistre. Liaison l\'ecoute pour le trouver lui-meme — ' +
+      texte: 'Il n\'a pas de tempo enregistré. Liaison l\'écoute pour le trouver lui-même — ' +
              'quelques secondes, et les propositions arrivent.',
-      marche: ['Rien a faire, ca se met a jour tout seul'],
-      repli: 'Sans tempo, les propositions seraient tirees au hasard : mieux vaut attendre.'
+      marche: ['Rien à faire, ça se met à jour tout seul'],
+      repli: 'Sans tempo, les propositions seraient tirées au hasard : mieux vaut attendre.'
     }]);
     return [];
   }
@@ -1843,23 +1930,23 @@ function reinscrireHors() {
 function conseilHors(t) {
   if (t && t.path) {
     return { cle: 'hors-biblio-fichier', quand: 'deck',
-      titre: 'Ce morceau n\'est pas dans ta bibliotheque',
-      texte: 'Liaison l\'a bien detecte sur le deck et il analyse le fichier en ce moment : ' +
-             'tempo, tonalite et energie vont arriver, et les propositions avec. ' +
-             'Il ne pourra simplement jamais etre PROPOSE tant qu\'il n\'est pas importe.',
-      marche: ['Reglages > Bibliotheque > Resynchroniser pour l\'ajouter pour de bon',
-               'S\'il vit sur une cle USB, ajoute le dossier de la cle'],
-      repli: 'En attendant, les propositions se calculent quand meme a partir de lui.' };
+      titre: 'Ce morceau n\'est pas dans ta bibliothèque',
+      texte: 'Liaison l\'a bien détecté sur le deck et il analyse le fichier en ce moment : ' +
+             'tempo, tonalité et énergie vont arriver, et les propositions avec. ' +
+             'Il ne pourra simplement jamais être PROPOSÉ tant qu\'il n\'est pas importé.',
+      marche: ['Réglages > Bibliothèque > Resynchroniser pour l\'ajouter pour de bon',
+               'S\'il vit sur une clé USB, ajoute le dossier de la clé'],
+      repli: 'En attendant, les propositions se calculent quand même à partir de lui.' };
   }
   return { cle: 'hors-biblio-texte', quand: 'deck',
-    titre: 'Morceau detecte, mais introuvable dans ta bibliotheque',
+    titre: 'Morceau détecté, mais introuvable dans ta bibliothèque',
     texte: 'Ton logiciel annonce un titre que Liaison n\'a pas su rapprocher d\'un morceau ' +
            'connu, et il n\'annonce pas le chemin du fichier : impossible de l\'analyser. ' +
-           'Sans tempo ni tonalite, les propositions restent approximatives.',
-    marche: ['Verifie que le dossier de ce morceau est bien importe',
-             'Reglages > Bibliotheque > Resynchroniser',
-             'Ou clique la loupe et declare le morceau a la main'],
-    repli: 'Liaison continue de proposer sur ce qu\'il sait : genre, notoriete, moment de la soiree.' };
+           'Sans tempo ni tonalité, les propositions restent approximatives.',
+    marche: ['Vérifie que le dossier de ce morceau est bien importé',
+             'Réglages > Bibliothèque > Resynchroniser',
+             'Ou clique la loupe et déclare le morceau à la main'],
+    repli: 'Liaison continue de proposer sur ce qu\'il sait : genre, notoriété, moment de la soirée.' };
 }
 
 /**
@@ -1947,6 +2034,10 @@ function setCurrent(track, how) {
       send('pris', { pris: rang >= 0, rang: rang, serie: serie, ceSoir: prisCeSoir });
     }
   } catch (e) {}
+  /* Les telephones des invites voient le morceau changer (et leur
+     demande passer) au tour suivant du relais, pas dix secondes apres. */
+  _etatCache = null;
+  if (relais) relais.bientot();
 
   /* ------------------------------------------------------------
      LES FILTRES D'INSTANT RETOMBENT ICI.
@@ -2190,21 +2281,21 @@ now.on('deck', st => {
   send('conseils', [avecId
     ? { cle: cle, quand: 'deck',
         titre: 'Ce morceau n\'est pas dans l\'export rekordbox importe',
-        texte: 'Le materiel annonce bien le morceau charge, mais son numero n\'existe pas ' +
+        texte: 'Le matériel annonce bien le morceau chargé, mais son numéro n\'existe pas ' +
                'dans le rekordbox.xml que Liaison a lu. L\'export date d\'avant l\'ajout ' +
                'de ce morceau.',
         marche: ['Dans rekordbox : Fichier > Exporter la collection au format xml',
-                 'Reglages > Bibliotheque > choisir ce fichier'],
-        repli: 'Les morceaux deja presents dans l\'export continuent d\'etre reconnus.' }
+                 'Réglages > Bibliothèque > choisir ce fichier'],
+        repli: 'Les morceaux déjà présents dans l\'export continuent d\'être reconnus.' }
     : { cle: cle, quand: 'deck',
         titre: 'Il manque l\'export rekordbox pour nommer les morceaux',
-        texte: 'Le materiel Pioneer annonce un numero de morceau, jamais son titre. ' +
-               'Sans export rekordbox.xml, Liaison recoit bien le signal mais ne peut ' +
-               'le relier a aucun morceau : c\'est pour ca que rien ne s\'affiche.',
+        texte: 'Le matériel Pioneer annonce un numéro de morceau, jamais son titre. ' +
+               'Sans export rekordbox.xml, Liaison reçoit bien le signal mais ne peut ' +
+               'le relier à aucun morceau : c\'est pour ça que rien ne s\'affiche.',
         marche: ['Dans rekordbox : Fichier > Exporter la collection au format xml',
-                 'Reglages > Bibliotheque > choisir ce fichier',
-                 'Le widget se remplit des le morceau suivant'],
-        repli: 'Sans materiel, Liaison sait aussi lire les fichiers que rekordbox ouvre.' }]);
+                 'Réglages > Bibliothèque > choisir ce fichier',
+                 'Le widget se remplit dès le morceau suivant'],
+        repli: 'Sans matériel, Liaison sait aussi lire les fichiers que rekordbox ouvre.' }]);
 });
 
 /* ---------------- IPC ---------------- */
@@ -2275,30 +2366,30 @@ function rapportDiagnostic() {
          '  ·  electron ' + process.versions.electron);
   L.push('');
 
-  L.push('BIBLIOTHEQUE : ' + n(library.length) + ' titre(s)');
+  L.push('BIBLIOTHÈQUE : ' + n(library.length) + ' titre(s)');
   if (dernierImport) {
     const age = Math.round((Date.now() - dernierImport.quand) / 1000);
     L.push('dernier import il y a ' + age + ' s');
     for (const s of dernierImport.sources) {
-      L.push('  · ' + s.kind + (s.manuel ? ' (ajoute a la main)' : '') + ' — ' + s.lus + ' lu(s)');
+      L.push('  · ' + s.kind + (s.manuel ? ' (ajouté à la main)' : '') + ' — ' + s.lus + ' lu(s)');
       L.push('      ' + s.path);
       if (s.erreur) L.push('      ERREUR : ' + s.erreur);
       for (const e of s.exemples)
         L.push('      ' + (e.existe ? 'fichier OK  ' : 'INTROUVABLE ') + e.path);
       if (s.lus && !s.exemples.some(e => e.existe))
-        L.push('      >>> la base est lue mais AUCUN de ses fichiers ne repond');
+        L.push('      >>> la base est lue mais AUCUN de ses fichiers ne répond');
     }
     L.push('  doublons replies : ' + n(dernierImport.doublons));
-    L.push('  retires (fichier introuvable) : ' + n(dernierImport.retires));
+    L.push('  retirés (fichier introuvable) : ' + n(dernierImport.retires));
     L.push('  hors ligne (disque absent) : ' + n(dernierImport.horsLigne));
   } else {
-    L.push('  aucun import enregistre dans cette session');
+    L.push('  aucun import enregistré dans cette session');
   }
   L.push('');
 
-  L.push('DOSSIERS AJOUTES : ' + ((config.dossiers || []).length || 'aucun'));
+  L.push('DOSSIERS AJOUTÉS : ' + ((config.dossiers || []).length || 'aucun'));
   for (const d of dossiersmod.sources(config.dossiers))
-    L.push('  · ' + (d.present ? 'present ' : 'ABSENT  ') + d.path);
+    L.push('  · ' + (d.present ? 'présent ' : 'ABSENT  ') + d.path);
   L.push('');
 
   /* --------------------------------------------------------
@@ -2312,12 +2403,12 @@ function rapportDiagnostic() {
   if (!current) L.push('  rien en cours');
   else {
     L.push('  ' + (current.artist || '?') + ' — ' + (current.title || '?'));
-    L.push('  hors bibliotheque : ' + (current.horsBiblio ? 'OUI' : 'non') +
+    L.push('  hors bibliothèque : ' + (current.horsBiblio ? 'OUI' : 'non') +
            '   source : ' + (commentIl || '?'));
     if (current.path) {
       const cle = libmod.cleChemin(current.path);
-      L.push('  chemin annonce : ' + current.path);
-      L.push('  cle calculee   : ' + cle);
+      L.push('  chemin annoncé : ' + current.path);
+      L.push('  clé calculée   : ' + cle);
       L.push('  dans l\'index  : ' + (chemins().has(cle) ? 'OUI' : 'NON'));
       if (!chemins().has(cle)) {
         /* On cherche le plus proche : si un seul caractere separe
@@ -2327,8 +2418,8 @@ function rapportDiagnostic() {
         for (const k of chemins().keys()) {
           if (k.endsWith(base)) { proches.push(k); if (proches.length >= 3) break; }
         }
-        for (const pr of proches) L.push('  cle proche     : ' + pr);
-        if (!proches.length) L.push('  aucun morceau de la bibliotheque ne porte ce nom de fichier');
+        for (const pr of proches) L.push('  clé proche     : ' + pr);
+        if (!proches.length) L.push('  aucun morceau de la bibliothèque ne porte ce nom de fichier');
       }
     } else {
       L.push('  le logiciel n\'annonce pas de chemin de fichier (titre seul)');
@@ -2363,7 +2454,7 @@ ipcMain.handle('dossiers:liste', () => ({
 ipcMain.handle('dossiers:ajouter', async () => {
   const r = await dialog.showOpenDialog({
     title: 'Choisis un dossier de musique',
-    message: 'Liaison lira ce dossier EN PLUS de ce qu\'il a deja trouve.',
+    message: 'Liaison lira ce dossier EN PLUS de ce qu\'il a déjà trouvé.',
     properties: ['openDirectory', 'multiSelections', 'createDirectory']
   });
   if (r.canceled || !r.filePaths.length) return { annule: true };
@@ -2424,7 +2515,7 @@ ipcMain.handle('bulle:basculer', () => {
    detruisait silencieusement la bulle si le logiciel de mix venait
    de se fermer. */
 ipcMain.handle('bulle:recentrer', () => {
-  if (!current) return { impossible: true, raison: 'Aucun morceau en cours : la bulle est inchangee.' };
+  if (!current) return { impossible: true, raison: 'Aucun morceau en cours : la bulle est inchangée.' };
   const avant = bulleActive;
   const r = poserBulle(current);
   if (r && r.impossible) { bulleActive = avant; return r; }
@@ -2453,7 +2544,7 @@ ipcMain.handle('client:import', async (e, opt) => {
   } catch (err) {
     return { ok: false, error: err.message };
   }
-  if (!entries.length) return { ok: false, error: 'Aucun titre lisible dans ce que tu as colle.' };
+  if (!entries.length) return { ok: false, error: 'Aucun titre lisible dans ce que tu as collé.' };
 
   /* on ajoute sans doublonner ce qui est deja dans la liste */
   const seen = new Set((config[side] || []).map(x => ((x.artist || '') + '|' + x.title).toLowerCase()));
@@ -2657,7 +2748,7 @@ ipcMain.handle('track:search', (e, q) => {
 });
 
 ipcMain.handle('session:start', async (e, opts) => {
-  if (!feat().sessions) return { error: 'Les sessions invites demandent une licence active.', locked: true };
+  if (!feat().sessions) return { error: 'Les sessions invités demandent une licence active.', locked: true };
   /* ------------------------------------------------------------
      Rouvrir le panneau ne doit ni changer le QR, ni vider la file.
 
@@ -2693,22 +2784,20 @@ ipcMain.handle('session:start', async (e, opts) => {
     token: config.sessionToken,
     cooldown: config.guestCooldown, maxPerDevice: config.guestMax,
     getLibrary: () => library,
-    onRequest: () => {
-      majTendances();
-      send('requests', requestList());
-      if (current) send('suggestions', computeSuggestions(config.suggestCount));
-    }
+    getEtat: () => etatInvites(),
+    getIndex: () => indexInvites(),
+    onRequest: apresDemande
   });
   } catch (err) {
     noterPanne('serveur des invites', err);
-    return { error: 'Le serveur des invites n\'a pas pu demarrer : ' + err.message +
-             '\nEssaie un autre port dans les reglages.' };
+    return { error: 'Le serveur des invités n\'a pas pu démarrer : ' + err.message +
+             '\nEssaie un autre port dans les réglages.' };
   }
+  guests.ferme = false;
   /* On n'ouvre une soiree que s'il n'y en a pas deja une en cours.
      Sans ca, un DJ qui affiche le QR une heure apres le debut coupait
      sa tracklist en deux et remettait a zero « ce que j'ai deja joue
-     ce soir » : le filtre anti-repetition et le badge « tu l'as passe
-     il y a vingt minutes » oubliaient la premiere heure. */
+     ce soir ». */
   if (!setlog) setlog = new SetLog(SETS());
   if (!setlog.current) {
     setlog.open(config.sessionName, config.pack);
@@ -2716,18 +2805,27 @@ ipcMain.handle('session:start', async (e, opts) => {
        enchainements : elle comptera des ce soir. */
     oublierAffinites();
   }
-  /* Et on repart d'une file de demandes vide : l'objet guests vit tant
-     que l'app tourne — lancee au login, elle reste dans la barre de
-     menus — donc les demandes du samedi et les quotas par telephone du
-     samedi etaient encore la dimanche. */
-  /* Uniquement quand la soiree commence vraiment. Rouvrir le panneau
-     en cours de set n'efface plus ce que les invites ont demande. */
+  /* On repart d'une file vide uniquement quand la soiree commence
+     vraiment. Rouvrir le panneau en cours de set n'efface plus ce que
+     les invites ont demande. */
   if (nouvelleSoiree) guests.clear();
+  invitesOuvert = true;
+  _etatCache = null;
+
+  /* ------------------------------------------------------------
+     LE RELAIS : le QR qui marche en 4G et qui reste valable.
+     Tente une fois ; s'il ne repond pas, la page locale prend le
+     relais et le DJ le sait (mode « Wi-Fi local »).
+     ------------------------------------------------------------ */
+  let mode = 'local';
+  if (config.guestMode !== 'local') {
+    const r = await demarrerRelais();
+    if (r) mode = 'relais';
+  } else if (relais) { try { await relais.arreter(); } catch (e) {} relais = null; }
+
   /* Windows : le pare-feu n'autorise souvent Liaison que sur les
-     reseaux « prives ». Le Wi-Fi d'un club est presque toujours classe
-     « public » : le QR s'affiche, et les telephones ne chargent rien.
-     On le dit une fois, avec le geste qui regle ca. */
-  if (process.platform === 'win32' && !config.pareFeuExplique) {
+     reseaux « prives ». Seul le mode local en depend. */
+  if (mode === 'local' && process.platform === 'win32' && !config.pareFeuExplique) {
     config.pareFeuExplique = true; saveConfig();
     send('conseils', [{
       cle: 'pare-feu', quand: 'invites',
@@ -2738,7 +2836,138 @@ ipcMain.handle('session:start', async (e, opts) => {
     }]);
   }
   majTendances();
-  return { url: url, qr: await qrPNG(url), share: shareLinks(url, config.sessionName) };
+  sessionInfo = await infoSession(mode === 'relais' ? relais.url() : url, url, mode);
+  send('invites', sessionInfo);
+  return sessionInfo;
+});
+
+async function infoSession(url, urlLocale, mode) {
+  return {
+    ouvert: true, url: url, urlLocale: urlLocale, mode: mode,
+    qr: await qrPNG(url),
+    share: shareLinks(url, config.sessionName),
+    nom: config.sessionName || '',
+    relais: relais ? relais.statut : null
+  };
+}
+
+async function demarrerRelais() {
+  if (!config.guestCode || !invitesmod.codeValide(config.guestCode) || !config.guestSecret) {
+    config.guestCode = invitesmod.nouveauCode(8);
+    config.guestSecret = require('crypto').randomBytes(24).toString('base64url');
+    saveConfig();
+  }
+  if (relais) { try { await relais.arreter(); } catch (e) {} relais = null; }
+  const base = (require('./license').API_LISTE || [])[0] || 'https://liaisondj.app';
+  const creer = () => new Relais({
+    base: base, code: config.guestCode, secret: config.guestSecret,
+    getEtat: () => etatInvites(),
+    getIndex: () => indexInvites(),
+    onDemandes: dem => {
+      let n = 0;
+      for (const d of dem) if (guests.ajouterRelayee(d)) n++;
+      if (n) apresDemande();
+    },
+    onEtat: st => { if (sessionInfo) { sessionInfo.relais = st; send('invites', sessionInfo); } }
+  });
+  let r = creer();
+  let res = await r.reserver();
+  /* Code deja pris par quelqu'un d'autre (une chance sur des
+     milliards, ou une configuration copiee d'une autre machine) :
+     on en tire un neuf, une seule fois. */
+  if (!res.ok && res.pris) {
+    config.guestCode = invitesmod.nouveauCode(8);
+    config.guestSecret = require('crypto').randomBytes(24).toString('base64url');
+    saveConfig();
+    r = creer();
+    res = await r.reserver();
+  }
+  if (!res.ok) return false;
+  relais = r;
+  relais.demarrer();
+  return true;
+}
+
+/* Fermer la session : les telephones affichent « fermee », la file
+   reste pour le debrief, le QR imprime restera valable la prochaine fois. */
+ipcMain.handle('session:stop', async () => {
+  invitesOuvert = false;
+  guests.ferme = true;
+  _etatCache = null;
+  if (relais) { const r = relais; relais = null; try { await r.arreter(etatInvites(true)); } catch (e) {} }
+  /* Le serveur local reste une minute, pour que les telephones deja
+     ouverts lisent « fermee » plutot qu'une erreur. */
+  setTimeout(() => { if (!invitesOuvert) guests.stop(); }, 60000);
+  sessionInfo = { ouvert: false };
+  send('invites', sessionInfo);
+  return sessionInfo;
+});
+ipcMain.handle('session:etat', () => {
+  if (sessionInfo && sessionInfo.ouvert && relais) sessionInfo.relais = relais.statut;
+  return sessionInfo || { ouvert: false };
+});
+ipcMain.handle('requests:masquer', (e, k) => {
+  guests.masquer(String(k || ''));
+  apresDemande();
+  return requestList();
+});
+
+/* ============================================================
+   LE QR EN GRAND — a retourner vers la salle, ou sur un second ecran.
+   ============================================================ */
+let fenetreQR = null;
+ipcMain.handle('qr:grand', () => {
+  if (!sessionInfo || !sessionInfo.ouvert) return { ok: false };
+  if (fenetreQR && !fenetreQR.isDestroyed()) { fenetreQR.show(); fenetreQR.focus(); return { ok: true }; }
+  const pt = screen.getCursorScreenPoint();
+  const d = screen.getDisplayNearestPoint(pt).bounds;
+  fenetreQR = new BrowserWindow({
+    x: d.x, y: d.y, width: d.width, height: d.height, fullscreen: true, backgroundColor: '#101114',
+    title: 'Liaison — QR',
+    webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
+  });
+  fenetreQR.loadFile(path.join(__dirname, 'ui', 'qr-grand.html'), avecLangue());
+  fenetreQR.on('closed', () => { fenetreQR = null; });
+  return { ok: true };
+});
+ipcMain.handle('qr:fermerGrand', () => { if (fenetreQR && !fenetreQR.isDestroyed()) fenetreQR.close(); return true; });
+
+/* ============================================================
+   L'AFFICHE — une page A4 (le QR en grand) et quatre chevalets A6 a
+   poser sur les tables. En mode relais, l'adresse ne change jamais :
+   on peut l'imprimer une fois pour toutes les soirees.
+   ============================================================ */
+ipcMain.handle('qr:affiche', async () => {
+  if (!sessionInfo || !sessionInfo.ouvert) return { ok: false, error: 'Ouvre d\'abord la session.' };
+  const en = langue() === 'en';
+  const svg = await qrSVG(sessionInfo.url);
+  const html = require('./affiche').htmlAffiche({
+    svg: svg, nom: config.sessionName || '', url: sessionInfo.url, en: en,
+    local: sessionInfo.mode !== 'relais',
+    police: f => 'file://' + path.join(__dirname, 'ui', 'fonts', f).replace(/\\/g, '/')
+  });
+  const tmp = path.join(app.getPath('temp'), 'liaison-affiche-' + process.pid + '.html');
+  fs.writeFileSync(tmp, html);
+  const w = new BrowserWindow({ show: false, webPreferences: { contextIsolation: true, nodeIntegration: false } });
+  try {
+    await w.loadFile(tmp);
+    await new Promise(r => setTimeout(r, 400));        /* les polices */
+    const pdf = await w.webContents.printToPDF({ pageSize: 'A4', printBackground: true, margins: { marginType: 'none' } });
+    const r = await dialog.showSaveDialog({
+      title: 'Enregistrer l\'affiche',
+      defaultPath: path.join(app.getPath('documents'), (en ? 'Liaison - song requests' : 'Liaison - demandes') + '.pdf'),
+      filters: [{ name: 'PDF', extensions: ['pdf'] }]
+    });
+    if (r.canceled || !r.filePath) return { ok: false, annule: true };
+    fs.writeFileSync(r.filePath, pdf);
+    try { shell.openPath(r.filePath); } catch (e) {}
+    return { ok: true, path: r.filePath };
+  } catch (e) {
+    return { ok: false, error: e.message };
+  } finally {
+    try { w.destroy(); } catch (e) {}
+    try { fs.unlinkSync(tmp); } catch (e) {}
+  }
 });
 ipcMain.handle('session:requests', () => requestList());
 /* Ce qui sort vers le navigateur ou une autre app. La page peut
@@ -2798,7 +3027,7 @@ ipcMain.on('drag:track', (e, id) => {
     const t = library.find(x => x.id === id);
     if (!t || !t.path) return;
     if (!fs.existsSync(t.path)) {
-      send('toast', { texte: 'Le fichier a bouge sur le disque — relance une lecture de bibliotheque.', rouge: true });
+      send('toast', { texte: 'Le fichier a bougé sur le disque — relance une lecture de bibliothèque.', rouge: true });
       return;
     }
     e.sender.startDrag({ file: t.path, icon: iconeDeGlisser() });
@@ -2991,7 +3220,7 @@ ipcMain.handle('aavoir:get', async (e, opt) => {
     /* De quoi expliquer un panneau vide sans faire chercher une
        panne : zero manque quand personne n'a encore rien demande
        n'est pas la meme chose que zero manque apres dix soirees. */
-    soirees: Object.keys(j).length ? null : 'aucune demande enregistree pour l\'instant',
+    soirees: Object.keys(j).length ? null : 'aucune demande enregistrée pour l\'instant',
     /* De quoi remplir le menu des pays, et dire lequel est
        actuellement servi — force a la main ou deduit du contexte. */
     pays: {
@@ -3037,7 +3266,7 @@ ipcMain.handle('filters:crates', () => {
 ipcMain.handle('landing:plan', (e, minutes) => {
   const m = Math.max(0, Math.round(Number(minutes) || 0));
   if (!m) { landPlan = null; landAt = 0; if (current) send('suggestions', computeSuggestions(config.suggestCount));
-            return { ok: false, note: 'Plan efface — Liaison revient a la courbe de la soiree.' }; }
+            return { ok: false, note: 'Plan effacé — Liaison revient à la courbe de la soirée.' }; }
   const tam = currentFilter();
   landPlan = landing.plan({
     restantMin: m,
@@ -3114,14 +3343,14 @@ ipcMain.handle('prepare:build', async (e, opt) => {
 });
 
 ipcMain.handle('prepare:export', async (e, opt) => {
-  if (!dernierePrepa || !dernierePrepa.ok) return { ok: false, error: 'Rien a exporter.' };
+  if (!dernierePrepa || !dernierePrepa.ok) return { ok: false, error: 'Rien à exporter.' };
   const format = (opt && opt.format) === 'txt' ? 'txt' : 'm3u8';
-  const nom = String(config.sessionName || 'Preparation').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 50);
+  const nom = String(config.sessionName || 'Préparation').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 50);
   const r = await dialog.showSaveDialog({
-    title: 'Enregistrer la preparation',
+    title: 'Enregistrer la préparation',
     defaultPath: nom + ' - ' + dernierePrepa.duree + ' min.' + format,
     filters: [format === 'm3u8'
-      ? { name: 'Playlist a importer', extensions: ['m3u8', 'm3u'] }
+      ? { name: 'Playlist à importer', extensions: ['m3u8', 'm3u'] }
       : { name: 'Texte', extensions: ['txt'] }]
   });
   if (r.canceled || !r.filePath) return { ok: false, canceled: true };
@@ -3167,8 +3396,8 @@ ipcMain.handle('sets:debrief', (e, id) => {
   });
   if (!droit.ok) {
     return { locked: true,
-      error: 'Le debrief complet fait partie de Resident. Le premier t\'a ete offert — ' +
-             'celui-la, il faut une licence.' };
+      error: 'Le débrief complet fait partie de Résident. Le premier t\'a été offert — ' +
+             'celui-là, il faut une licence.' };
   }
   if (droit.offert) {
     license.state.debriefOffert = Date.now();
@@ -3202,7 +3431,7 @@ ipcMain.handle('sets:export', async (e, opt) => {
     title: 'Enregistrer la tracklist',
     defaultPath: 'Tracklist ' + jour + ' - ' + propre + '.' + format,
     filters: [format === 'csv'
-      ? { name: 'Tableur / declaration', extensions: ['csv'] }
+      ? { name: 'Tableur / déclaration', extensions: ['csv'] }
       : { name: 'Texte', extensions: ['txt'] }]
   });
   if (r.canceled || !r.filePath) return { ok: false, canceled: true };
@@ -3212,10 +3441,10 @@ ipcMain.handle('sets:export', async (e, opt) => {
   return { ok: true, path: r.filePath, n: t.lignes.length };
 });
 ipcMain.handle('sets:replay', (e, opts) => {
-  if (!feat().replay) return { error: 'Le rejeu de set demande une licence Resident ou Collectif.', locked: true };
+  if (!feat().replay) return { error: 'Le rejeu de set demande une licence Résident ou Collectif.', locked: true };
   if (!setlog) return null;
   const prev = setlog.hydrate(opts.id, library);
-  if (!prev.length) return { error: 'Set introuvable dans la bibliotheque actuelle.' };
+  if (!prev.length) return { error: 'Set introuvable dans la bibliothèque actuelle.' };
   const additions = (opts.addIds || []).map(id => library.find(t => t.id === id)).filter(Boolean);
   const r = reshuffle(prev, additions, {
     /* reshuffle ne comprend que up/hold/down : « auto » doit etre
@@ -3402,21 +3631,21 @@ function refreshTray() {
   tray.setToolTip(tr('Liaison — ' + label));
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: label, enabled: false },
-    { label: library.length ? library.length + ' titres prets' : 'Bibliotheque en cours…', enabled: false },
+    { label: library.length ? library.length + ' titres prêts' : 'Bibliothèque en cours…', enabled: false },
     { label: 'Licence : ' + license.status().label + (license.tier() === 'trial' ? ' (' + license.trialLeft() + ' j)' : ''), enabled: false },
     { type: 'separator' },
     { label: 'Afficher le widget', click: () => widget && widget.show() },
     { label: 'Masquer le widget', click: () => widget && widget.hide() },
     { label: 'Licence…', click: () => openLicence() },
-    { label: 'Reglages…', click: openSettings },
+    { label: 'Réglages…', click: openSettings },
     { type: 'separator' },
-    { label: 'Relire la bibliotheque', click: () => autoImport(activeApp && activeApp.librarySource).catch(e => console.warn('import :', e && e.message)) },
+    { label: 'Relire la bibliothèque', click: () => autoImport(activeApp && activeApp.librarySource).catch(e => console.warn('import :', e && e.message)) },
     /* Un testeur qui a vu quelque chose d'anormal doit pouvoir
        nous envoyer le journal sans avoir a le chercher dans un
        dossier systeme cache. Deux clics depuis la barre de menus. */
     { label: 'Ouvrir le journal des pannes', click: () => {
         const f = path.join(DIR(), 'pannes.log');
-        try { if (!fs.existsSync(f)) fs.writeFileSync(f, 'Aucune panne enregistree. Tant mieux.\n'); } catch (e) {}
+        try { if (!fs.existsSync(f)) fs.writeFileSync(f, 'Aucune panne enregistrée. Tant mieux.\n'); } catch (e) {}
         try { shell.showItemInFolder(f); } catch (e) {}
       } },
     { type: 'separator' },
@@ -3726,7 +3955,7 @@ app.whenReady().then(async () => {
        « Liaison a rencontre un probleme » au demarrage, bibliotheque
        vide, et aucune indication de ce qu'il fallait faire. */
     .catch(e => {
-      send('status', { ok: false, msg: 'Bibliotheque introuvable — verifie le chemin dans les reglages' });
+      send('status', { ok: false, msg: 'Bibliothèque introuvable — vérifie le chemin dans les réglages' });
       noterPanne('import de bibliotheque', e);
     });
 
@@ -3927,14 +4156,14 @@ ipcMain.handle('maj:ouvrir', async () => {
 
   const r = await dialog.showMessageBox({
     type: 'info',
-    title: 'Mise a jour de Liaison',
+    title: 'Mise à jour de Liaison',
     message: 'Ferme Liaison avant de lancer l\'installateur.',
     detail: process.platform === 'win32'
-      ? 'Windows ne peut pas remplacer une application en cours d\'execution : si Liaison tourne '
+      ? 'Windows ne peut pas remplacer une application en cours d\'exécution : si Liaison tourne '
         + 'pendant l\'installation, l\'ancienne version peut rester en place.\n\n'
-        + 'La page de telechargement vient de s\'ouvrir. Tu peux fermer Liaison maintenant, '
-        + 'puis lancer le fichier telecharge.'
-      : 'La page de telechargement vient de s\'ouvrir. Ferme Liaison, remplace-le dans '
+        + 'La page de téléchargement vient de s\'ouvrir. Tu peux fermer Liaison maintenant, '
+        + 'puis lancer le fichier téléchargé.'
+      : 'La page de téléchargement vient de s\'ouvrir. Ferme Liaison, remplace-le dans '
         + 'Applications, puis relance-le.',
     buttons: ['Fermer Liaison maintenant', 'Plus tard'],
     defaultId: 0, cancelId: 1
@@ -4047,16 +4276,16 @@ function prevenirPanne() {
   try {
     dialog.showMessageBox({
       type: 'warning',
-      title: 'Liaison a rencontre un probleme',
+      title: 'Liaison a rencontré un problème',
       message: 'Liaison continue de tourner.',
       detail: choix === undefined
-        ? 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
-          'Tu peux m\'aider a le corriger en envoyant un rapport ANONYME : la version, ton systeme, ' +
+        ? 'Un incident a été noté. Si quelque chose ne répond plus, ferme et rouvre l\'app.\n\n' +
+          'Tu peux m\'aider à le corriger en envoyant un rapport ANONYME : la version, ton système, ' +
           'et la trace technique. Jamais un titre, jamais un nom de fichier, jamais ton nom. ' +
-          'L\'envoi se fait au prochain demarrage, jamais pendant que tu mixes.\n\n' +
-          'Le detail est dans :\n' + path.join(DIR(), 'pannes.log')
-        : 'Un incident a ete note. Si quelque chose ne repond plus, ferme et rouvre l\'app.\n\n' +
-          'Le detail est dans :\n' + path.join(DIR(), 'pannes.log'),
+          'L\'envoi se fait au prochain démarrage, jamais pendant que tu mixes.\n\n' +
+          'Le détail est dans :\n' + path.join(DIR(), 'pannes.log')
+        : 'Un incident a été noté. Si quelque chose ne répond plus, ferme et rouvre l\'app.\n\n' +
+          'Le détail est dans :\n' + path.join(DIR(), 'pannes.log'),
       buttons: boutons,
       defaultId: 0, cancelId: 0
     }).then(r => {
@@ -4158,11 +4387,11 @@ try {
         if (guests && guests.enMarche && guests.enMarche()) {
           send('conseils', [{
             cle: 'reveil-reseau', quand: 'invites',
-            titre: 'Verifie le lien des invites',
-            texte: 'L\'ordinateur sort de veille. Si le reseau a change, l\'adresse du QR ' +
-                   'affiche a l\'entree ne repond plus.',
-            marche: ['Ouvre les reglages, section Invites',
-                     'Reaffiche le QR : il porte l\'adresse actuelle']
+            titre: 'Vérifie le lien des invités',
+            texte: 'L\'ordinateur sort de veille. Si le réseau a changé, l\'adresse du QR ' +
+                   'affiché à l\'entrée ne répond plus.',
+            marche: ['Ouvre les réglages, section Invités',
+                     'Réaffiche le QR : il porte l\'adresse actuelle']
           }]);
         }
       } catch (e) { noterPanne('reveil de veille', e); }

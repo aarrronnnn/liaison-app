@@ -133,7 +133,7 @@ async function decode(file, seconds) {
   const second = await decodeDepuis(file, 0, seconds).catch(() => null);
   if (second && second.length > premier.length) return second;
   if (premier.length) return premier;
-  throw new Error('ffmpeg: aucun echantillon (' + path.basename(file) + ')');
+  throw new Error('ffmpeg: aucun échantillon (' + path.basename(file) + ')');
 }
 
 function decodeDepuis(file, depart, seconds) {
@@ -163,7 +163,7 @@ function decodeDepuis(file, depart, seconds) {
       if (fini) return;
       fini = true;
       try { p.kill('SIGKILL'); } catch (e) {}
-      reject(new Error('ffmpeg : delai depasse (' + path.basename(file) + ')'));
+      reject(new Error('ffmpeg : délai dépassé (' + path.basename(file) + ')'));
     }, DELAI_FFMPEG);
     const terminer = (fn) => (...a) => {
       if (fini) return;

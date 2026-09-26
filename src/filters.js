@@ -90,7 +90,7 @@ function build(f) {
   const played = f.skipPlayed && f.playedIds
     ? (f.playedIds instanceof Set ? f.playedIds : new Set(f.playedIds))
     : null;
-  if (played) active.push('Pas deja joue');
+  if (played) active.push('Pas déjà joué');
 
   if (f.noExplicit) active.push('Sans paroles explicites');
 
@@ -116,7 +116,7 @@ function build(f) {
 
   const emin = f.energyMin > 0 ? f.energyMin : null;
   const emax = f.energyMax > 0 && f.energyMax < 10 ? f.energyMax : null;
-  if (emin || emax) active.push('Energie ' + (emin || 1) + '–' + (emax || 10));
+  if (emin || emax) active.push('Énergie ' + (emin || 1) + '–' + (emax || 10));
 
   const keep = t => {
     if (!t) return false;

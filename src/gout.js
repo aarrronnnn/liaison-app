@@ -417,14 +417,14 @@ class Gout {
     const out = [];
     const n = this.d.n;
     if (n < MINI) {
-      out.push({ t: 'Liaison observe', d: n + ' enchainement' + (n > 1 ? 's' : '') + ' sur ' + MINI +
-        ' avant de commencer a s\'adapter. Rien n\'est modifie pour l\'instant.' });
+      out.push({ t: 'Liaison observe', d: n + ' enchaînement' + (n > 1 ? 's' : '') + ' sur ' + MINI +
+        ' avant de commencer à s\'adapter. Rien n\'est modifié pour l\'instant.' });
       return out;
     }
     const r = this.reglages();
     const tauxPris = n ? Math.round(this.d.pris / n * 100) : 0;
-    out.push({ t: 'Ce que tu prends', d: tauxPris + ' % de tes enchainements sortent des suggestions de Liaison' +
-      (this.d.prisPremier ? ', dont ' + Math.round(this.d.prisPremier / n * 100) + ' % la premiere' : '') + '.' });
+    out.push({ t: 'Ce que tu prends', d: tauxPris + ' % de tes enchaînements sortent des suggestions de Liaison' +
+      (this.d.prisPremier ? ', dont ' + Math.round(this.d.prisPremier / n * 100) + ' % la première' : '') + '.' });
 
     const dit = (cle, haut, bas) => {
       const v = r.poids[cle];
@@ -432,8 +432,8 @@ class Gout {
       if (v >= 1.18) out.push({ t: haut.t, d: haut.d });
       else if (v <= 0.85) out.push({ t: bas.t, d: bas.d });
     };
-    dit('h', { t: 'Tu tiens a l\'harmonie', d: 'Tu choisis des titres mieux accordes que la moyenne des propositions. Liaison remonte la tonalite dans le classement.' },
-             { t: 'L\'harmonie te gene peu', d: 'Tu passes souvent des titres qui ne sont pas accordes. Liaison arrete d\'en faire une priorite.' });
+    dit('h', { t: 'Tu tiens à l\'harmonie', d: 'Tu choisis des titres mieux accordés que la moyenne des propositions. Liaison remonte la tonalité dans le classement.' },
+             { t: 'L\'harmonie te gêne peu', d: 'Tu passes souvent des titres qui ne sont pas accordés. Liaison arrête d\'en faire une priorité.' });
     /* Le tempo se raconte a partir de l'ecart REELLEMENT mesure, pas
        du poids. Le poids dit « le tempo n'est pas ce qui decide chez
        lui », ce qui est vrai meme quand ses ecarts sont minuscules —
@@ -442,26 +442,26 @@ class Gout {
        exactes, cote a cote, qui se contredisent : c'est le genre de
        detail qui fait perdre confiance dans tout le reste. */
     dit('cr', { t: 'Tu suis le contexte', d: 'Tes choix collent aux genres du contexte choisi. Liaison y tient davantage.' },
-              { t: 'Tu sors du contexte', d: 'Tu debordes souvent des genres attendus. Liaison ouvre.' });
+              { t: 'Tu sors du contexte', d: 'Tu débordes souvent des genres attendus. Liaison ouvre.' });
     if (r.poids.pop >= 0.25) out.push({ t: 'Tu joues les tubes',
-      d: 'Tu choisis nettement plus connu que ce qu\'on te propose. Liaison remonte les valeurs sures.' });
+      d: 'Tu choisis nettement plus connu que ce qu\'on te propose. Liaison remonte les valeurs sûres.' });
     else if (r.poids.pop <= -0.25) out.push({ t: 'Tu creuses',
-      d: 'Tu choisis nettement moins connu que ce qu\'on te propose. Liaison sort des evidences.' });
+      d: 'Tu choisis nettement moins connu que ce qu\'on te propose. Liaison sort des évidences.' });
 
     const p = Math.round(this.d.ecartTempo * 1000) / 10;
     if (this.d.ecartTempo > 0) {
-      const c = this.d.ecartTempo < 0.025 ? 'Tu cales au BPM pres'
-              : this.d.ecartTempo > 0.07 ? 'Tu oses les ecarts'
-              : 'Ton ecart habituel';
+      const c = this.d.ecartTempo < 0.025 ? 'Tu cales au BPM près'
+              : this.d.ecartTempo > 0.07 ? 'Tu oses les écarts'
+              : 'Ton écart habituel';
       const d = p.toFixed(1).replace('.', ',') + ' % de tempo entre deux morceaux'
               + (this.d.ecartTempo < 0.025 ? ' — Liaison resserre sa recherche.'
-                 : this.d.ecartTempo > 0.07 ? ' — Liaison elargit la sienne d\'autant.' : '.');
+                 : this.d.ecartTempo > 0.07 ? ' — Liaison élargit la sienne d\'autant.' : '.');
       out.push({ t: c, d: d });
     }
     const rep = Math.round(this.d.repetitionArtiste * 100);
-    if (rep >= 12) out.push({ t: 'Tu rejoues tes artistes', d: 'Environ ' + rep + ' % du temps. Liaison arrete de t\'en empecher.' });
+    if (rep >= 12) out.push({ t: 'Tu rejoues tes artistes', d: 'Environ ' + rep + ' % du temps. Liaison arrête de t\'en empêcher.' });
     if (Math.abs(this.d.sautEnergie) > 0.25)
-      out.push({ t: 'Ta pente', d: this.d.sautEnergie > 0 ? 'Tu montes en moyenne d\'un demi-point d\'energie par morceau.' : 'Tu redescends plus souvent que tu ne montes.' });
+      out.push({ t: 'Ta pente', d: this.d.sautEnergie > 0 ? 'Tu montes en moyenne d\'un demi-point d\'énergie par morceau.' : 'Tu redescends plus souvent que tu ne montes.' });
     return out;
   }
 

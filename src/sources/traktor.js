@@ -23,9 +23,9 @@ function start(opts, cb) {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('OK');
   });
-  server.on('error', e => cb.onStatus({ ok: false, msg: 'Port ' + port + ' occupe : ' + e.code }));
+  server.on('error', e => cb.onStatus({ ok: false, msg: 'Port ' + port + ' occupé : ' + e.code }));
   server.listen(port, '127.0.0.1', () =>
-    cb.onStatus({ ok: true, msg: 'En ecoute sur 127.0.0.1:' + port + ' (mount /liaison)' }));
+    cb.onStatus({ ok: true, msg: 'En écoute sur 127.0.0.1:' + port + ' (mount /liaison)' }));
   return { stop: () => { try { server.close(); } catch (e) {} } };
 }
 module.exports = { start };

@@ -242,17 +242,17 @@ function start(opts, cb) {
        semblant de chercher : on le dit, et on montre le chemin qui
        marche — deux lettres dans la loupe, et Liaison enchaine.
        ------------------------------------------------------------ */
-    cb.onStatus({ ok: false, msg: 'rekordbox sous Windows : declare le morceau a la main',
+    cb.onStatus({ ok: false, msg: 'rekordbox sous Windows : déclare le morceau à la main',
       conseil: {
         cle: 'rekordbox-windows', quand: 'deck',
-        titre: 'rekordbox sous Windows, sans materiel',
+        titre: 'rekordbox sous Windows, sans matériel',
         texte: 'rekordbox n\'annonce pas ce qu\'il joue, et Windows ne permet pas de le deviner. ' +
                'Ce n\'est pas une panne : c\'est une limite du logiciel de Pioneer.',
         marche: ['Clique la loupe en haut, tape deux lettres du titre',
                  'Liaison propose la suite, avec les points de mix',
                  'Une seule frappe par morceau, pas plus'],
-        repli: 'Avec un CDJ, un XDJ ou un DJM sur le reseau, le deck est lu automatiquement. ' +
-               'Serato, Traktor et VirtualDJ le sont aussi, sans materiel.'
+        repli: 'Avec un CDJ, un XDJ ou un DJM sur le réseau, le deck est lu automatiquement. ' +
+               'Serato, Traktor et VirtualDJ le sont aussi, sans matériel.'
       } });
     return { stop() {} };
   }
@@ -283,7 +283,7 @@ function start(opts, cb) {
       enCours = false;
       if (list === null) {
         vus.clear();
-        if (!annonce) { annonce = true; cb.onStatus({ ok: false, msg: 'rekordbox n\'est pas lance' }); }
+        if (!annonce) { annonce = true; cb.onStatus({ ok: false, msg: 'rekordbox n\'est pas lancé' }); }
         return;
       }
       annonce = false;
@@ -332,30 +332,30 @@ function start(opts, cb) {
           const exemple = list[0];
           const dossier = exemple.slice(0, exemple.lastIndexOf('/')) || exemple;
           cb.onStatus({ ok: false,
-            msg: 'rekordbox joue un fichier que Liaison n\'a pas dans sa bibliotheque',
+            msg: 'rekordbox joue un fichier que Liaison n\'a pas dans sa bibliothèque',
             conseil: {
               cle: 'rekordbox-hors-bibliotheque', quand: 'deck',
-              titre: 'Le morceau joue n\'est pas dans ta bibliotheque Liaison',
+              titre: 'Le morceau joué n\'est pas dans ta bibliothèque Liaison',
               texte: 'rekordbox lit bien un fichier, mais il ne fait pas partie des morceaux ' +
-                     'que Liaison connait. C\'est presque toujours un dossier oublie a l\'import — ' +
-                     'une bibliotheque Musique ou iTunes, par exemple, alors que Liaison n\'a lu ' +
+                     'que Liaison connaît. C\'est presque toujours un dossier oublié à l\'import — ' +
+                     'une bibliothèque Musique ou iTunes, par exemple, alors que Liaison n\'a lu ' +
                      'que le dossier rekordbox.\n\nDossier concerne : ' + dossier,
-              marche: ['Ouvre Reglages, section Bibliotheque',
+              marche: ['Ouvre Réglages, section Bibliothèque',
                        'Ajoute le dossier ci-dessus',
                        'Relance l\'import : Liaison retrouvera le morceau tout seul'],
               repli: 'Si les fichiers sont sur un disque externe, rebranche-le avant de relancer ' +
-                     'rekordbox : un chemin absent a l\'import ne peut pas etre retrouve.' } });
+                     'rekordbox : un chemin absent à l\'import ne peut pas être retrouvé.' } });
         }
         if (jamaisRien === 6 && list.length === 0) {
-          cb.onStatus({ ok: false, msg: 'rekordbox est lance, mais ne tient aucun fichier audio ouvert',
+          cb.onStatus({ ok: false, msg: 'rekordbox est lancé, mais ne tient aucun fichier audio ouvert',
             conseil: {
               cle: 'rekordbox-rien-ouvert', quand: 'deck',
               titre: 'rekordbox ne laisse rien voir',
-              texte: 'rekordbox est bien lance, mais il ne garde aucun fichier audio ouvert : ' +
-                     'Liaison ne peut pas deduire ce qui tourne.',
+              texte: 'rekordbox est bien lancé, mais il ne garde aucun fichier audio ouvert : ' +
+                     'Liaison ne peut pas déduire ce qui tourne.',
               marche: ['Clique la loupe en haut et tape deux lettres du titre',
-                       'Liaison enchaine ensuite normalement'],
-              repli: 'Avec un CDJ ou un DJM sur le reseau, Pro DJ Link donne le deck directement.' } });
+                       'Liaison enchaîne ensuite normalement'],
+              repli: 'Avec un CDJ ou un DJM sur le réseau, Pro DJ Link donne le deck directement.' } });
         }
         return;
       }

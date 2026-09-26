@@ -80,7 +80,7 @@ try { chromium = require('playwright').chromium; } catch (e) { try { chromium = 
       key: '8A', bpm: 121.4, energy: 7, how: 'deck', mesure: true });
     renderSug([{ id: 2, title: 'Voyage voyage', artist: 'Desireless', key: '8B', bpm: 132, energy: 8,
       total: 73, transition: 'Cut sur le drop', why: 'x', delta: 1.5, trend: 75, client: true, cloture: true,
-      horsBulle: true, relance: true, deja: { texte: 'DEJA PASSE', grave: true } }]);
+      horsBulle: true, relance: true, deja: { texte: 'DÉJÀ PASSÉ', grave: true } }]);
   });
   await p.waitForTimeout(400);
   const r = await p.evaluate(() => {

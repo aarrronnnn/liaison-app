@@ -361,7 +361,7 @@ const nom = t => (t.path || '').replace('/m/', '').replace('.mp3', '');
   verifier('8ter. et aucun ne prescrit une technique harmonique',
            plans.every(n => !/Blend|Bass swap|drop/i.test(n)), plans.join(' | '));
   verifier('8quater. Liaison dit qu\'il ignore la tonalite',
-           out.every(r => /tonalite inconnue/i.test(r.transition.d)),
+           out.every(r => /tonalit[eé] inconnue/i.test(r.transition.d)),
            out[0].transition.d.slice(0, 52) + '…');
 
   /* ---------- le temoin ----------
