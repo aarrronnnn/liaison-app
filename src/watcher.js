@@ -42,11 +42,29 @@ function listProcesses() {
   });
 }
 
+/* ------------------------------------------------------------
+   On compare le NOM du programme, pas toute la ligne.
+
+   `ps -Ao comm=` rend le chemin complet, et on cherchait « rekordbox »
+   n'importe ou dedans. Or rekordboxAgent (le service de synchro de
+   rekordbox) se lance a l'ouverture de session et tourne en
+   permanence : Liaison croyait rekordbox ouvert toute la journee —
+   widget affiche au demarrage, et le reseau des platines jamais
+   considere comme libre. Meme piege pour les assistants, les
+   services de mise a jour et les rapporteurs de plantage.
+   ------------------------------------------------------------ */
+const ANNEXE = /(agent|helper|updater|update|crashpad|crash|service|daemon|installer|uninstall)/i;
+function nomDuProgramme(ligne) {
+  let x = String(ligne || '').trim();
+  if (x.startsWith('"')) x = x.slice(1, x.indexOf('"', 1) > 0 ? x.indexOf('"', 1) : undefined);   /* tasklist /fo csv */
+  x = x.split(/[\\/]/).pop();
+  return x.replace(/\.exe$/i, '').trim();
+}
 function detectFrom(lines) {
-  const hay = lines.join('\n');
+  const noms = (lines || []).map(nomDuProgramme).filter(n => n && !ANNEXE.test(n));
   const found = [];
   for (const app of APPS) {
-    if (app.match.some(re => re.test(hay))) found.push(app);
+    if (noms.some(n => app.match.some(re => re.test(n)))) found.push(app);
   }
   return found;
 }
@@ -59,7 +77,13 @@ class AppWatcher extends EventEmitter {
     this.timer = null;
   }
   async tick() {
-    const lines = await listProcesses();
+    /* Un « tasklist » lent sous Windows (plusieurs secondes sur une
+       machine chargee) laissait l'intervalle relancer un releve par
+       dessus le precedent ; ils pouvaient revenir dans le desordre. */
+    if (this._enCours) return;
+    this._enCours = true;
+    let lines;
+    try { lines = await listProcesses(); } finally { this._enCours = false; }
     /* ------------------------------------------------------------
        Un releve rate ne ferme rien.
 

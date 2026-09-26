@@ -22,9 +22,7 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 
-const unesc = s => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-  .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-  .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(+d));
+const unesc = s => require('./library').xmlDecode(s);
 
 /* Un identifiant lisible et stable, derive du nom. */
 function slug(s) {
@@ -53,7 +51,7 @@ function pathKey(p) {
    champ « ptrk » : le chemin, en UTF-16 big endian. */
 function seratoCrateFiles() {
   const out = [];
-  for (const b of [path.join(os.homedir(), 'Music'), path.join(os.homedir(), 'Musique'), path.join(os.homedir(), 'Musik')]) {
+  for (const b of require('./volumes').dossiersMusique()) {
     const d = path.join(b, '_Serato_', 'Subcrates');
     let list = [];
     try { list = fs.readdirSync(d); } catch (e) { continue; }

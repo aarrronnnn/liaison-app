@@ -66,6 +66,8 @@ const DEFAULTS = {
      Aucun envoi dans les deux cas — la valeur par defaut est le
      silence. */
   rapportPannes: undefined,
+  /* 'auto' suit la langue du systeme ; 'fr' ou 'en' la forcent. */
+  langue: 'auto',
   libraryMode: null, libraryPath: null,
   /* les dossiers que le DJ a montres du doigt : des sources EN PLUS */
   dossiers: [],
@@ -125,6 +127,33 @@ const lesSoirees = () => (soirees || (soirees = new Soirees(SOIREES())));
 /* Ce qu'on proposait juste avant le changement de morceau : c'est
    l'etiquette de l'exemple qu'on est en train d'observer. */
 let dernieresPropositions = [];
+let serie = 0, prisCeSoir = 0, serieSoiree = null;   /* les titres proposes que le DJ a joues */
+
+/* ------------------------------------------------------------
+   « BELLE SOIREE. »
+
+   Le logiciel de mix se ferme apres un vrai set : une notification,
+   une seule, avec ce que la nuit a donne. C'est le moment ou le DJ
+   range son casque — un chiffre juste, pas un rapport.
+   ------------------------------------------------------------ */
+let bonneSoireeDite = null;
+function direBonneSoiree() {
+  try {
+    const s = setlog && setlog.current;
+    if (!s || !Array.isArray(s.played) || s.played.length < 8 || bonneSoireeDite === s.id) return;
+    const { Notification } = require('electron');
+    if (!Notification || !Notification.isSupported || !Notification.isSupported()) return;
+    bonneSoireeDite = s.id;
+    const p = s.played;
+    const min = Math.max(0, Math.round(((p[p.length - 1].at || 0) - (p[0].at || 0)) / 60000));
+    const duree = Math.floor(min / 60) + ' h ' + String(min % 60).padStart(2, '0');
+    const en = langue() === 'en';
+    const bouts = [p.length + (en ? ' tracks' : ' titres'), duree];
+    if (prisCeSoir > 0 && serieSoiree === s.id)
+      bouts.push(prisCeSoir + (en ? ' Liaison transition' + (prisCeSoir > 1 ? 's' : '') : ' enchaînement' + (prisCeSoir > 1 ? 's' : '') + ' Liaison'));
+    new Notification({ title: en ? 'Great night.' : 'Belle soirée.', body: bouts.join(' · '), silent: true }).show();
+  } catch (e) { /* une notification ratee ne doit rien casser */ }
+}
 /* ------------------------------------------------------------
    Ce que la salle reclame — la « tendance », mesuree ici et ce soir.
 
@@ -431,9 +460,157 @@ function poserAuDessus(w) {
   } catch (e) {}
 }
 
+/* Aucune fenetre ne doit jamais quitter sa page. Par defaut, Chromium
+   NAVIGUE vers un fichier qu'on lache dessus : un morceau glisse depuis
+   le Finder, ou une suggestion lachee a cote du deck, et le widget
+   etait remplace par un lecteur audio — plus de suggestions, plus de
+   bouton pour revenir, en plein set. Les pages sont chargees par
+   loadFile, qui ne passe pas par ici ; tout le reste est refuse. */
+/* Les dossiers Musique et Documents tels que le systeme les connait —
+   ils suivent une redirection OneDrive ou vers un autre disque. Poses
+   dans l'environnement avant la creation de tout fil, qui en herite. */
+try {
+  if (!process.env.LIAISON_MUSIQUE) process.env.LIAISON_MUSIQUE = app.getPath('music');
+  if (!process.env.LIAISON_DOCUMENTS) process.env.LIAISON_DOCUMENTS = app.getPath('documents');
+} catch (e) { /* hors Electron (essais) : les emplacements classiques suffisent */ }
+
+/* ============================================================
+   LA LANGUE.
+
+   « auto » suit le systeme : francais si le Mac ou le PC est en
+   francais, anglais sinon. Le DJ peut forcer l'une ou l'autre dans
+   les reglages. Les pages recoivent la langue dans leur adresse
+   (?lang=en) et se traduisent elles-memes (ui/i18n.js) ; ce qui est
+   natif — menus, barre de menus, boites de dialogue — passe par tr().
+   ============================================================ */
+function langue() {
+  const c = config && config.langue;
+  if (c === 'fr' || c === 'en') return c;
+  let l = '';
+  try { l = (app.getPreferredSystemLanguages && app.getPreferredSystemLanguages()[0]) || app.getLocale() || ''; } catch (e) {}
+  return /^fr\b/i.test(l) ? 'fr' : 'en';
+}
+let _traducteur = null;
+function tr(s) {
+  if (s == null || langue() !== 'en') return s;
+  try {
+    if (!_traducteur) _traducteur = require('./ui/i18n.js').creer(require('./ui/i18n-en.js'));
+    const r = _traducteur.traduire(String(s));
+    return r == null ? s : r;
+  } catch (e) { return s; }
+}
+function trMenu(modele) {
+  return (modele || []).map(it => {
+    if (!it || typeof it !== 'object') return it;
+    const o = Object.assign({}, it);
+    /* Un element systeme (role) garde le libelle anglais d'Electron :
+       « Reduire » veut dire « Minimize » dans Fenetre et « Zoom Out »
+       dans Affichage — le role, lui, ne se trompe pas. */
+    if (o.role && langue() === 'en') delete o.label;
+    else if (typeof o.label === 'string') o.label = tr(o.label);
+    if (typeof o.toolTip === 'string') o.toolTip = tr(o.toolTip);
+    if (Array.isArray(o.submenu)) o.submenu = trMenu(o.submenu);
+    return o;
+  });
+}
+function trDialogue(o) {
+  if (!o || typeof o !== 'object' || langue() !== 'en') return o;
+  const c = Object.assign({}, o);
+  for (const k of ['title', 'message', 'detail', 'buttonLabel', 'checkboxLabel', 'nameFieldLabel'])
+    if (typeof c[k] === 'string') c[k] = tr(c[k]);
+  if (Array.isArray(c.buttons)) c.buttons = c.buttons.map(tr);
+  if (Array.isArray(c.filters)) c.filters = c.filters.map(f => Object.assign({}, f, { name: tr(f.name) }));
+  return c;
+}
+/* Chaque boite de dialogue et chaque menu passe par la traduction,
+   sans toucher les dizaines d'appels existants. */
+(function () {
+  const d = dialog;
+  for (const f of ['showMessageBox', 'showMessageBoxSync', 'showOpenDialog', 'showOpenDialogSync',
+                   'showSaveDialog', 'showSaveDialogSync']) {
+    const orig = d[f];
+    if (typeof orig !== 'function') continue;
+    d[f] = function () {
+      const a = Array.prototype.slice.call(arguments);
+      const i = a[0] && typeof a[0].isDestroyed === 'function' ? 1 : 0;   /* (fenetre, options) ou (options) */
+      a[i] = trDialogue(a[i]);
+      return orig.apply(d, a);
+    };
+  }
+  const eb = d.showErrorBox;
+  if (typeof eb === 'function') d.showErrorBox = (t, c) => eb.call(d, tr(t), tr(c));
+  const bft = Menu && Menu.buildFromTemplate;
+  if (typeof bft === 'function') Menu.buildFromTemplate = modele => bft.call(Menu, trMenu(modele));
+})();
+/* L'adresse d'une page, avec sa langue. */
+function avecLangue(opts) {
+  const o = Object.assign({}, opts || {});
+  const l = 'lang=' + langue();
+  o.search = o.search ? o.search + '&' + l : l;
+  return o;
+}
+function changerLangue() {
+  _traducteur = null;
+  for (const [w, f] of [[widget, 'widget.html'], [settings, 'settings.html']]) {
+    try { if (w && !w.isDestroyed()) w.loadFile(path.join(__dirname, 'ui', f), avecLangue()); } catch (e) {}
+  }
+  try { if (licence && !licence.isDestroyed()) licence.close(); } catch (e) {}
+  try { refreshTray(); } catch (e) {}
+  try { buildMenu(); } catch (e) {}
+}
+
+app.on('web-contents-created', (_e, wc) => {
+  wc.on('will-navigate', e => e.preventDefault());
+  try { wc.setWindowOpenHandler(() => ({ action: 'deny' })); } catch (e) {}
+});
+
+/* ============================================================
+   LE WIDGET RESTE TOUJOURS A L'ECRAN.
+
+   Il s'ouvrait toujours sur l'ecran principal, a une position fixe,
+   et ne regardait jamais la place disponible. Sur un 1366×768, ou un
+   ecran 1080p a 150 % (680 px utiles), le bas du widget — recherche,
+   pied, bouton SOS — passait sous la barre des taches. Un ecran
+   externe debranche le laissait dans le vide, et le raccourci de
+   secours le rendait « visible » la ou personne ne pouvait le voir.
+
+   Toute position passe maintenant par dansEcran() : elle est
+   ramenee dans la zone utile de l'ecran le plus proche, hauteur
+   comprise.
+   ============================================================ */
+const MARGE_ECRAN = 8;
+function zoneUtile(b) {
+  try { return screen.getDisplayMatching(b).workArea; }
+  catch (e) { return screen.getPrimaryDisplay().workArea; }
+}
+function dansEcran(b) { return require('./ecran').ramener(b, zoneUtile(b), MARGE_ECRAN); }
+function ramenerWidget() {
+  if (!widget || widget.isDestroyed()) return;
+  try {
+    const b = widget.getBounds(), n = dansEcran(b);
+    if (n.x !== b.x || n.y !== b.y || n.height !== b.height) widget.setBounds(n);
+    widget.webContents.send('ecran', { max: zoneUtile(widget.getBounds()).height - 2 * MARGE_ECRAN });
+  } catch (e) {}
+}
+let _posTimer = null;
+function retenirPosition() {
+  clearTimeout(_posTimer);
+  _posTimer = setTimeout(() => {
+    if (!widget || widget.isDestroyed()) return;
+    const b = widget.getBounds();
+    config.widgetPos = { x: b.x, y: b.y };
+    saveConfig();
+  }, 800);
+}
+
 function createWidget() {
   const d = screen.getPrimaryDisplay().workArea;
   const mac = process.platform === 'darwin';
+  /* La ou le DJ l'a laisse la derniere fois — s'il y a encore un
+     ecran a cet endroit. Sinon, en haut a droite de l'ecran principal. */
+  const p0 = config.widgetPos && Number.isFinite(config.widgetPos.x) && Number.isFinite(config.widgetPos.y)
+    ? dansEcran({ x: config.widgetPos.x, y: config.widgetPos.y, width: 344, height: 400 })
+    : dansEcran({ x: d.x + d.width - 372, y: d.y + 40, width: 344, height: 400 });
   widget = new BrowserWindow({
     /* 548 px etait la hauteur de depart ET la hauteur definitive :
        l'ajustement automatique ne s'est jamais declenche (le corps
@@ -443,7 +620,7 @@ function createWidget() {
        eviter que le widget s'ouvre grand puis se retracte sous les
        yeux du DJ. */
     width: 344, height: 400,
-    x: d.x + d.width - 372, y: d.y + 40,
+    x: p0.x, y: p0.y,
     frame: false, resizable: false, maximizable: false, fullscreenable: false,
     /* « panel » : le seul type de fenetre qui flotte au-dessus d'une
        application en plein ecran sur macOS. Ailleurs, le type par
@@ -454,11 +631,12 @@ function createWidget() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   poserAuDessus(widget);
-  widget.loadFile(path.join(__dirname, 'ui', 'widget.html'));
+  widget.loadFile(path.join(__dirname, 'ui', 'widget.html'), avecLangue());
   /* A chaque affichage : le reglage se perd au retour d'un
      masquage ou d'un changement d'espace. */
   widget.on('show', () => poserAuDessus(widget));
   widget.on('closed', () => { widget = null; });
+  widget.on('moved', retenirPosition);
   widget.on('close', e => { if (!app.isQuitting) { e.preventDefault(); widget.hide(); } });
 }
 
@@ -471,6 +649,7 @@ function poserRaccourci() {
     globalShortcut.register(combo, () => {
       if (!widget || widget.isDestroyed()) createWidget();
       poserAuDessus(widget);
+      ramenerWidget();                 /* le filet doit ramener le widget LA OU ON LE VOIT */
       widget.show();
       widget.focus();
     });
@@ -479,7 +658,7 @@ function poserRaccourci() {
 function openLicence(view) {
   if (licence && !licence.isDestroyed()) {
     licence.focus();
-    if (view) licence.loadFile(path.join(__dirname, 'ui', 'licence.html'), { search: 'v=' + view });
+    if (view) licence.loadFile(path.join(__dirname, 'ui', 'licence.html'), avecLangue({ search: 'v=' + view }));
     return;
   }
   licence = new BrowserWindow({
@@ -488,32 +667,44 @@ function openLicence(view) {
     backgroundColor: '#EDEDEF', show: false,
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
-  licence.loadFile(path.join(__dirname, 'ui', 'licence.html'), view ? { search: 'v=' + view } : undefined);
+  licence.loadFile(path.join(__dirname, 'ui', 'licence.html'), avecLangue(view ? { search: 'v=' + view } : undefined));
   licence.once('ready-to-show', () => licence.show());
   licence.on('closed', () => { licence = null; });
 }
 
 function openSettings() {
   if (settings && !settings.isDestroyed()) { settings.focus(); return; }
+  /* 940×720 ne tient pas sur un ecran de 1366×768 ou a 150 % : la
+     barre de titre passait au-dessus de l'ecran. */
+  const zs = screen.getPrimaryDisplay().workArea;
   settings = new BrowserWindow({
-    width: 940, height: 720, title: 'Liaison — reglages', backgroundColor: '#EDEDEF',
+    width: Math.max(640, Math.min(940, zs.width - 24)), height: Math.max(460, Math.min(720, zs.height - 24)),
+    minWidth: 640, minHeight: 460, center: true,
+    title: 'Liaison — reglages', backgroundColor: '#EDEDEF',
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
-  settings.loadFile(path.join(__dirname, 'ui', 'settings.html'));
+  settings.loadFile(path.join(__dirname, 'ui', 'settings.html'), avecLangue());
   settings.on('closed', () => { settings = null; });
 }
 
 /* ---------------- bibliotheque ---------------- */
 async function importLibrary(mode, p) {
-  const onProgress = x => send('progress', x);
-  let tracks = [];
-  if (mode === 'rekordbox') tracks = lib.parseRekordboxXML(p);
-  else tracks = await lib.scanFolder(p, onProgress, { cache: SCAN() });
-  /* Meme regle qu'a la detection automatique : ce qui n'est plus sur
-     le disque ne doit pas se retrouver dans une proposition. */
-  const sansDbl = lib.dedoublonner(tracks);
-  const elague = lib.elaguerDisparus(sansDbl.tracks);
-  library = lib.finalize(elague.gardes);
+  /* Le choix manuel passe devant la surveillance automatique : sans
+     ca, l'ancien surveillant relisait sa base par-dessus le fichier
+     que le DJ venait de choisir. Et une relecture deja en cours est
+     attendue plutot que doublee. */
+  if (libraryWatcher) { try { libraryWatcher.stop(); } catch (e) {} libraryWatcher = null; }
+  for (let i = 0; importing && i < 600; i++) await new Promise(r => setTimeout(r, 100));
+  importing = true;
+  try {
+  const lu = await lireSources([{ kind: mode === 'rekordbox' ? 'rekordbox' : 'folder', path: p }]);
+  const r0 = lu.rapports[0];
+  if (r0 && r0.erreur && !lu.library.length) throw new Error(r0.erreur);
+  library = lu.library;
+  if (current && current.id != null) {
+    const frais = library.find(t => t.id === current.id);
+    if (frais) current = frais;
+  }
   repCentre = repertoire.centre(library);
   elaguerStructures();
   indexChemins = null;
@@ -525,9 +716,70 @@ async function importLibrary(mode, p) {
   /* la bibliotheque est jouable des maintenant ; l'analyse suit */
   startAnalysis();
   return library.length;
+  } finally { importing = false; }
 }
 
 /* ---------------- decouverte automatique ---------------- */
+/* ============================================================
+   Lire les sources dans un fil a part, avec un repli sur place.
+   ============================================================ */
+let importFil = null, importSeq = 0;
+function lireSourcesIci(ordered) {
+  return (async () => {
+    const lists = [], rapports = [];
+    for (const src of ordered) {
+      let l = null, err = null;
+      try { l = await autolib.readSource(src, x => send('progress', x), { cache: SCAN() }); }
+      catch (e) { err = e.message; }
+      lists.push(l || []);
+      rapports.push({ kind: src.kind, path: src.path, manuel: !!src.manuel, label: src.label, erreur: err,
+        lus: (l || []).length,
+        exemples: (l || []).slice(0, 3).map(t => ({ path: t.path,
+          existe: (() => { try { return !!t.path && fs.statSync(t.path).isFile(); } catch (e) { return false; } })() })) });
+    }
+    const d = libmod.dedoublonner(autolib.merge(lists));
+    const e = libmod.elaguerDisparus(d.tracks);
+    return { library: libmod.finalize(e.gardes), rapports, replies: d.replies || 0,
+             disparus: e.disparus.length, horsLigne: e.horsLigne || 0 };
+  })();
+}
+function lireSources(ordered) {
+  let Worker;
+  try { ({ Worker } = require('worker_threads')); } catch (e) { return lireSourcesIci(ordered); }
+  return new Promise(resolve => {
+    let fini = false;
+    const repli = () => { if (fini) return; fini = true; importFil = null; resolve(lireSourcesIci(ordered)); };
+    try {
+      if (!importFil) {
+        const f = path.join(__dirname, 'import-worker.js').replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
+        importFil = new Worker(f);
+        importFil.unref();
+        importFil.on('error', () => { try { importFil.terminate(); } catch (e) {} importFil = null; });
+        importFil.on('exit', () => { importFil = null; });
+      }
+    } catch (e) { return repli(); }
+    const id = ++importSeq;
+    const w = importFil;
+    const onMsg = m => {
+      if (!m || m.id !== id) return;
+      if (m.progress) { send('progress', m.progress); return; }
+      detacher();
+      if (fini) return;
+      if (!m.ok) return repli();
+      fini = true;
+      resolve(m);
+    };
+    const detacher = () => { w.off('message', onMsg); w.off('error', onErr); w.off('exit', onErr); };
+    const onErr = () => { detacher(); repli(); };
+    w.on('message', onMsg);
+    w.on('error', onErr);
+    w.on('exit', onErr);
+    /* Seules des donnees simples traversent : chemins, genre de source. */
+    w.postMessage({ id, cache: SCAN(),
+      sources: ordered.map(s => JSON.parse(JSON.stringify(s))) });
+  });
+}
+
 async function autoImport(preferKind) {
   if (importing) return;
   importing = true;
@@ -581,28 +833,14 @@ async function autoImport(preferKind) {
        Une source qui rend zero n'est pas la meme chose qu'une
        source absente, et ne se repare pas pareil. On les separe.
        ------------------------------------------------------------ */
-    const lists = [];
-    const muettes = [];
-    /* Ce que chaque source a donne, garde pour le diagnostic : sans
-       ca, « 0 titre » ne dit pas LAQUELLE des sources est vide. */
+    /* La lecture lourde (bases, fusion, doublons, fichiers disparus)
+       se fait hors du fil du widget : voir import-worker.js. */
     dernierImport = { quand: Date.now(), sources: [], retires: 0, doublons: 0, horsLigne: 0 };
-    for (const src of ordered) {
-      let l = null, err = null;
-      try { l = await autolib.readSource(src, x => send('progress', x), { cache: SCAN() }); }
-      catch (e) { err = e.message; send('status', { ok: false, msg: src.kind + ' : ' + e.message }); }
-      if (!l || !l.length) muettes.push(src);
-      lists.push(l || []);
-      dernierImport.sources.push({
-        kind: src.kind, path: src.path, manuel: !!src.manuel, erreur: err,
-        lus: (l || []).length,
-        /* trois chemins en exemple, et s'ils designent un fichier :
-           c'est ce qui distingue « base vide » de « chemins faux » */
-        exemples: (l || []).slice(0, 3).map(t => ({
-          path: t.path,
-          existe: (() => { try { return !!t.path && fs.statSync(t.path).isFile(); } catch (e) { return false; } })()
-        }))
-      });
-    }
+    const lu = await lireSources(ordered);
+    dernierImport.sources = lu.rapports.map(r => ({ kind: r.kind, path: r.path, manuel: r.manuel,
+                                                   erreur: r.erreur, lus: r.lus, exemples: r.exemples }));
+    for (const r of lu.rapports) if (r.erreur) send('status', { ok: false, msg: r.kind + ' : ' + r.erreur });
+    const muettes = lu.rapports.filter(r => !r.lus);
     if (muettes.length) {
       send('conseils', [{
         cle: 'source-muette', quand: 'import',
@@ -619,37 +857,12 @@ async function autoImport(preferKind) {
         repli: 'Les autres sources, elles, ont ete lues normalement.'
       }]);
     }
-    const merged = autolib.merge(lists);
-    /* ------------------------------------------------------------
-       Ce que le DJ a supprime, retire de la bibliotheque.
-
-       Les bases des logiciels de mix ne se vident pas toutes
-       seules — un export rekordbox est une photo prise un jour
-       donne, et iTunes garde une entree pour un fichier qu'on a
-       mis a la corbeille il y a six mois. Liaison lisait donc des
-       lignes qui ne designent plus rien, et les proposait toute la
-       nuit.
-
-       On verifie une fois, a l'import : si le volume repond et que
-       le fichier n'y est pas, il est parti. On le dit — un DJ qui
-       voit « 340 titres retires » comprend tout de suite que son
-       export date ; s'il n'en voyait rien, il croirait a un bug.
-       ------------------------------------------------------------ */
-    /* ------------------------------------------------------------
-       Le meme morceau dans deux bibliotheques.
-
-       merge() a deja replie ce qui partage un chemin. Ici on replie
-       ce qui partage une chanson : deux FICHIERS differents, meme
-       artiste, meme titre, meme duree. C'est le cas du DJ qui a
-       iTunes ET rekordbox — iTunes copie dans son dossier media
-       pendant que rekordbox garde l'original.
-       ------------------------------------------------------------ */
-    const sansDoublons = libmod.dedoublonner(merged);
+    const sansDoublons = { replies: lu.replies };
+    const elagage = { disparus: { length: lu.disparus }, horsLigne: lu.horsLigne, gardes: lu.library };
     if (sansDoublons.replies)
       send('status', { ok: true, msg: sansDoublons.replies +
         ' doublon' + (sansDoublons.replies > 1 ? 's' : '') + ' replie' +
         (sansDoublons.replies > 1 ? 's' : '') + ' (meme morceau dans deux bibliotheques)' });
-    const elagage = libmod.elaguerDisparus(sansDoublons.tracks);
     if (dernierImport) {
       dernierImport.retires = elagage.disparus.length;
       dernierImport.doublons = sansDoublons.replies || 0;
@@ -660,11 +873,15 @@ async function autoImport(preferKind) {
       send('status', { ok: true, msg: elagage.disparus.length +
         ' titre' + (elagage.disparus.length > 1 ? 's' : '') + ' retire' +
         (elagage.disparus.length > 1 ? 's' : '') + ' : fichier introuvable' });
-    /* On ne fait plus attendre le DJ : la base du logiciel donne
-       deja titre, artiste, BPM et tonalite, et c'est tout ce qu'il
-       faut pour proposer un enchainement. L'energie et le timbre
-       arrivent ensuite, morceau par morceau, sans bloquer. */
-    library = libmod.finalize(elagage.gardes);
+    library = lu.library;
+    /* Le morceau en cours est rattache a sa nouvelle fiche. Sans ca,
+       `current` restait l'ancien objet : s'il n'etait pas encore
+       analyse, l'en-tete gardait « BPM … » et les suggestions
+       partaient d'un morceau fantome jusqu'au titre suivant. */
+    if (current && current.id != null) {
+      const frais = library.find(t => t.id === current.id);
+      if (frais) current = frais;
+    }
     repCentre = repertoire.centre(library);
     indexChemins = null;
     /* La base du logiciel de mix est reecrite en pleine soiree des
@@ -684,7 +901,7 @@ async function autoImport(preferKind) {
     startAnalysis();
 
     if (libraryWatcher) libraryWatcher.stop();
-    libraryWatcher = autolib.watch(ordered, () => autoImport(preferKind));
+    libraryWatcher = autolib.watch(ordered, () => autoImport(preferKind).catch(e => console.warn('relecture :', e && e.message)));
   } finally { importing = false; }
 }
 
@@ -752,6 +969,7 @@ function startAnalysis() {
       scheduleResuggest();
     }
   });
+  reglerCadence();
   const r = analyse.charger(library);
   reinscrireHors();
   send('analysis', { phase: 'analyse', done: 0, total: r.aFaire, restants: r.aFaire,
@@ -902,6 +1120,18 @@ function ensureStructure(track, priorite) {
       structures.set(track.id, hit);
       return;
     }
+  }
+  /* Un mix enregistre de deux heures se decode en ~320 Mo de
+     memoire, par fil : sur un portable de 8 Go, trois a la fois
+     suffisaient a faire ramer le logiciel de mix. Au-dela de vingt
+     minutes, ce n'est pas un titre qu'on enchaine a la mesure pres :
+     reperes estimes, sans rien decoder. */
+  if (track.duration > 1200) {
+    try {
+      structures.set(track.id, require('./structure').structureEstimee(track.duration, track.bpm, 'fichier tres long'));
+      scheduleStructRefresh();
+    } catch (e) {}
+    return;
   }
   structBusy.add(track.id);
   structPool.run(track.path, track.bpm, { priorite: priorite || 0, cle: track.id })
@@ -1698,6 +1928,27 @@ function setCurrent(track, how) {
   } catch (e) { /* apprendre ne doit jamais empecher de jouer */ }
 
   /* ------------------------------------------------------------
+     « BIEN VU. »
+
+     Quand le DJ lance l'un des titres que Liaison proposait, le
+     widget le salue d'un signe discret — une coche, et la serie en
+     cours. C'est le petit plaisir du bon enchainement, rendu
+     visible : il n'interrompt rien, il ne clignote pas, et il ne
+     s'affiche jamais quand le DJ a choisi autre chose (on ne juge
+     pas ses choix, on celebre les notres quand ils tombent juste).
+     ------------------------------------------------------------ */
+  try {
+    if (current && track && current.id !== track.id) {
+      const soir = setlog && setlog.current ? setlog.current.id : null;
+      if (soir !== serieSoiree) { serieSoiree = soir; serie = 0; prisCeSoir = 0; }
+      const rang = (dernieresPropositions || []).findIndex(c => c && c.track && c.track.id === track.id);
+      if (rang >= 0) { serie++; prisCeSoir++; }
+      else serie = 0;
+      send('pris', { pris: rang >= 0, rang: rang, serie: serie, ceSoir: prisCeSoir });
+    }
+  } catch (e) {}
+
+  /* ------------------------------------------------------------
      LES FILTRES D'INSTANT RETOMBENT ICI.
 
      « Une fois que le son est joue, les filtres retournent par
@@ -1762,8 +2013,12 @@ function setCurrent(track, how) {
    structure.
    ------------------------------------------------------------ */
 let commentIl = 'auto';
-function envoyerNow() {
-  send('now', current ? {
+/* Une seule forme pour « ce qui tourne ». now:get (widget qui
+   s'ouvre alors qu'un morceau joue deja) renvoyait une version
+   amputee : ni `mesure`, ni `how`, ni `horsBiblio` — l'energie
+   restait sur « … » jusqu'au morceau suivant. */
+function payloadNow() {
+  return current ? {
     id: current.id, title: current.title, artist: current.artist, key: current.key,
     bpm: current.bpm, energy: current.energy, how: commentIl,
     /* ce qu'on sait encore : le DJ doit pouvoir distinguer « pas
@@ -1773,8 +2028,9 @@ function envoyerNow() {
     tempoDeduit: !!current.bpmDeduit, tempoCorrige: !!current.bpmCorrige,
     tonaliteDeduite: !!current.keyDeduite, tonaliteCorrigee: !!current.keyCorrigee,
     structure: structures.get(current.id) || null
-  } : null);
+  } : null;
 }
+function envoyerNow() { send('now', payloadNow()); }
 
 /* ---------------- source now-playing ---------------- */
 now.on('text', text => {
@@ -1967,12 +2223,14 @@ ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(),
    et desormais chaque changement de hauteur — relancait un calcul
    complet de suggestions sur toute la bibliotheque. Sur 22 000
    titres, ca se sent au doigt. */
-const DECOR = ['theme', 'densite', 'opacity'];
+const DECOR = ['theme', 'densite', 'opacity', 'langue'];
 
 ipcMain.handle('config:set', (e, patch) => {
   const p = patch || {};
+  const avantLangue = langue();
   Object.assign(config, p); saveConfig();
   if (p.source) now.start(config.source, config.sourceOpts);
+  if ('langue' in p && langue() !== avantLangue) setTimeout(changerLangue, 50);
   const clefs = Object.keys(p);
   if (!clefs.length || !clefs.every(k => DECOR.includes(k)))
     send('suggestions', computeSuggestions(config.suggestCount));
@@ -2376,11 +2634,7 @@ ipcMain.handle('rescue', () => {
   });
 });
 
-ipcMain.handle('now:get', () => current && {
-  id: current.id, title: current.title, artist: current.artist, key: current.key,
-  bpm: current.bpm, energy: current.energy,
-  structure: structures.get(current.id) || null
-});
+ipcMain.handle('now:get', () => payloadNow());
 
 /* Chargement : on met le titre dans le presse-papier, on ecrit une
    playlist M3U que le logiciel peut ouvrir, et on peut reveler le fichier. */
@@ -2429,6 +2683,7 @@ ipcMain.handle('session:start', async (e, opts) => {
     config.sessionToken = require('crypto').randomBytes(9).toString('base64url');
     saveConfig();
   }
+  if (setlog) setlog.fermerSiPerimee();          /* la soiree de samedi n'est pas celle de ce soir */
   const nouvelleSoiree = !setlog || !setlog.current;
   guests.stop();
   let url;
@@ -2468,11 +2723,39 @@ ipcMain.handle('session:start', async (e, opts) => {
   /* Uniquement quand la soiree commence vraiment. Rouvrir le panneau
      en cours de set n'efface plus ce que les invites ont demande. */
   if (nouvelleSoiree) guests.clear();
+  /* Windows : le pare-feu n'autorise souvent Liaison que sur les
+     reseaux « prives ». Le Wi-Fi d'un club est presque toujours classe
+     « public » : le QR s'affiche, et les telephones ne chargent rien.
+     On le dit une fois, avec le geste qui regle ca. */
+  if (process.platform === 'win32' && !config.pareFeuExplique) {
+    config.pareFeuExplique = true; saveConfig();
+    send('conseils', [{
+      cle: 'pare-feu', quand: 'invites',
+      titre: 'Si les téléphones n\'ouvrent pas la page',
+      texte: 'Windows bloque souvent Liaison sur les réseaux « publics » — c\'est le cas de la plupart des Wi-Fi de salle.',
+      marche: ['Paramètres Windows > Confidentialité et sécurité > Sécurité Windows > Pare-feu',
+               'Autoriser une application via le pare-feu > Liaison : coche « Public »']
+    }]);
+  }
   majTendances();
   return { url: url, qr: await qrPNG(url), share: shareLinks(url, config.sessionName) };
 });
 ipcMain.handle('session:requests', () => requestList());
-ipcMain.handle('share:open', (e, url) => { shell.openExternal(url); return true; });
+/* Ce qui sort vers le navigateur ou une autre app. La page peut
+   demander n'importe quelle adresse : on n'accepte que le web
+   chiffre, le mail et le SMS — jamais file:, un partage reseau
+   Windows (\\hote\x.exe) ou un gestionnaire de protocole. Et la
+   promesse est attrapee : un refus du systeme remontait en « promesse
+   rejetee », avec une boite de dialogue en plein set. */
+function ouvrirDehors(url) {
+  let u;
+  try { u = new URL(String(url || '')); } catch (e) { return false; }
+  const local = u.protocol === 'http:' && /^(localhost|127\.0\.0\.1)$/.test(u.hostname);   /* LIAISON_API de developpement */
+  if (!local && !['https:', 'mailto:', 'sms:'].includes(u.protocol)) return false;
+  shell.openExternal(u.href).catch(e => console.warn('ouverture refusee :', e && e.message));
+  return true;
+}
+ipcMain.handle('share:open', (e, url) => ouvrirDehors(url));
 ipcMain.handle('share:copy', (e, text) => { clipboard.writeText(text); return true; });
 /* ============================================================
    Le glisser-deposer vers le deck.
@@ -2973,7 +3256,7 @@ ipcMain.handle('license:release', async () => {
   return r;
 });
 ipcMain.handle('license:buy', (e, plan) => {
-  shell.openExternal(API + '/acheter/' + (plan || 'resident'));
+  ouvrirDehors(API + '/acheter/' + encodeURIComponent(plan || 'resident'));
   return true;
 });
 
@@ -3053,8 +3336,17 @@ function douceur(t) {
 function poserHauteur(win, cible) {
   if (!win || win.isDestroyed()) return;
   const b = win.getBounds();
-  const h = Math.max(120, Math.min(900, Math.round(cible)));
-  if (Math.abs(b.height - h) < 1) return;
+  const wa = zoneUtile(b);
+  const hMax = Math.max(120, wa.height - 2 * MARGE_ECRAN);
+  const h = Math.max(120, Math.min(900, hMax, Math.round(cible)));
+  /* Grandir vers le bas ne doit pas passer sous la barre des taches :
+     on remonte le widget d'autant, d'un coup, avant d'animer. */
+  const basMax = wa.y + wa.height - MARGE_ECRAN;
+  if (b.y + h > basMax) {
+    b.y = Math.max(wa.y + MARGE_ECRAN, basMax - h);
+    try { win.setBounds(Object.assign({}, b)); } catch (e) {}
+  }
+  if (Math.abs(b.height - h) < 1) return { hauteur: h, max: hMax };
 
   if (tweenHauteur) { clearInterval(tweenHauteur); tweenHauteur = null; }
 
@@ -3062,7 +3354,7 @@ function poserHauteur(win, cible) {
      l'animer ferait vibrer le widget a chaque morceau. */
   if (Math.abs(b.height - h) < HAUTEUR_SEUIL || !win.isVisible()) {
     win.setBounds(Object.assign(b, { height: h }));
-    return;
+    return { hauteur: h, max: hMax };
   }
 
   const depart = b.height;
@@ -3076,6 +3368,7 @@ function poserHauteur(win, cible) {
     if (t >= 1) { clearInterval(tweenHauteur); tweenHauteur = null; }
   }, 16);
   if (tweenHauteur.unref) tweenHauteur.unref();
+  return { hauteur: h, max: hMax };
 }
 
 ipcMain.handle('widget:height', (e, h) => {
@@ -3083,8 +3376,16 @@ ipcMain.handle('widget:height', (e, h) => {
   /* Plancher a 120 px : au cran BARRE le widget n'est plus qu'une
      reglette posee au-dessus des decks, et 220 px l'auraient
      rallonge d'une centaine de pixels de vide noir. */
-  poserHauteur(from || widget, h);
+  return poserHauteur(from || widget, h) || null;
 });
+/* Un ecran branche, debranche, ou une mise a l'echelle changee : le
+   widget est ramene dans la zone visible. */
+function ecouterEcrans() {
+  try {
+    for (const ev of ['display-removed', 'display-added', 'display-metrics-changed'])
+      screen.on(ev, () => setTimeout(ramenerWidget, 300));
+  } catch (e) {}
+}
 
 /* ---------------- barre de menus ---------------- */
 function buildTray() {
@@ -3098,7 +3399,7 @@ function refreshTray() {
   if (!tray) return;
   const running = watcher.current();
   const label = running.length ? running.map(a => a.label).join(', ') : 'Aucun logiciel de mix';
-  tray.setToolTip('Liaison — ' + label);
+  tray.setToolTip(tr('Liaison — ' + label));
   tray.setContextMenu(Menu.buildFromTemplate([
     { label: label, enabled: false },
     { label: library.length ? library.length + ' titres prets' : 'Bibliotheque en cours…', enabled: false },
@@ -3109,7 +3410,7 @@ function refreshTray() {
     { label: 'Licence…', click: () => openLicence() },
     { label: 'Reglages…', click: openSettings },
     { type: 'separator' },
-    { label: 'Relire la bibliotheque', click: () => autoImport(activeApp && activeApp.librarySource) },
+    { label: 'Relire la bibliotheque', click: () => autoImport(activeApp && activeApp.librarySource).catch(e => console.warn('import :', e && e.message)) },
     /* Un testeur qui a vu quelque chose d'anormal doit pouvoir
        nous envoyer le journal sans avoir a le chercher dans un
        dossier systeme cache. Deux clics depuis la barre de menus. */
@@ -3127,8 +3428,12 @@ function refreshTray() {
 function wireWatcher() {
   watcher.on('open', async app_ => {
     activeApp = app_;
+    reglerCadence();
     send('app', { id: app_.id, label: app_.label, open: true });
-    if (config.autoWidget && widget) { widget.show(); widget.setAlwaysOnTop(true, 'screen-saver'); }
+    /* showInactive : le widget apparait sans prendre le clavier au
+       logiciel de mix (un raccourci tape a ce moment partait dans
+       le vide). */
+    if (config.autoWidget && widget) { widget.showInactive(); widget.setAlwaysOnTop(true, 'screen-saver'); }
     const kind = app_.nowSource;
     config.source = kind; saveConfig();
     const opts = kind === 'prolink'
@@ -3142,7 +3447,7 @@ function wireWatcher() {
        est libre, les fichiers ouverts sinon. C'est ce qui permet de
        rendre le port sans laisser le widget muet. */
     if (kind === 'prolink') startRekordboxFichiers(); else stopRekordboxFichiers();
-    if (config.autoLibrary && !library.length) await autoImport(app_.librarySource);
+    if (config.autoLibrary && !library.length) { try { await autoImport(app_.librarySource); } catch (e) { console.warn('import :', e && e.message); } }
     refreshTray();
   });
   /* ------------------------------------------------------------
@@ -3160,8 +3465,12 @@ function wireWatcher() {
      ------------------------------------------------------------ */
   async function reprendre(app_) {
     activeApp = app_;
+    reglerCadence();
     send('app', { id: app_.id, label: app_.label, open: true });
-    if (config.autoWidget && widget) { widget.show(); widget.setAlwaysOnTop(true, 'screen-saver'); }
+    /* showInactive : le widget apparait sans prendre le clavier au
+       logiciel de mix (un raccourci tape a ce moment partait dans
+       le vide). */
+    if (config.autoWidget && widget) { widget.showInactive(); widget.setAlwaysOnTop(true, 'screen-saver'); }
     const kind = app_.nowSource;
     config.source = kind; saveConfig();
     const opts = kind === 'prolink'
@@ -3198,7 +3507,10 @@ function wireWatcher() {
         return;
       }
       activeApp = null;
+      reglerCadence();
       if (config.autoWidget && widget) widget.hide();
+      setTimeout(prevenirPanneDifferee, 1500);
+      direBonneSoiree();
     }
     refreshTray();
   });
@@ -3239,7 +3551,7 @@ function buildMenu() {
   modele.push({
     label: 'Fichier',
     submenu: [
-      { label: 'Relire ma bibliothèque', click: () => autoImport(activeApp && activeApp.librarySource) },
+      { label: 'Relire ma bibliothèque', click: () => autoImport(activeApp && activeApp.librarySource).catch(e => console.warn('import :', e && e.message)) },
       { label: 'Choisir un dossier de musique…', click: () => openSettings() },
       { type: 'separator' },
       ...(mac ? [{ label: 'Fermer la fenêtre', role: 'close' }]
@@ -3274,9 +3586,8 @@ function buildMenu() {
       { label: 'Agrandir', role: 'zoomIn' },
       { label: 'Réduire', role: 'zoomOut' },
       { type: 'separator' },
-      { label: 'Plein écran', role: 'togglefullscreen' },
-      { label: 'Outils de développement', role: 'toggleDevTools' }
-    ]
+      { label: 'Plein écran', role: 'togglefullscreen' }
+    ].concat(app.isPackaged ? [] : [{ label: 'Outils de développement', role: 'toggleDevTools' }])
   });
 
   modele.push({
@@ -3293,10 +3604,10 @@ function buildMenu() {
   modele.push({
     label: 'Aide',
     submenu: [
-      { label: 'Première ouverture', click: () => shell.openExternal(API + '/premiere-ouverture.html') },
-      { label: 'Site de Liaison', click: () => shell.openExternal(API) },
+      { label: 'Première ouverture', click: () => ouvrirDehors(API + '/premiere-ouverture.html') },
+      { label: 'Site de Liaison', click: () => ouvrirDehors(API) },
       { type: 'separator' },
-      { label: 'Nous écrire', click: () => shell.openExternal('mailto:contact@liaison.dj?subject=Liaison%20' + app.getVersion()) }
+      { label: 'Nous écrire', click: () => ouvrirDehors(API + '/contact.html?v=' + encodeURIComponent(app.getVersion())) }
     ]
   });
 
@@ -3382,6 +3693,7 @@ app.whenReady().then(async () => {
   license.ensureTrial();
   structCache = new StructureCache(STRUCT());
   createWidget();
+  ecouterEcrans();
   if (config.autoWidget) widget.hide();          // le widget attend son logiciel
   buildTray();
   wireWatcher();
@@ -3391,10 +3703,7 @@ app.whenReady().then(async () => {
     try { app.setLoginItemSettings({ openAtLogin: true, openAsHidden: true }); } catch (e) {}
   }
 
-  license.refresh(false).then(() => {
-    send('license', license.status());
-    refreshTray();
-  });
+  rafraichirLicence();
 
   /* La file des incidents part ICI, et nulle part ailleurs : au
      demarrage, avant qu'un logiciel de mix soit ouvert. C'est le
@@ -3409,7 +3718,7 @@ app.whenReady().then(async () => {
     license._save();
     openLicence('welcome');
   }
-  if (config.autoLibrary) autoImport().then(refreshTray);
+  if (config.autoLibrary) autoImport().then(refreshTray).catch(e => console.warn('import :', e && e.message));
   else if (config.libraryPath) importLibrary(config.libraryMode, config.libraryPath)
     .then(refreshTray)
     /* Le fichier a pu etre deplace ou reexporte depuis la derniere fois.
@@ -3488,7 +3797,35 @@ ipcMain.handle('tarifs:get', async () => {
   return tarifsCache;
 });
 
+/* La licence en cache vaut 30 jours. Elle n'etait revalidee qu'au
+   demarrage : un Mac qui dort au lieu de s'eteindre garde Liaison
+   ouvert des semaines, et au 31e jour un client qui paie passait
+   en « essai termine ». refresh(false) ne touche le reseau qu'une
+   fois par jour au plus ; l'appeler toutes les heures ne coute rien. */
+/* Un morceau d'analyse a la fois pendant un set ou sur batterie :
+   la musique passe avant (voir AnalysisService.cadence). */
+function surBatterie() {
+  try { return !!(powerMonitor.isOnBatteryPower && powerMonitor.isOnBatteryPower()); } catch (e) { return false; }
+}
+function reglerCadence() {
+  try { if (analyse) analyse.setCadence(activeApp || surBatterie() ? 1 : 0); } catch (e) {}
+}
+try {
+  powerMonitor.on('on-battery', reglerCadence);
+  powerMonitor.on('on-ac', reglerCadence);
+} catch (e) {}
+
+function rafraichirLicence() {
+  license.refresh(false).then(r => {
+    if (r && r.skipped) return;
+    send('license', license.status());
+    refreshTray();
+  }).catch(e => console.warn('licence :', e && e.message));
+}
+
 function regarderLEssai() {
+  rafraichirLicence();
+  try { if (setlog) setlog.fermerSiPerimee(); } catch (e) {}
   try {
     /* D'abord la prolongation : elle change trialLeft, donc elle doit
        etre decidee avant qu'on lise l'etat pour les deux annonces. */
@@ -3580,7 +3917,7 @@ ipcMain.handle('maj:etat', async () => {
    ============================================================ */
 ipcMain.handle('maj:ouvrir', async () => {
   const page = (derniereMaj && derniereMaj.page) || 'https://liaisondj.app/telecharger';
-  shell.openExternal(page);
+  if (!ouvrirDehors(page)) ouvrirDehors('https://liaisondj.app/telecharger');
 
   /* En pleine soiree, on ne propose rien du tout : une boite de
      dialogue par-dessus la cabine serait pire que le probleme.
@@ -3667,6 +4004,26 @@ function noterPanne(quoi, err) {
     if (inc) incidents.empiler(ecrire, DIR(), inc);
   } catch (e) {}
 
+  if (dejaPrevenu) return;
+  /* En plein set, une boite de dialogue prend le clavier au logiciel
+     de mix. Le DJ est prevenu par un message discret dans le widget ;
+     la fenetre, elle, attend la fermeture du logiciel. */
+  if (activeApp) {
+    if (!panneDifferee) {
+      panneDifferee = true;
+      try { send('toast', { texte: 'Incident noté — Liaison continue. Détails après ton set.' }); } catch (e) {}
+    }
+    return;
+  }
+  prevenirPanne();
+}
+let panneDifferee = false;
+function prevenirPanneDifferee() {
+  if (!panneDifferee || dejaPrevenu) return;
+  panneDifferee = false;
+  prevenirPanne();
+}
+function prevenirPanne() {
   if (dejaPrevenu) return;
   dejaPrevenu = true;
 
@@ -3783,6 +4140,8 @@ app.on('activate', () => {
 try {
   powerMonitor.on('resume', () => {
     setTimeout(() => {
+      rafraichirLicence();
+      try { if (setlog) setlog.fermerSiPerimee(); } catch (e) {}
       try {
         if (activeApp) {
           const kind = activeApp.nowSource;
@@ -3811,12 +4170,36 @@ try {
   });
 } catch (e) { /* powerMonitor n'existe pas partout : ce n'est pas grave */ }
 
+/* Tout ce qui attend d'etre ecrit, ecrit maintenant. Appele a la
+   fermeture normale, mais aussi quand Windows s'eteint ou ferme la
+   session : dans ce cas « before-quit » n'arrive jamais, et les
+   derniers morceaux de la soiree, le gout appris et les resultats
+   d'analyse partaient a la poubelle. */
+function toutEcrire() {
+  try { if (structCache) structCache.save(true); } catch (e) {}
+  try { if (gout) gout.ecrireMaintenant(); } catch (e) {}
+  try { if (setlog) setlog.vider(); } catch (e) {}
+  try { if (journalSale) { journalSale = false; enregistrerJournal(); } } catch (e) {}
+  try { if (analyse && analyse.cache) analyse.cache.save(); } catch (e) {}
+}
+try {
+  powerMonitor.on('shutdown', () => { toutEcrire(); app.isQuitting = true; });
+} catch (e) {}
+app.on('browser-window-created', (_e, w) => {
+  /* Windows : fermeture de session ou arret. On ecrit, puis on laisse
+     la fenetre se fermer (sans ca, le « masquer au lieu de fermer »
+     du widget retardait l'arret du systeme). */
+  try { w.on('session-end', () => { toutEcrire(); app.isQuitting = true; }); } catch (e) {}
+});
+
 app.on('before-quit', () => {
   app.isQuitting = true;
   try { globalShortcut.unregisterAll(); } catch (e) {}
   watcher.stop(); now.stop(); guests.stop();
   if (libraryWatcher) libraryWatcher.stop();
-  if (structCache) structCache.save(true);
+  toutEcrire();
+  try { if (analyse) analyse.stop(); } catch (e) {}
+  try { if (importFil) importFil.terminate(); } catch (e) {}
   /* L'apprentissage attend jusqu'a quatre secondes avant d'ecrire :
      sans ce vidage, une fermeture rapide perdait les derniers reglages
      appris — ou laissait intact ce qu'on venait d'effacer. */

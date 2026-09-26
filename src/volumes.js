@@ -121,4 +121,46 @@ function racinesTraktor(volume, plateforme) {
   return ['/Volumes/' + v, ''];
 }
 
-module.exports = { racineDuVolume, resoudre, estAbsolu, racinesTraktor };
+/* ============================================================
+   LES VRAIS DOSSIERS « MUSIQUE » ET « DOCUMENTS ».
+
+   Windows 11 pousse la sauvegarde OneDrive : Musique et Documents
+   sont alors deplaces dans OneDrive (…\OneDrive\Musique), et un
+   disque D: peut aussi les accueillir. Serato y range _Serato_,
+   Traktor et VirtualDJ y rangent leurs bases. On ne cherchait que
+   sous le dossier personnel : bibliotheque vide, et aucune
+   detection du morceau en cours avec Serato.
+
+   main.js fournit les chemins que le systeme connait (ils suivent
+   la redirection) ; on garde les emplacements classiques en plus.
+   ============================================================ */
+function uniques(l) {
+  const vus = new Set(), out = [];
+  for (const p of l) {
+    if (!p) continue;
+    const k = process.platform === 'win32' || process.platform === 'darwin' ? p.toLowerCase() : p;
+    if (vus.has(k)) continue;
+    vus.add(k); out.push(p);
+  }
+  return out;
+}
+function dossiersMusique() {
+  const os = require('os'), path = require('path');
+  const h = os.homedir(), od = process.env.OneDrive || process.env.OneDriveConsumer || '';
+  return uniques([
+    process.env.LIAISON_MUSIQUE,
+    path.join(h, 'Music'), path.join(h, 'Musique'), path.join(h, 'Musik'),
+    od && path.join(od, 'Music'), od && path.join(od, 'Musique'), od && path.join(od, 'Musik')
+  ]);
+}
+function dossiersDocuments() {
+  const os = require('os'), path = require('path');
+  const h = os.homedir(), od = process.env.OneDrive || process.env.OneDriveConsumer || '';
+  return uniques([
+    process.env.LIAISON_DOCUMENTS,
+    path.join(h, 'Documents'),
+    od && path.join(od, 'Documents')
+  ]);
+}
+
+module.exports = { racineDuVolume, resoudre, estAbsolu, racinesTraktor, dossiersMusique, dossiersDocuments };

@@ -1,7 +1,7 @@
 {
   "name": "liaison",
   "productName": "Liaison",
-  "version": "1.5.1",
+  "version": "1.5.2",
   "description": "Widget de cabine — suggestions d'enchaînement en direct pour DJ",
   "main": "src/main.js",
   "scripts": {
@@ -9,7 +9,7 @@
     "dist:mac": "electron-builder --mac --arm64 --publish never",
     "dist:mac-intel": "electron-builder --mac --x64 --publish never",
     "dist:win": "electron-builder --win --x64 --publish never",
-    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-chemins.js && node build/test-suggestions.js && node build/test-rekordbox.js && node build/test-serato.js && node build/test-dossiers.js && node build/banc-bibliotheque.js && node build/banc-soiree-windows.js && node build/test-instance-unique.js && node build/test-essai.js && node build/test-soirees-jouees.js && node build/test-incidents.js && node build/test-rotation-cle.js && node build/test-bulle.js && node build/test-prolink.js && node build/test-epoque.js && node build/test-affinites.js && node build/test-plancher.js && node build/test-parente.js && node build/test-tags.js && node build/test-analyse.js && node build/test-fenetre.js && node build/test-repertoire.js && node build/test-maj-biblio.js && node build/test-points-de-mix.js && node build/test-detection.js && node build/test-lecture-tags.js && node build/test-filtre-styles.js && node build/test-a-avoir.js && node build/test-widget.js && node build/test-licence-ui.js && node build/test-reglages-ui.js && node build/test-promesses.js"
+    "verifier": "node build/verifier-config.js && node build/demarrage.js && node build/test-moments.js && node build/test-chemins.js && node build/test-suggestions.js && node build/test-rekordbox.js && node build/test-serato.js && node build/test-dossiers.js && node build/banc-bibliotheque.js && node build/banc-soiree-windows.js && node build/test-instance-unique.js && node build/test-essai.js && node build/test-soirees-jouees.js && node build/test-incidents.js && node build/test-rotation-cle.js && node build/test-bulle.js && node build/test-prolink.js && node build/test-epoque.js && node build/test-affinites.js && node build/test-plancher.js && node build/test-parente.js && node build/test-tags.js && node build/test-analyse.js && node build/test-fenetre.js && node build/test-repertoire.js && node build/test-maj-biblio.js && node build/test-points-de-mix.js && node build/test-detection.js && node build/test-lecture-tags.js && node build/test-filtre-styles.js && node build/test-a-avoir.js && node build/test-widget.js && node build/test-licence-ui.js && node build/test-reglages-ui.js && node build/test-promesses.js && node build/test-licence-machine.js && node build/test-bilan-donnees.js && node build/test-bilan-soiree.js && node build/test-empaquetage.js && node build/test-relecture.js && node build/test-ecrans.js && node build/test-anglais.js"
   },
   "author": "Liaison",
   "license": "UNLICENSED",
@@ -38,6 +38,13 @@
         "dmg"
       ],
       "category": "public.app-category.music",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Liaison écoute le réseau de tes platines (Pro DJ Link) et sert la page où tes invités demandent des morceaux.",
+        "NSRemovableVolumesUsageDescription": "Liaison lit la musique de tes disques externes pour la proposer et l'analyser.",
+        "NSDocumentsFolderUsageDescription": "Liaison lit les bibliothèques Traktor et VirtualDJ rangées dans Documents.",
+        "NSDesktopFolderUsageDescription": "Liaison lit l'export rekordbox si tu l'as posé sur le Bureau.",
+        "NSDownloadsFolderUsageDescription": "Liaison lit les morceaux rangés dans Téléchargements."
+      },
       "minimumSystemVersion": "10.15.0",
       "identity": null,
       "gatekeeperAssess": false,
@@ -96,6 +103,11 @@
       "src/analyze-worker.js",
       "src/structure.js",
       "src/analyze.js",
+      "src/import-worker.js",
+      "src/autolibrary.js",
+      "src/library.js",
+      "src/serato-db.js",
+      "src/volumes.js",
       "node_modules/ffmpeg-static/**",
       "node_modules/ffprobe-static/**"
     ]

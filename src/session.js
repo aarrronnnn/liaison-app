@@ -12,18 +12,35 @@ const ecrire = require('./ecrire');
 const QR = require('qrcode');
 const { match, search, keyOf } = require('./engine');
 
+/* L'adresse que les telephones des invites peuvent joindre.
+   La premiere IPv4 venue pouvait etre une carte virtuelle (WSL,
+   VirtualBox, Docker), un VPN (Tailscale 100.x, NordLynx) ou un pont :
+   le QR pointait dans le vide. On ecarte ces cartes, et on prefere le
+   Wi-Fi puis l'Ethernet sur une plage privee. */
+const VIRTUELLE = /vethernet|virtualbox|vmware|vmnet|wsl|docker|hyper-?v|utun|tun\d|tap|tailscale|zerotier|nordlynx|wireguard|wg\d|bridge|awdl|llw|vboxnet|loopback|npcap/i;
+function privee(a) {
+  return /^192\.168\./.test(a) || /^10\./.test(a) || /^172\.(1[6-9]|2\d|3[01])\./.test(a);
+}
 function lanIP() {
   const ifs = os.networkInterfaces();
-  const pref = [];
+  const cands = [];
   for (const name of Object.keys(ifs)) {
     for (const i of ifs[name] || []) {
-      if (i.family !== 'IPv4' || i.internal) continue;
-      if (/^169\.254\./.test(i.address)) continue;
-      pref.push({ name: name, addr: i.address });
+      if (i.family !== 'IPv4' && i.family !== 4) continue;
+      if (i.internal) continue;
+      if (/^169\.254\./.test(i.address)) continue;            /* pas d'adresse attribuee */
+      if (/^100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\./.test(i.address)) continue;   /* VPN / CGNAT */
+      let note = 0;
+      if (!VIRTUELLE.test(name)) note += 4;
+      if (privee(i.address)) note += 2;
+      if (/wi-?fi|wlan|wireless|en0|airport/i.test(name)) note += 2;
+      else if (/ethernet|eth\d|en\d/i.test(name)) note += 1;
+      if (/^192\.168\.56\./.test(i.address)) note -= 3;     /* VirtualBox host-only */
+      cands.push({ name, addr: i.address, note });
     }
   }
-  const wifi = pref.find(p => /wi-?fi|wlan|en0/i.test(p.name));
-  return (wifi || pref[0] || { addr: '127.0.0.1' }).addr;
+  cands.sort((a, b) => b.note - a.note);
+  return (cands[0] || { addr: '127.0.0.1' }).addr;
 }
 
 /* ---------- page mobile des invites ----------
@@ -32,7 +49,14 @@ function lanIP() {
    toujours de reseau au fond d'une salle. Tout tient dans la page. */
 function guestPage(sessionName, token, opts) {
   opts = opts || {};
-  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">
+  /* Un invite dont le telephone n'est pas en francais recoit la page
+     en anglais : le meme traducteur que l'application, servi par ce
+     serveur (rien ne vient d'internet). */
+  const anglais = opts.langue === 'en'
+    ? '<script>window.LIAISON_LANGUE="en"</script><script src="/i18n-en.js?t=' + encodeURIComponent(token) + '"></script>' +
+      '<script src="/i18n.js?t=' + encodeURIComponent(token) + '"></script>'
+    : '';
+  return `<!doctype html><html lang="fr"><head><meta charset="utf-8">${anglais}
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="theme-color" content="#101114">
 <title>${esc(sessionName)}</title>
@@ -72,7 +96,7 @@ color:var(--cream3);margin:28px 0 10px;display:block}
 <path d="M3.4 3.4 10 12l-6.6 8.6" stroke="#4459FF" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
 <path d="M20.6 3.4 14 12l6.6 8.6" stroke="#FF5A42" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
 <circle cx="12" cy="12" r="2.4" fill="#EFEAE0"/></svg><span>LIAISON</span></div>
-<h1>${esc(sessionName)}</h1>
+<h1 data-brut>${esc(sessionName)}</h1>
 <p class="s">Demande un morceau au DJ. S'il colle au moment, il le passe.</p>
 <input id="q" placeholder="Titre, ou artiste et titre…" autocomplete="off" enterkeyhint="search">
 <div id="res"></div>
@@ -100,7 +124,7 @@ document.getElementById('q').addEventListener('input',e=>{
     const r=await fetch('/api/search?t='+encodeURIComponent(TOKEN)+'&q='+encodeURIComponent(v));
     const j=await r.json();
     res.innerHTML=j.map(x=>'<div class="r"><span><b>'+esc(x.title)+'</b><small>'+esc(x.artist)+
-      (x.have?'':' · le DJ ne l\'a pas, il peut quand meme noter')+'</small></span>'+
+      (x.have?'':' · le DJ ne l’a pas, il peut quand meme noter')+'</small></span>'+
       '<button class="go" data-t="'+esc(x.title)+'" data-a="'+esc(x.artist)+'">Demander</button></div>').join('');
   },220);
 });
@@ -112,7 +136,7 @@ res.addEventListener('click',async e=>{
     body:JSON.stringify({title:b.dataset.t,artist:b.dataset.a})});
   const j=await r.json().catch(()=>({}));
   res.innerHTML='';document.getElementById('q').value='';
-  if(j.ok){ say('C\'est note. Le DJ voit ta demande.'); if(j.cooldown) startCool(j.cooldown); }
+  if(j.ok){ say('C’est note. Le DJ voit ta demande.'); if(j.cooldown) startCool(j.cooldown); }
   else if(j.reste!=null){ startCool(j.reste); }
   else say(j.error||'Impossible pour le moment.',true);
   load();
@@ -121,7 +145,7 @@ async function load(){
   const r=await fetch('/api/top?t='+encodeURIComponent(TOKEN));const j=await r.json();
   top_.innerHTML=j.length?j.map(x=>'<div class="r"><span><b>'+esc(x.title)+'</b><small>'+esc(x.artist)+
     '</small></span><span class="n'+(x.n>=3?' hot':'')+'">'+x.n+' demande'+(x.n>1?'s':'')+'</span></div>').join('')
-    :'<p class="s">Personne n\'a encore demande. Lance-toi.</p>';
+    :'<p class="s">Personne n’a encore demande. Lance-toi.</p>';
 }
 load();setInterval(load,8000);
 </script></body></html>`;
@@ -219,12 +243,21 @@ class GuestServer {
       }
       if (u.pathname === '/api/top') return json(self.top().slice(0, 8));
 
+      if (u.pathname === '/i18n.js' || u.pathname === '/i18n-en.js') {
+        try {
+          const f = require('path').join(__dirname, 'ui', u.pathname.slice(1));
+          res.writeHead(200, { 'Content-Type': 'text/javascript; charset=utf-8', 'Cache-Control': 'max-age=3600' });
+          return res.end(require('fs').readFileSync(f));
+        } catch (e) { return deny(); }
+      }
       if (u.pathname.indexOf('/s/') !== 0) return deny();
       const head = { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' };
+      const lg = String(req.headers['accept-language'] || '').trim().toLowerCase();
       if (fresh) head['Set-Cookie'] = setCookie();
       res.writeHead(200, head);
       res.end(guestPage(self.sessionName, self.token,
-        { cooldown: self.cooldown, maxPerDevice: self.maxPerDevice }));
+        { cooldown: self.cooldown, maxPerDevice: self.maxPerDevice,
+          langue: lg && !/^fr\b/.test(lg) ? 'en' : 'fr' }));
     });
 
     return new Promise((resolve, reject) => {
@@ -242,9 +275,13 @@ class GuestServer {
     return crypto.timingSafeEqual(a, b);
   }
   /* L'adresse de l'appelant, derriere un eventuel relais. */
+  /* Il n'y a AUCUN relais devant ce serveur : il tourne sur le
+     portable du DJ. X-Forwarded-For etait donc ecrit par le client
+     lui-meme — en le changeant a chaque requete, un seul telephone
+     devenait mille, et passait le delai, le plafond de cinq demandes
+     et la limite de recherche. Seule l'adresse du socket fait foi. */
   _adresse(req) {
-    const x = String(req.headers['x-forwarded-for'] || '').split(',')[0].trim();
-    return x || (req.socket && req.socket.remoteAddress) || 'inconnu';
+    return (req.socket && req.socket.remoteAddress) || 'inconnu';
   }
 
   /* Trois recherches par seconde et par adresse. Une frappe au clavier
@@ -342,6 +379,7 @@ function shareLinks(url, sessionName) {
    soireesJouees() plus bas pour le raisonnement. */
 const SOIREE_TITRES = 8;
 const SOIREE_MINUTES = 45;
+const PAUSE_MAX_MS = 4 * 3600 * 1000;
 
 class SetLog {
   constructor(file) { this.file = file; this.sets = this._load(); }
@@ -385,7 +423,31 @@ class SetLog {
   vider() { try { this._save(true); } catch (e) {} }
 
   open(name, pack) { this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] }; this.sets.unshift(this.current); this._save(true); return this.current; }
+  /* ------------------------------------------------------------
+     Une soiree finit. Rien ne refermait `current` : l'app vit dans
+     la barre de menus et le Mac dort au lieu de s'eteindre, donc la
+     « soiree » de samedi durait jusqu'a jeudi. Le filtre « deja passe
+     ce soir » couvrait la semaine, le badge annoncait « joue il y a
+     4 320 min » comme une faute de ce soir, et une mise a jour ne
+     proposait plus jamais de redemarrer (« un set est en cours »).
+
+     Quatre heures sans un seul morceau : ce n'est plus la meme
+     soiree. Une pause entre deux sets ne dure pas ca.
+     ------------------------------------------------------------ */
+  derniereActivite() {
+    const c = this.current;
+    if (!c) return 0;
+    const last = c.played[c.played.length - 1];
+    return last && last.at ? last.at : (Date.parse(c.at) || c.id || 0);
+  }
+  fermerSiPerimee(now) {
+    if (!this.current) return false;
+    const t = this.derniereActivite();
+    if (t && (now || Date.now()) - t > PAUSE_MAX_MS) { this.current = null; return true; }
+    return false;
+  }
   play(track, transition) {
+    if (this.current && this.fermerSiPerimee()) this.open(this.sets[0] && this.sets[0].name || 'Session', this.sets[0] && this.sets[0].pack || null);
     if (!this.current) this.open('Session', null);
     const last = this.current.played[this.current.played.length - 1];
     if (last && last.id === track.id) return;
@@ -610,5 +672,5 @@ class SetLog {
   }
 }
 
-module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP,
+module.exports = { GuestServer, SetLog, qrPNG, qrSVG, shareLinks, lanIP, guestPage,
                    SOIREE_TITRES, SOIREE_MINUTES };

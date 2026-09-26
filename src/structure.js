@@ -14,7 +14,7 @@
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { ffmpegPath } = require('./analyze');
+const { ffmpegPath, basse } = require('./analyze');
 
 /* Un morceau ne se decode pas en plus de ca : au-dela, c'est bloque. */
 const DELAI_FFMPEG = 180000;
@@ -26,7 +26,8 @@ const WIN = 512;
 function decodeAll(file) {
   return new Promise((resolve, reject) => {
     const args = ['-v', 'error', '-i', file, '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'];
-    const p = spawn(ffmpegPath(), args);
+    const p = spawn(ffmpegPath(), args, { windowsHide: true });
+    basse(p);
     const chunks = [];
     let bytes = 0;
     p.stdout.on('data', d => { chunks.push(d); bytes += d.length; });
@@ -412,7 +413,7 @@ class StructurePool {
     try { ({ Worker } = require('worker_threads')); } catch (e) { return null; }
     /* Dans une app empaquetee, le fichier vit hors de l'archive asar :
        worker_threads ne sait pas lire dedans. */
-    const file = path.join(__dirname, 'structure-worker.js').replace('app.asar', 'app.asar.unpacked');
+    const file = path.join(__dirname, 'structure-worker.js').replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
     let w;
     try { w = new Worker(file); } catch (e) { return null; }
     w.busy = false;

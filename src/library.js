@@ -149,6 +149,21 @@ function toCamelot(raw) {
 
 const num = v => { const n = parseFloat(String(v).replace(',', '.')); return isFinite(n) ? n : 0; };
 
+/* Les entites XML, en UNE passe. rekordbox ecrit « Drum &amp; Bass »
+   dans ses attributs — y compris dans Location. On ne les decodait
+   pas : le chemin « Drum &amp; Bass/x.wav » n'existe pas sur le
+   disque, l'elagage le prenait pour un fichier efface et le RETIRAIT
+   de la bibliotheque ; les titres s'affichaient « L&apos;Aventurier ».
+   Une seule passe : « &amp;lt; » doit rendre « &lt; », pas « < ». */
+const ENTITES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" };
+function xmlDecode(s) {
+  return String(s == null ? '' : s).replace(/&(amp|lt|gt|quot|apos|#\d+|#x[0-9a-f]+);/gi, (m, e) => {
+    if (e[0] !== '#') return ENTITES[e.toLowerCase()] || m;
+    const c = e[1] === 'x' || e[1] === 'X' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10);
+    try { return c > 0 && c < 0x110000 ? String.fromCodePoint(c) : m; } catch (x) { return m; }
+  });
+}
+
 /* ---------- rekordbox.xml ---------- */
 function parseRekordboxXML(xmlPath) {
   /* Le message brut d'ENOENT ne dit rien a un DJ. Celui-ci dit ce qui
@@ -167,7 +182,7 @@ function parseRekordboxXML(xmlPath) {
     const attrs = {};
     const ar = /([A-Za-z_]+)="([^"]*)"/g;
     let a;
-    while ((a = ar.exec(m[1]))) attrs[a[1]] = a[2];
+    while ((a = ar.exec(m[1]))) attrs[a[1]] = xmlDecode(a[2]);
     if (!attrs.Name && !attrs.Location) continue;
     if (!attrs.Location) continue;
     let loc = attrs.Location.replace(/^file:\/\/localhost/, '').replace(/^file:\/\//, '');
@@ -224,7 +239,7 @@ function ffprobePath() {
   try {
     let p = require('ffprobe-static');
     if (p && p.path) p = p.path;
-    if (p) return String(p).replace('app.asar', 'app.asar.unpacked');
+    if (p) return String(p).replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
   } catch (e) {}
   return 'ffprobe';
 }
@@ -256,7 +271,7 @@ let _lecteur;                                  /* {mode, bin} decide une fois */
 
 function utilisable(bin, args) {
   try {
-    const r = spawnSync(bin, args, { timeout: 5000, stdio: 'ignore' });
+    const r = spawnSync(bin, args, { timeout: 5000, stdio: 'ignore', windowsHide: true });
     return !r.error && r.status === 0;
   } catch (e) { return false; }
 }
@@ -270,7 +285,7 @@ function lecteurDeTags() {
   try {
     let p = require('ffprobe-static');
     if (p && p.path) p = p.path;
-    if (p) candidats.push(String(p).replace('app.asar', 'app.asar.unpacked'));
+    if (p) candidats.push(String(p).replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked'));
   } catch (e) {}
   candidats.push('ffprobe');                   /* celui du systeme, s'il y en a un */
 
@@ -311,9 +326,17 @@ function lireFfmetadata(txt) {
   return t;
 }
 
+/* Un NAS qui ne repond plus ou une cle USB qui decroche laissait
+   ffprobe pendu pour toujours, et le scan du dossier avec. */
+function borne(p, resolve, ms) {
+  const t = setTimeout(() => { try { p.kill('SIGKILL'); } catch (e) {} resolve({}); }, ms || 20000);
+  p.on('close', () => clearTimeout(t));
+  p.on('error', () => clearTimeout(t));
+}
 function probeViaFfmpeg(file) {
   return new Promise(resolve => {
-    const p = spawn(ffmpegPath(), ['-hide_banner', '-i', file, '-f', 'ffmetadata', '-']);
+    const p = spawn(ffmpegPath(), ['-hide_banner', '-i', file, '-f', 'ffmetadata', '-'], { windowsHide: true });
+    borne(p, resolve);
     let out = '', err = '';
     p.stdout.on('data', d => (out += d));
     p.stderr.on('data', d => (err += d));
@@ -330,7 +353,8 @@ function probe(file) {
   if (l.mode === 'ffmpeg') return probeViaFfmpeg(file);
   return new Promise(resolve => {
     const p = spawn(l.bin, ['-v', 'quiet', '-print_format', 'json',
-      '-show_format', '-show_entries', 'format=duration:format_tags', file]);
+      '-show_format', '-show_entries', 'format=duration:format_tags', file], { windowsHide: true });
+    borne(p, resolve);
     let out = '';
     p.stdout.on('data', d => (out += d));
     p.on('error', () => resolve({}));
@@ -935,14 +959,32 @@ function elaguerDisparus(tracks, opt) {
    existe vraiment. On note combien de copies ont ete repliees —
    l'ecran de sante s'en sert pour proposer le menage.
    ============================================================ */
-function normaliserNom(s) {
+/* Le « featuring » est coupe sur l'ARTISTE et sur le TITRE, chacun de
+   son cote. Il etait coupe sur « artiste + titre » colles ensemble :
+   « Ninho feat. Niska » + « Coco » devenait « ninho », exactement
+   comme « Ninho feat. Niska » + « Tout va bien » — deux morceaux
+   differents replies en un seul des que leurs durees se tenaient a
+   quatre secondes. Et « avec » n'en est pas un : « Danse avec moi »
+   et « Danse avec toi » devenaient tous deux « danse ». */
+function aPlat(s) {
   return String(s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/\b(feat|ft|featuring|avec)\b.*$/, ' ')
+    .replace(/[\u0153]/g, 'oe').replace(/[\u00e6]/g, 'ae').replace(/[\u00f8]/g, 'o');
+}
+function normaliserNom(s) {
+  return aPlat(s)
     .replace(/[\[(][^\])]*[\])]/g, ' ')
+    .replace(/\s(feat|ft|featuring)\b.*$/, ' ')
     .replace(/[^a-z0-9]+/g, ' ')
     .trim();
+}
+function cleMorceau(t) {
+  const art = aPlat(t.artist)
+    .replace(/\s(feat\.?|ft\.?|featuring|x|&|et|and)\s.*$/, ' ').replace(/,\s.*$/, ' ')
+    .replace(/[^a-z0-9]+/g, ' ').trim();
+  const tit = normaliserNom(t.title);
+  return (art + ' ' + tit).trim().length < 4 ? '' : art + '|' + tit;
 }
 
 /* Ecart tolere : 4 secondes, ou 2 % pour les morceaux longs. Un meme
@@ -961,8 +1003,8 @@ function dedoublonner(tracks) {
   const parNom = new Map();
   const sansNom = [];
   for (const t of tracks || []) {
-    const n = normaliserNom((t.artist || '') + ' ' + (t.title || ''));
-    if (n.length < 4) { sansNom.push(t); continue; }
+    const n = cleMorceau(t);
+    if (!n) { sansNom.push(t); continue; }
     if (!parNom.has(n)) parNom.set(n, []);
     parNom.get(n).push(t);
   }
@@ -1108,4 +1150,4 @@ function finalize(tracks) {
 }
 
 module.exports = { parseRekordboxXML, scanFolder, analyzeAll, finalize, toCamelot, walk, hash53, cleChemin, chargerScanCache, ecrireScanCache, probe, commentOnLitLesTags, lecteurDeTags, lireFfmetadata, anneeTag, anneeDeLaMusique, estReedition, VERSION_TAGS, ffprobePath,
-                   FIABILITE, fiabilite, elaguerDisparus, dedoublonner, normaliserNom, AUDIO };
+                   FIABILITE, fiabilite, elaguerDisparus, dedoublonner, normaliserNom, xmlDecode, AUDIO };

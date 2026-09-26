@@ -544,6 +544,12 @@ function suggest(cur, library, opt) {
      comportement est exactement celui d'avant.
      ------------------------------------------------------------ */
   const P = opt.poids || {};
+  /* L'echelle de variete apprise arrive en opt.variete (main.js) ;
+     on ne lisait que opt.poids.variete, qui n'existe pas — le gout
+     appris du DJ sur la repetition d'artistes n'etait jamais applique.
+     isFinite : typeof NaN === 'number'. */
+  const vBrut = Number.isFinite(opt.variete) ? opt.variete : (Number.isFinite(P.variete) ? P.variete : 1);
+  const ECHELLE_VARIETE = Math.max(0.25, Math.min(1.6, Number(vBrut)));
   const m = (k) => { const v = P[k]; return (typeof v === 'number' && isFinite(v)) ? Math.max(0.5, Math.min(1.8, v)) : 1; };
   /* ------------------------------------------------------------
      L'ORDRE DES CRITERES, tel que les DJ le demandent.
@@ -711,7 +717,7 @@ function suggest(cur, library, opt) {
 
   /* Le morceau en cours est-il mesure ? S'il ne l'est pas, comparer
      son energie a celle des autres n'a aucun sens. */
-  const curMesure = !!cur.analyzed;
+  const curMesure = !!cur.analyzed && !cur.illisible;
 
   /* Combien de morceaux de la bibliotheque portent un tempo ? S'ils
      sont trop peu nombreux pour remplir une liste, on ouvre la porte
@@ -849,7 +855,7 @@ function suggest(cur, library, opt) {
          null au lieu de les faire passer par finalize(). La
          correction marchait sur l'etabli et pas en cabine.
          ------------------------------------------------------------ */
-      t.mesure = !!t.analyzed;
+      t.mesure = !!t.analyzed && !t.illisible;   /* illisible = valeurs par defaut, pas une mesure */
       const h = sansTonalite ? 50 : (t.key ? harmScore(cur.key, t.key) : H_INCONNU);
       const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleOk(cur, t));
       /* ------------------------------------------------------------
@@ -932,7 +938,7 @@ function suggest(cur, library, opt) {
          nuit et personne ne s'en plaint ; un DJ de club ne le fait
          jamais. L'echelle de la penalite est donc apprise, elle
          aussi. */
-      const va = pin ? 0 : penaliteVariete(t, M, { sansFamille: !!B }) * (typeof P.variete === 'number' ? Math.max(0.25, Math.min(1.6, P.variete)) : 1);
+      const va = pin ? 0 : penaliteVariete(t, M, { sansFamille: !!B }) * ECHELLE_VARIETE;
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
@@ -1163,6 +1169,20 @@ const mmss = t => {
 };
 
 function mixPlan(cur, next, curS, nextS, tp) {
+  /* Sans tempo des deux cotes, le plan n'a pas de sens : un BPM absent
+     donnait un etirement nul, une intro « infinie » et un plan
+     annonce sur « Lance a 0:45 » avec 93 mesures de recouvrement ;
+     deux absents, « Lance a 0:00 ». Un repere faux est pire qu'aucun. */
+  const bA = cur && cur.bpm > 0 ? cur.bpm : (curS && curS.bpm > 0 ? curS.bpm : 0);
+  const bB = next && next.bpm > 0 ? next.bpm : (nextS && nextS.bpm > 0 ? nextS.bpm : 0);
+  if (!(bA > 0) || !(bB > 0)) {
+    return { ok: false, note: 'Tempo inconnu — pas de repere de mix tant qu\'il n\'est pas mesure.' };
+  }
+  if (!(cur.bpm > 0) || !(next.bpm > 0)) {
+    cur = Object.assign({}, cur, { bpm: bA });
+    next = Object.assign({}, next, { bpm: bB });
+    tp = null;
+  }
   tp = tp || tempoScore(cur.bpm, next.bpm);
   const ratio = tp.ratio || 1;
   /* B joue au tempo de A : ses durees se contractent ou s'etirent */

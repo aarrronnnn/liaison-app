@@ -42,13 +42,13 @@ function ffmpegPath() {
   try {
     let p = require('ffmpeg-static');
     if (p && p.path) p = p.path;
-    if (p) candidats.push(String(p).replace('app.asar', 'app.asar.unpacked'));
+    if (p) candidats.push(String(p).replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked'));
   } catch (e) { /* fallback */ }
   candidats.push('ffmpeg');
 
   for (const bin of candidats) {
     try {
-      const r = spawnSync(bin, ['-version'], { timeout: 5000, stdio: 'ignore' });
+      const r = spawnSync(bin, ['-version'], { timeout: 5000, stdio: 'ignore', windowsHide: true });
       if (!r.error && r.status === 0) { _ffmpeg = bin; return _ffmpeg; }
     } catch (e) {}
   }
@@ -140,7 +140,8 @@ function decodeDepuis(file, depart, seconds) {
   return new Promise((resolve, reject) => {
     const args = ['-v', 'error', '-ss', String(depart), '-t', String(seconds), '-i', file,
                   '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'];
-    const p = spawn(ffmpegPath(), args);
+    const p = spawn(ffmpegPath(), args, { windowsHide: true });
+    basse(p);
     const chunks = [];
     let bytes = 0;
     p.stdout.on('data', d => { chunks.push(d); bytes += d.length; });
@@ -600,4 +601,22 @@ function estimateBPM(flux, frameRate) {
            confiance: Math.round(confiance * 100) / 100 };
 }
 
-module.exports = { analyze, ffmpegPath, estimateBPM };
+/* ------------------------------------------------------------
+   L'analyse passe APRES la musique.
+
+   ffmpeg tournait en priorite normale, jusqu'a six a la fois, a
+   cote de Serato ou rekordbox. Sur un portable deux coeurs, c'est
+   le logiciel de mix qui partage le processeur avec nous — et un
+   decrochage audio en plein set est la pire panne possible. Chaque
+   processus d'analyse est donc pose en priorite basse : il prend ce
+   qui reste, jamais ce dont la musique a besoin.
+   ------------------------------------------------------------ */
+function basse(p) {
+  try {
+    const os = require('os');
+    if (p && p.pid) os.setPriority(p.pid, os.constants.priority.PRIORITY_LOW);
+  } catch (e) { /* refuse par le systeme : on continue en priorite normale */ }
+  return p;
+}
+
+module.exports = { analyze, ffmpegPath, estimateBPM, basse };

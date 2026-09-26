@@ -7,8 +7,9 @@ const os = require('os');
 
 function dirFor(custom) {
   if (custom) return custom;
-  const docs = path.join(os.homedir(), 'Documents', 'VirtualDJ', 'Tracklists');
-  return docs;
+  const cands = require('../volumes').dossiersDocuments().map(d => path.join(d, 'VirtualDJ', 'Tracklists'));
+  return cands.find(d => { try { return fs.existsSync(d); } catch (e) { return false; } })
+      || path.join(os.homedir(), 'Documents', 'VirtualDJ', 'Tracklists');
 }
 /* ------------------------------------------------------------
    Chercher le fichier le plus recent, sans balayer le dossier

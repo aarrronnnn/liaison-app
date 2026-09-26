@@ -174,12 +174,50 @@ function deviceId() {
   const seed = [os.hostname(), os.platform(), os.arch(), mac, (os.userInfo().username || '')].join('|');
   return crypto.createHash('sha256').update(seed).digest('hex').slice(0, 32);
 }
+/* ---------- empreinte materielle ----------
+   deviceId() melange la premiere adresse MAC, le nom de la machine et
+   l'utilisateur. Elle sert d'identifiant aupres du serveur (les sieges
+   deja vendus y sont inscrits sous cette forme), mais elle n'est PAS
+   stable : Wi-Fi coupe en cabine, adresse MAC privee par reseau, nom
+   de machine donne par le DHCP, adaptateur VPN... et la licence
+   devenait « celle d'une autre machine » en plein set.
+
+   On fige donc l'identifiant une fois pour toutes dans l'etat, et on
+   le lie a une empreinte qui, elle, ne bouge pas : l'UUID de la carte
+   mere sur Mac, le MachineGuid sous Windows. Copier le fichier de
+   licence sur une autre machine ne suffit donc toujours pas. On n'en
+   garde qu'une empreinte hachee, jamais la valeur brute. */
+let _hw;
+function hardwareId() {
+  if (_hw !== undefined) return _hw;
+  _hw = null;
+  try {
+    const cp = require('child_process');
+    let brut = '';
+    if (process.platform === 'darwin') {
+      const o = cp.execFileSync('/usr/sbin/ioreg', ['-rd1', '-c', 'IOPlatformExpertDevice'],
+                                { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      const m = o.match(/"IOPlatformUUID"\s*=\s*"([^"]+)"/);
+      if (m) brut = m[1];
+    } else if (process.platform === 'win32') {
+      const o = cp.execFileSync('reg', ['query', 'HKLM\\SOFTWARE\\Microsoft\\Cryptography', '/v', 'MachineGuid'],
+                                { encoding: 'utf8', timeout: 3000, windowsHide: true });
+      const m = o.match(/MachineGuid\s+REG_\w+\s+([0-9a-fA-F-]{16,})/);
+      if (m) brut = m[1];
+    } else {
+      try { brut = fs.readFileSync('/etc/machine-id', 'utf8').trim(); } catch (e) {}
+    }
+    if (brut) _hw = crypto.createHash('sha256').update('liaison|' + brut.toLowerCase()).digest('hex').slice(0, 32);
+  } catch (e) { _hw = null; }
+  return _hw;
+}
+
 function deviceName() {
   return (os.hostname() || 'Machine').replace(/\.local$/, '').slice(0, 40);
 }
 
 /* ---------- verification de la licence signee ---------- */
-function verify(token) {
+function verify(token, attendu) {
   try {
     const [b, s] = String(token).split('.');
     if (!b || !s) return null;
@@ -201,7 +239,7 @@ function verify(token) {
     /* Et seulement maintenant on relit la charge — celle qui
        vient d'etre prouvee. */
     const payload = JSON.parse(body.toString('utf8'));
-    if (payload.device !== deviceId()) return null;      // licence d'une autre machine
+    if (payload.device !== (attendu || deviceId())) return null;   // licence d'une autre machine
     return payload;
   } catch (e) { return null; }
 }
@@ -317,8 +355,38 @@ class License {
   constructor(file) {
     this.file = file;
     this.state = this._load();
-    this.device = deviceId();
+    this.hw = hardwareId();
+    this.device = this._identifiantStable();
   }
+
+  /* L'identifiant fige (voir hardwareId). Trois cas :
+     — deja fige, sur cette meme machine : on le garde, quoi que
+       disent le Wi-Fi ou le nom de la machine ce soir ;
+     — fige sur une AUTRE machine (fichier copie) : on repart de
+       l'identifiant du jour, et la licence ne se verifie plus ;
+     — pas encore fige (version precedente) : on reprend celui sous
+       lequel la licence en cache a ete signee — c'est celui que le
+       serveur connait — sinon celui du jour. */
+  _identifiantStable() {
+    const st = this.state;
+    const memeMachine = !st.hw || !this.hw || st.hw === this.hw;
+    if (typeof st.device === 'string' && st.device && memeMachine) {
+      if (!st.hw && this.hw) { st.hw = this.hw; this._save(); }
+      return st.device;
+    }
+    let d = deviceId();
+    if (memeMachine && st.license) {
+      try {
+        const b = JSON.parse(Buffer.from(String(st.license).split('.')[0], 'base64url').toString('utf8'));
+        if (b && typeof b.device === 'string' && verify(st.license, b.device)) d = b.device;
+      } catch (e) { /* illisible : on garde celui du jour */ }
+    }
+    st.device = d;
+    if (this.hw) st.hw = this.hw;
+    this._save();
+    return d;
+  }
+  _verifier(token) { return token ? verify(token, this.device) : null; }
   _load() { return ecrire.lireJSON(this.file, {}) || {}; }
   /* Ecriture atomique : perdre ce fichier, c'est forcer une
      reactivation alors que le siege est deja consomme cote serveur —
@@ -504,7 +572,7 @@ class License {
 
   /** Niveau effectif, sans reseau. */
   tier() {
-    const p = this.state.license ? verify(this.state.license) : null;
+    const p = this._verifier(this.state.license);
     const n = this.maintenant();
     if (p && n < p.exp) {
       if ((p.plan === 'pass' || p.plan === 'ami') && p.until && n > p.until) return 'expire';
@@ -519,7 +587,7 @@ class License {
 
   status() {
     const t = this.tier();
-    const p = this.state.license ? verify(this.state.license) : null;
+    const p = this._verifier(this.state.license);
     return {
       tier: t,
       label: TIERS[t].label,
@@ -548,7 +616,7 @@ class License {
     if (r.code !== 200 || !r.body.license) {
       return { ok: false, error: r.body.error || ('Erreur ' + r.code), devices: r.body.devices };
     }
-    if (!verify(r.body.license)) return { ok: false, error: 'Licence non verifiable — cle publique incorrecte' };
+    if (!this._verifier(r.body.license)) return { ok: false, error: 'Licence non verifiable — cle publique incorrecte' };
     this.state.key = String(key).trim().toUpperCase();
     this.state.license = r.body.license;
     this.state.lastCheck = Date.now();
@@ -563,8 +631,17 @@ class License {
       return { ok: true, skipped: true };
     try {
       const r = await postAilleurs('/api/validate', { key: this.state.key, device: this.device }, 6000);
-      if (r.code === 200 && r.body.license && verify(r.body.license)) {
+      const frais = r.code === 200 && r.body.license ? this._verifier(r.body.license) : null;
+      if (frais) {
         this.state.license = r.body.license;
+        /* Le serveur vient de dater cette licence. Si notre « plus
+           haute heure vue » est loin devant (horloge partie en 2030
+           une seule fois), elle verrouillerait la licence jusqu'en
+           2030 : on la ramene a l'heure du serveur. */
+        if (frais.iat > 0 && (this.state.vuMax || 0) > frais.iat + 86400000) {
+          this.state.vuMax = frais.iat;
+          this._ecrireTemoin({ t: this._debutTemoin() || this.state.trialStart || frais.iat, v: frais.iat });
+        }
         this.state.lastCheck = Date.now();
         this._save();
         return { ok: true, status: this.status() };
@@ -587,12 +664,12 @@ class License {
   async release() {
     if (!this.state.key) return { ok: false, error: 'Aucune cle' };
     try { await postAilleurs('/api/liberer', { key: this.state.key, device: this.device }); } catch (e) {}
-    this.state = { trialStart: this.state.trialStart };
+    this.state = { trialStart: this.state.trialStart, device: this.state.device, hw: this.state.hw };
     this._save();
     return { ok: true };
   }
 }
 
-module.exports = { License, TIERS, deviceId, deviceName, verify, tarifs, TARIFS_REPLI,
+module.exports = { License, TIERS, deviceId, hardwareId, deviceName, verify, tarifs, TARIFS_REPLI,
                    API, API_LISTE, TRIAL_DAYS, TRIAL_SOIREES, TRIAL_PLAFOND_J,
                    CLES_PUBLIQUES, CLE_PAR_DEFAUT, PUBLIC_KEY };

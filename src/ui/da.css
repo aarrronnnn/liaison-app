@@ -71,7 +71,12 @@
      la couleur heritee, c'est-a-dire le creme plein. Les mentions
      ecrites pour etre discretes s'affichaient donc aussi fort qu'un
      titre, ce qui est exactement l'inverse de leur role. */
-  --dim:#4A4D54;
+  /* Remesure a l'audit 1.5.2 : #4A4D54 ne rendait que 2,12:1 sur la
+     carte — pour du 8 a 9,5 px. « Discret » etait devenu « illisible »
+     (« estime », la raison d'un plan rate, « hors bulle »). #7C8088
+     rend 4,53:1 sur la carte ; la discretion passe par la taille et
+     la graisse, plus par l'effacement. */
+  --dim:#7C8088;
   /* --carte : la surface POSEE sur le fond. Le widget n'avait que
      des creux (deep2, deep3, plus sombres que deep) et aucun
      relief : tout se lisait comme un seul aplat creuse. Une carte
@@ -159,7 +164,7 @@
      du bloc « morceau en cours ». #585B63 rend 4,68:1 au pire,
      6,51:1 sur la carte. */
   --cream:#111218; --cream2:#474B55; --cream3:#585B63;
-  --dim:#A4A7AE;
+  --dim:#6B6E75;   /* 4,89:1 sur la carte (etait #A4A7AE : 2,31) */
   --best:#FFFDF8;
   --ombre:0 10px 22px -18px rgba(40,34,20,.75);
   --ombreCarte:0 1px 2px rgba(40,34,20,.10),0 14px 26px -18px rgba(31,53,216,.45);

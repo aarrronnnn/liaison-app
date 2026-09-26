@@ -1,6 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Liaison</title>
 <link rel="stylesheet" href="./da.css">
+<script src="./i18n-en.js"></script>
+<script src="./i18n.js"></script>
 <style>
 *{box-sizing:border-box}
 /* ============================================================
@@ -314,17 +317,20 @@ font-size:9.5px;color:var(--cream3);margin-top:3px;overflow:hidden}
 .bpmc{display:block;text-align:right;padding-top:2px}
 .bpmc b{display:block;font-family:var(--d);font-weight:400;font-size:18px;line-height:.9;
 color:var(--cream2);letter-spacing:-.01em}
-.bpmc s{display:block;text-decoration:none;font-family:var(--m);font-size:8px;letter-spacing:.04em;
+.bpmc s{display:block;text-decoration:none;font-family:var(--m);font-size:9px;letter-spacing:.04em;
 color:var(--cream3);margin-top:4px}
-.bpmc.pres b{color:var(--blueLit)}
+.bpmc.pres b{color:var(--blueTxt)}
 .bpmc.loin b{color:var(--redLit)}
 .bpmc.loin s{color:var(--redLit)}
-.bpmc.flou b,.bpmc.flou s{opacity:.5}
+/* Estime, pas mesure : on le dit par un pointille, plus par une
+   demi-opacite qui tombait a 1,76:1 sur le bleu — illisible. */
+.bpmc.flou b{text-decoration:underline dotted;text-decoration-thickness:1px;text-underline-offset:3px;opacity:.85}
+.bpmc.flou s{opacity:.85}
 /* La tonalite, elle aussi promue : c'est la seconde chose qu'on
    regarde, et elle s'affichait dans le meme gris que le reste de
    la ligne. Elle est maintenant en tete du groupe des faits de
    mix, en gras, et bleue quand elle est sure. */
-.mm .kk{font-weight:700;color:var(--blueTxt);letter-spacing:.02em}
+.mm .kk{font-weight:700;color:var(--blueTxt);letter-spacing:.02em;font-size:11px}  /* lue d'un coup d'oeil : 9,5 px ne suffisait pas */
 .mm .kk.flou{color:var(--cream3)}
 .mm .kk.vide{color:var(--dim);font-weight:400}
 /* « HORS FENETRE » : la seule etiquette rouge qui parle de mix et
@@ -369,7 +375,7 @@ background:var(--deep3);color:var(--cream);border:1px solid var(--wire2);border-
 .land .ph{font-family:var(--d);font-size:14px;text-transform:uppercase;letter-spacing:.04em}
 .land .ph.tenir{color:var(--cream)}
 .land .ph.dernier{color:var(--redLit)}
-.land .ph.poser{color:var(--blueLit)}
+.land .ph.poser{color:var(--blueTxt)}
 .land .re{margin-left:auto;font-family:var(--m);font-size:10px;color:var(--cream3);white-space:nowrap}
 .land .tx{color:var(--cream2);font-size:11.5px;line-height:1.45;margin-top:4px}
 .land .cl{display:flex;align-items:center;gap:6px;margin-top:7px;padding-top:7px;border-top:1px solid var(--wire)}
@@ -487,6 +493,50 @@ white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .seg .chip:first-child{border-radius:2px 0 0 2px;margin-left:0}
 .seg .chip:last-child{border-radius:0 2px 2px 0}
 .seg .chip[aria-pressed=true]{position:relative;z-index:1}
+/* ------------------------------------------------------------
+   DES CIBLES POUR DES DOIGTS DE CABINE.
+
+   Dans le noir, d'une main, pendant que l'autre tient un casque :
+   « Copier » faisait 27 px de haut, les fleches de pente 25 × 27,
+   les pastilles du haut 25 px. On visait, on ratait, on recliquait.
+
+   La zone qui REPOND au clic deborde maintenant du dessin de
+   quelques pixels, dans le vide qui separe deja les boutons. Le
+   widget ne grandit pas d'un pixel ; le doigt, lui, trouve 34 a
+   37 px. Les fleches et les pastilles « Fin » / « Demandes »
+   s'elargissent un peu dans la place libre du pied.
+   ------------------------------------------------------------ */
+.chip,.go,.rail .p,.ecells button,.act button{position:relative}
+.chip::after,.go::after,.rail .p::after,.ecells button::after{content:"";position:absolute;inset:-5px -2px}
+.go::after{inset:-6px -4px}
+.chip.fl::after{inset:-5px 0}   /* collees entre elles : pas de debord de cote */
+.chip.mini{min-width:30px;justify-content:center}
+.chip.fl{min-width:30px;text-align:center}
+/* ------------------------------------------------------------
+   LES PETITS PLAISIRS.
+
+   Le bouton « Copier » repond : il passe au bleu et montre une
+   coche, le temps d'un battement. Et quand le DJ lance l'un des
+   titres proposes, le bloc du morceau en cours s'allume une fois
+   et affiche la serie. Rien ne clignote, rien ne boucle : un
+   geste, une reponse, puis le calme.
+   ------------------------------------------------------------ */
+@keyframes lzPop{0%{transform:scale(.86)}60%{transform:scale(1.06)}100%{transform:scale(1)}}
+@keyframes lzLueur{0%{box-shadow:inset 0 0 0 1px var(--blueLit),0 0 0 0 rgba(68,89,255,.5)}
+100%{box-shadow:inset 0 0 0 1px transparent,0 0 26px 0 rgba(68,89,255,0)}}
+.go.fait{background:var(--blue);border-color:var(--blue);color:#fff;animation:lzPop .34s cubic-bezier(.2,1.4,.4,1)}
+.ref.pris{animation:lzLueur 1.2s ease-out}
+.serie{margin-left:auto;font-family:var(--m);font-size:9px;font-weight:700;letter-spacing:.12em;
+text-transform:uppercase;color:var(--blueTxt);display:inline-flex;align-items:center;gap:5px;white-space:nowrap}
+.serie svg{width:10px;height:10px;stroke:currentColor;fill:none;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.serie.pop{animation:lzPop .42s cubic-bezier(.2,1.4,.4,1)}
+.row:active{transform:scale(.995)}
+.chip:active,.go:active,.rail .p:active{transform:scale(.94)}
+.chip,.go,.rail .p{transition:transform .08s ease-out,background-color .15s,border-color .15s,color .15s}
+@media (prefers-reduced-motion:reduce){
+  .go.fait,.ref.pris,.serie.pop{animation:none}
+  .row:active,.chip:active,.go:active,.rail .p:active{transform:none}
+}
 /* Le pied ne doit jamais monter au-dessus du message passager. */
 .foot{position:relative;z-index:2}
 .chip{font-family:var(--m);font-size:8.5px;letter-spacing:.08em;text-transform:uppercase;
@@ -499,7 +549,7 @@ padding:6px 5px;border-radius:2px;border:1px solid var(--wire);color:var(--cream
    d'oeil — et c'est un coup d'oeil qu'on a, en cabine, pas une
    lecture. Le nom reste dans l'infobulle et pour les lecteurs
    d'ecran. */
-.chip.fl{font-size:12px;line-height:1;padding:4px 8px;letter-spacing:0}
+.chip.fl{font-size:12px;line-height:1;padding:4px 10px;letter-spacing:0}
 .chip{display:inline-flex;align-items:center;gap:5px}
 /* ------------------------------------------------------------
    Ce qui tient dans 344 px, et ce qui n'y tient pas.
@@ -663,7 +713,7 @@ body[data-densite="barre"] .row{padding:5px 6px 6px;gap:8px}
 body[data-densite="barre"] .row + .row{border-top:1px solid var(--wire)}
 body[data-densite="barre"] .sc{font-size:18px}
 body[data-densite="barre"] .bpmc b{font-size:15px}
-body[data-densite="barre"] .bpmc s{margin-top:2px;font-size:7.5px}
+body[data-densite="barre"] .bpmc s{margin-top:2px;font-size:8.5px}
 body[data-densite="barre"] .n{font-size:11.5px}
 body[data-densite="barre"] .mm{margin-top:2px;font-size:9px}
 body[data-densite="barre"] .mm .ar{display:none}
@@ -753,7 +803,7 @@ stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
 /* Le volet ouvert : un anneau, pas un remplissage — l'etat
    « ouvert » et l'etat « pose » sont deux choses differentes et
    se cumulent. */
-.rail .p.ouvert{border-color:var(--blueLit);color:var(--blueLit);box-shadow:0 0 0 1px var(--blueLit)}
+.rail .p.ouvert{border-color:var(--blueLit);color:var(--blueTxt);box-shadow:0 0 0 1px var(--blueLit)}
 .rail .p.ouvert[aria-pressed=true]{color:#fff}
 .rail .p b{font-weight:400;letter-spacing:.04em}
 .rail .n{margin-left:auto;font-family:var(--m);font-size:8.5px;letter-spacing:.06em;
@@ -1016,9 +1066,9 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
 </div>
 
 <div class="ref">
-  <div class="top"><span class="lbl" id="refLbl">En attente du deck</span></div>
-  <div class="t" id="refT">—</div>
-  <div class="a" id="refA">—</div>
+  <div class="top"><span class="lbl" id="refLbl">En attente du deck</span><span class="serie" id="serie" hidden></span></div>
+  <div class="t" id="refT" data-brut>—</div>
+  <div class="a" id="refA" data-brut>—</div>
   <div class="m">
     <span><em>KEY</em> <i id="refK">—</i></span>
     <span><em>BPM</em> <i id="refB">—</i></span>
@@ -1134,7 +1184,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
 
 <div class="listwrap" id="listwrap">
   <div class="list" id="list">
-    <div class="empty"><b>Demarrage</b>Liaison cherche ta bibliotheque<br>et ton logiciel de mix.</div>
+    <div class="empty"><b>Démarrage</b>Liaison cherche ta bibliothèque<br>et ton logiciel de mix.</div>
   </div>
 </div>
 
@@ -1144,7 +1194,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
 </div>
 
 <div class="licbar" id="licBar">
-  <span class="lbl" id="licTxt" style="color:var(--blueLit)"></span>
+  <span class="lbl" id="licTxt" style="color:var(--blueTxt)"></span>
   <button class="chip" id="licBuy" style="margin-left:auto">Prendre une licence</button>
 </div>
 
@@ -1153,7 +1203,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
      Et « Plus tard » vaut pour cette version-la seulement — la
      suivante reposera la question. -->
 <div class="licbar" id="majBar">
-  <span class="lbl" id="majTxt" style="color:var(--blueLit)"></span>
+  <span class="lbl" id="majTxt" style="color:var(--blueTxt)"></span>
   <button class="chip" id="majVoir" style="margin-left:auto">Voir</button>
   <button class="chip" id="majPlusTard" title="Ne plus le dire pour cette version">Plus tard</button>
 </div>
@@ -1163,7 +1213,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
      annees 80 » se verifie d'un coup d'oeil, « Bulle ON » ne se
      verifie pas du tout. -->
 <div class="licbar" id="bulBar">
-  <span class="lbl" id="bulTxt" style="color:var(--blueLit)"></span>
+  <span class="lbl" id="bulTxt" style="color:var(--blueTxt)"></span>
   <button class="chip" id="bulRe" style="margin-left:auto" title="Refaire la bulle autour du morceau qui tourne">Recentrer</button>
   <button class="chip" id="bulOff" title="Revenir aux suggestions normales">Sortir</button>
 </div>
@@ -1205,7 +1255,7 @@ background:var(--cream3);border-radius:2px;transition:top .14s ease,bottom .14s 
   <span class="st" id="st"></span>
 </div>
 
-<div class="toast" id="toast"></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script>
 const $ = s => document.querySelector(s);
@@ -1246,10 +1296,30 @@ function fitHeight() {
       /* Le plancher descend a 120 px : au cran BARRE, le widget
          n'est plus qu'une reglette et 180 px l'auraient rallonge
          de vide noir. Le plafond ne bouge pas. */
-      window.liaison.setHeight(Math.max(120, Math.min(760, h)));
+      const demande = Math.max(120, Math.min(760, h));
+      Promise.resolve(window.liaison.setHeight(demande)).then(r => {
+        /* Petit ecran : l'ecran ne donne pas tout. C'est la LISTE qui
+           raccourcit (elle defile), jamais le pied — le bouton SOS et
+           les commandes doivent rester visibles. */
+        if (r && r.max && demande > r.max) retrecirListe(demande - r.max);
+      }).catch(() => {});
     }
   }, 60);
 }
+function retrecirListe(exces) {
+  const l = $('#list');
+  if (!l) return;
+  const actuelle = l.getBoundingClientRect().height;
+  l.style.maxHeight = Math.max(72, Math.floor(actuelle - exces - 4)) + 'px';
+  lastH = 0;
+  fitHeight();
+}
+/* L'ecran a change (branche, debranche, mise a l'echelle) : on rend
+   a la liste sa hauteur naturelle, et on redemande. */
+window.liaison.on && window.liaison.on('ecran', () => {
+  const l = $('#list'); if (l) l.style.maxHeight = '';
+  lastH = 0; fitHeight();
+});
 let view = 'sug', lastSug = [], lastReq = [], curStruct = null;
 
 /* ------------------------------------------------------------
@@ -1271,7 +1341,10 @@ $('#list').addEventListener('scroll', marquerDefilement, { passive: true });
 function toast(msg, red) {
   const t = $('#toast'); t.textContent = msg;
   t.className = 'toast on' + (red ? ' red' : '');
-  setTimeout(() => t.className = 'toast' + (red ? ' red' : ''), 1900);
+  /* Un second message dans les 1,9 s etait efface par le minuteur
+     du premier, au bout de quelques dixiemes : on repart a zero. */
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => t.className = 'toast' + (red ? ' red' : ''), 1900);
 }
 
 /* ---------- ruban de structure ----------
@@ -1324,7 +1397,7 @@ function renderStrip(st, plan) {
 let curNow = null;
 function renderNow(n) {
   curNow = n;
-  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck')
+  $('#refLbl').textContent = n ? (n.how === 'manuel' ? 'Déclaré à la main' : 'Sur le deck')
     : (etatAn.library ? 'Lance un morceau' : 'En attente');
   $('#refT').textContent = n ? n.title : '—';
   $('#refA').textContent = n ? (n.artist || '') : '—';
@@ -1363,13 +1436,13 @@ function renderNow(n) {
        croira que le morceau est dans sa bibliotheque alors qu'il
        n'y est pas, et il s'etonnera de ne jamais le voir propose.
        ------------------------------------------------------------ */
-    if (n.horsBiblio) dit.push(n.sansFichier ? 'hors bibliotheque' : 'hors bibliotheque, analyse en cours');
+    if (n.horsBiblio) dit.push(n.sansFichier ? 'hors bibliothèque' : 'hors bibliothèque, analyse en cours');
     if (n.tempoDeduit) dit.push('tempo mesure par Liaison');
     else if (n.tempoCorrige) dit.push('tempo corrige par Liaison');
     if (n.tonaliteDeduite) dit.push('tonalite mesuree');
     else if (n.tonaliteCorrigee) dit.push('tonalite corrigee');
     $('#refLbl').textContent = dit.length
-      ? (n.how === 'manuel' ? 'Declare a la main' : 'Sur le deck') + ' · ' + dit.join(' · ')
+      ? (n.how === 'manuel' ? 'Déclaré à la main' : 'Sur le deck') + ' · ' + dit.join(' · ')
       : $('#refLbl').textContent;
   }
   if (n) curStruct = n.structure || null;
@@ -1460,12 +1533,12 @@ function conseilPour(quand) {
 
 function etatVide() {
   if (etatAn.importing)
-    return '<div class="empty"><b>Lecture de ta bibliotheque</b>Liaison lit la base de ton logiciel.<br>Quelques secondes.</div>';
+    return '<div class="empty"><b>Lecture de ta bibliothèque</b>Liaison lit la base de ton logiciel.<br>Quelques secondes.</div>';
   if (!etatAn.library)
     return conseilHTML(conseilPour('biblio') || {
-      titre: 'Aucune bibliotheque',
+      titre: 'Aucune bibliothèque',
       texte: 'Liaison n\'a trouve aucune base a lire.',
-      marche: ['Ouvre les reglages et lance la detection',
+      marche: ['Ouvre les réglages et lance la detection',
                'Ou pointe directement ton dossier de musique'] });
   if (!curNow)
     return conseilHTML(conseilPour('deck') || {
@@ -1562,8 +1635,8 @@ function renderSug(list) {
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       ${bpmHTML(r)}
       <span style="min-width:0">
-        <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.horsFenetre || r.horsRepertoire || r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsFenetre ? '<span class="hf">HORS FENÊTRE</span>' : ''}${r.horsRepertoire ? (r.horsFenetre?' · ':'') + '<span class="hr">' + esc(r.horsRepertoire.toUpperCase()) + '</span>' : ''}${r.cloture ? ((r.horsFenetre||r.horsRepertoire)?' · ':'') + '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? ((r.horsFenetre||r.horsRepertoire||r.cloture)?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}${r.relance ? ' · <span class="up">RELANCE</span>' : ''}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="n" data-brut>${esc(r.title)}</span>
+        <span class="mm">${r.horsFenetre || r.horsRepertoire || r.cloture || r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsFenetre ? '<span class="hf">HORS FENÊTRE</span>' : ''}${r.horsRepertoire ? (r.horsFenetre?' · ':'') + '<span class="hr">' + esc(r.horsRepertoire.toUpperCase()) + '</span>' : ''}${r.cloture ? ((r.horsFenetre||r.horsRepertoire)?' · ':'') + '<span class="clo">CLÔTURE</span>' : ''}${r.horsBulle ? ((r.horsFenetre||r.horsRepertoire||r.cloture)?' · ':'') + '<span class="hb">HORS BULLE</span>' : ''}${r.client ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.horsBulle)?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.horsFenetre||r.horsRepertoire||r.cloture||r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · ${esc(r.transition)}${r.trend >= 70 ? ' · <span class="up">TENDANCE</span>' : ''}${r.relance ? ' · <span class="up">RELANCE</span>' : ''}</span><span class="ar" data-brut>${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -1587,8 +1660,8 @@ function renderSos(list) {
       <span class="sc" data-n="${r.total >= 85 ? 'haut' : r.total >= 70 ? 'moyen' : 'bas'}">${r.total}</span>
       ${bpmHTML(r)}
       <span style="min-width:0">
-        <span class="n">${esc(r.title)}</span>
-        <span class="mm">${r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsBulle ? '<span class="hb">HORS BULLE</span>' : ''}${r.client ? (r.horsBulle?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar">${esc(r.artist || '')}</span></span>
+        <span class="n" data-brut>${esc(r.title)}</span>
+        <span class="mm">${r.client || r.horsBulle || (r.deja && r.deja.texte) ? `<span class="bd">${r.horsBulle ? '<span class="hb">HORS BULLE</span>' : ''}${r.client ? (r.horsBulle?' · ':'') + '<span class="ask">DEMANDÉ</span>' : ''}${r.deja && r.deja.texte ? ((r.client||r.horsBulle)?' · ':'') + dejaBrut(r) : ''}</span>` : ''}<span class="fx">${keyHTML(r)} · É ${r.energy} · ${esc(r.why)}</span><span class="ar" data-brut>${esc(r.artist || '')}</span></span>
         ${planHTML(r)}
       </span>
       <button class="go" data-id="${r.id}">Copier</button>
@@ -1601,7 +1674,29 @@ function renderSos(list) {
 $('#list').addEventListener('click', async e => {
   const b = e.target.closest('.go'); if (!b) return;
   const r = await window.liaison.loadTrack(Number(b.dataset.id));
-  if (r && r.ok) toast('« ' + r.copied + ' » copie — colle dans ta recherche', view === 'sos');
+  if (r && r.ok) {
+    /* Le bouton repond lui-meme : l'oeil est deja dessus. */
+    if (!b.dataset.txt) b.dataset.txt = b.textContent;
+    if (!b.classList.contains('fait')) b.style.minWidth = b.offsetWidth + 'px';   /* la ligne ne bouge pas */
+    b.classList.remove('fait'); void b.offsetWidth; b.classList.add('fait');
+    b.textContent = '✓';
+    clearTimeout(b._t);
+    b._t = setTimeout(() => { b.classList.remove('fait'); b.textContent = b.dataset.txt; b.style.minWidth = ''; }, 1300);
+    toast('« ' + r.copied + ' » copie — colle dans ta recherche', view === 'sos');
+  }
+});
+
+/* « Bien vu » : le DJ vient de lancer un titre que Liaison proposait. */
+window.liaison.on('pris', p => {
+  const el = $('#serie'), ref = document.querySelector('.ref');
+  if (!el) return;
+  if (!p || !p.pris) { el.hidden = true; return; }
+  const coche = '<svg viewBox="0 0 12 12" aria-hidden="true"><path d="M2.2 6.4l2.4 2.4 5.2-5.4"/></svg>';
+  el.innerHTML = coche + '<span>' + (p.serie > 1 ? p.serie + ' d\'affilée' : (p.rang === 0 ? 'Premier choix' : 'Bien vu')) + '</span>';
+  el.title = p.ceSoir > 1 ? p.ceSoir + ' enchaînements Liaison ce soir' : 'Enchaînement proposé par Liaison';
+  el.hidden = false;
+  el.classList.remove('pop'); void el.offsetWidth; el.classList.add('pop');
+  if (ref) { ref.classList.remove('pris'); void ref.offsetWidth; ref.classList.add('pris'); }
 });
 /* ============================================================
    La bulle, cote cabine.
@@ -1634,7 +1729,7 @@ function renderBulle(b) {
          compte. */
       (bulEtat.epoquePerdue
         ? '<span style="opacity:.62"> · epoque non lue (' + bulEtat.partAnnees +
-          ' % de ta bibliotheque est datee) — « Tout relire » dans les reglages</span>'
+          ' % de ta bibliothèque est datée) — « Tout relire » dans les réglages</span>'
         : '');
   }
   /* En bulle, la courbe tient : les quatre boutons de pente ne
@@ -1668,7 +1763,7 @@ async function basculerBulle() {
   const b = await window.liaison.bulleBasculer();
   if (b && b.impossible) { toast(b.raison, true); return; }
   renderBulle(b);
-  if (avant) toast('Bulle levee');
+  if (avant) toast('Bulle levée');
   else if (b) toast('Bulle posee — ' + b.etiquette +
                     (b.epoquePerdue ? ' (epoque indisponible)' : ''));
 }
@@ -1716,7 +1811,7 @@ function renderReq(list) {
 
   const box = $('#list');
   if (!lastReq.length) {
-    box.innerHTML = '<div class="empty"><b>Aucune demande</b>Ouvre une session dans les reglages,<br>puis affiche le QR au bar.</div>';
+    box.innerHTML = '<div class="empty"><b>Aucune demande</b>Ouvre une session dans les réglages,<br>puis affiche le QR au bar.</div>';
     fitHeight(); return;
   }
   $('#reqSub').textContent = lastReq.length + ' titre' + (lastReq.length > 1 ? 's' : '') +
@@ -1725,10 +1820,10 @@ function renderReq(list) {
     <div class="row req ${r.n >= 3 ? 'hot' : ''}">
       <span class="sc">${r.n}</span>
       <span style="min-width:0">
-        <span class="n">${esc(r.title)}</span>
+        <span class="n" data-brut>${esc(r.title)}</span>
         <span class="mm"><span class="fx">${r.have
-          ? esc(r.match.key || '?') + ' · ' + Number(r.match.bpm).toFixed(1).replace('.', ',')
-          : '<span class="miss">pas dans ta bibliothèque</span>'}</span><span class="ar">${esc(r.artist || '')}</span></span>
+          ? esc(r.match.key || '?') + ' · ' + (r.match.bpm > 0 ? Number(r.match.bpm).toFixed(1).replace('.', ',') : '—')
+          : '<span class="miss">pas dans ta bibliothèque</span>'}</span><span class="ar" data-brut>${esc(r.artist || '')}</span></span>
       </span>
       ${r.have ? `<button class="go" data-id="${r.id}">Copier</button>` : '<span class="go" style="opacity:.35">—</span>'}
     </div>`).join('');
@@ -1751,7 +1846,7 @@ $('#q').addEventListener('input', e => {
   const v = e.target.value;
   tq = setTimeout(async () => {
     const r = await window.liaison.searchTrack(v);
-    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}">${esc(x.title)} <span style="color:var(--cream3)">— ${esc(x.artist)} · ${esc(x.key || 'clé ?')} · ${x.bpm > 0 ? Number(x.bpm).toFixed(1).replace('.', ',') + ' BPM' : 'BPM ?'}</span></div>`).join('');
+    $('#sres').innerHTML = r.map(x => `<div data-id="${x.id}"><span data-brut>${esc(x.title)}</span> <span style="color:var(--cream3)">— <span data-brut>${esc(x.artist)}</span> · ${esc(x.key || 'clé ?')} · ${x.bpm > 0 ? Number(x.bpm).toFixed(1).replace('.', ',') + ' BPM' : 'BPM ?'}</span></div>`).join('');
   }, 200);
 });
 $('#sres').addEventListener('click', async e => {
@@ -1948,7 +2043,7 @@ async function peindreGenres() {
      c'est le libelle qui s'affiche ensuite dans « un filtre tourne ».
      ------------------------------------------------------------ */
   box.innerHTML = liste.map(g =>
-    '<button data-g="' + esc(g.libelle) + '" aria-pressed="' +
+    '<button data-brut data-g="' + esc(g.libelle) + '" aria-pressed="' +
     (fEtat.genres.includes(g.libelle) ? 'true' : 'false') + '">' +
     esc(g.libelle) + '<s>' + nbfr(g.n) + '</s></button>').join('');
   $('#gInfo').textContent = fEtat.genres.length
@@ -2055,7 +2150,7 @@ async function loadFilt() {
   const r = await window.liaison.filters();
   const sel = $('#fCrate');
   sel.innerHTML = '<option value="">Toute la bibliothèque</option>' +
-    (r.crates || []).map(c => `<option value="${esc(c.id)}">${esc(c.name)} · ${c.n}</option>`).join('');
+    (r.crates || []).map(c => `<option value="${esc(c.id)}" data-brut>${esc(c.name)} · ${c.n}</option>`).join('');
   if (!(r.crates || []).length) sel.innerHTML += '<option value="" disabled>Aucune liste trouvée</option>';
   renderFiltCount(r);
   peindreListe();
@@ -2340,7 +2435,7 @@ window.liaison.on('progress', p => {
   let t = 'Lecture ' + n(p.done) + ' / ' + n(p.total);
   /* Quand le cache reprend la main, on le dit : c'est la difference
      entre « ca recommence a zero » et « ca reprend ou ca en etait ». */
-  if (p.caches > 0) t += ' · ' + n(p.caches) + ' deja connus';
+  if (p.caches > 0) t += ' · ' + n(p.caches) + ' déjà connus';
   $('#st').textContent = t;
 });
 window.liaison.on('conseils', list => {
@@ -2350,7 +2445,7 @@ window.liaison.on('conseils', list => {
   if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
 });
 window.liaison.on('library', async l => {
-  $('#st').textContent = l.n.toLocaleString('fr-FR') + ' titres prets';
+  $('#st').textContent = l.n.toLocaleString('fr-FR') + ' titres prêts';
   try { etatAn = Object.assign(etatAn, await window.liaison.analysisState()); } catch (e) {}
   if (view === 'sug' && !lastSug.length) $('#list').innerHTML = etatVide();
 });
@@ -2382,7 +2477,7 @@ $('#licBuy').onclick = () => window.liaison.openLicence('plans');
   if (n && n.id != null) { try { curStruct = await window.liaison.structure(n.id); } catch (e) {} }
   renderNow(n);
   renderSug(await window.liaison.suggest());
-  if (c.libraryCount) $('#st').textContent = c.libraryCount + ' titres prets';
+  if (c.libraryCount) $('#st').textContent = c.libraryCount + ' titres prêts';
   fitHeight();
 })();
 </script></body></html>

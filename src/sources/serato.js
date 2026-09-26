@@ -8,9 +8,11 @@ const os = require('os');
 
 function sessionsDir(custom) {
   if (custom) return custom;
-  const music = path.join(os.homedir(), 'Music', '_Serato_', 'History', 'Sessions');
-  const alt = path.join(os.homedir(), 'Musique', '_Serato_', 'History', 'Sessions');
-  return fs.existsSync(music) ? music : alt;
+  /* Musique peut etre redirige (OneDrive, autre disque) : on prend
+     le premier dossier ou Serato a vraiment ecrit son historique. */
+  const cands = require('../volumes').dossiersMusique().map(m => path.join(m, '_Serato_', 'History', 'Sessions'));
+  return cands.find(d => { try { return fs.existsSync(d); } catch (e) { return false; } })
+      || path.join(os.homedir(), 'Music', '_Serato_', 'History', 'Sessions');
 }
 
 /* ------------------------------------------------------------

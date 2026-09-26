@@ -1,6 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Liaison</title>
 <link rel="stylesheet" href="./da.css">
+<script src="./i18n-en.js"></script>
+<script src="./i18n.js"></script>
 <style>
 /* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
    Aucune police distante : hors ligne, le club coupe tout. */
@@ -293,8 +296,13 @@ $('#activate').onclick = async () => {
   $('#activate').disabled = true;
   $('#msg').className = 'msg';
   $('#msg').textContent = 'Activation…';
-  const r = await window.liaison.licenseActivate(key);
-  $('#activate').disabled = false;
+  /* Un appel qui jette ne doit pas laisser le bouton grise sur
+     « Activation… » : le DJ n'aurait plus qu'a fermer la fenetre. */
+  let r;
+  try { r = await window.liaison.licenseActivate(key); }
+  catch (e) { r = { ok: false, error: '' }; }
+  finally { $('#activate').disabled = false; }
+  r = r || { ok: false, error: '' };
   if (r.ok) {
     const st = r.status;
     $('#doneTitle').textContent = st.tier === 'ami' ? 'Bienvenue' : 'Machine activée';
@@ -306,8 +314,15 @@ $('#activate').onclick = async () => {
     go('done');
   } else {
     $('#msg').className = 'msg err';
-    let m = r.error || 'Activation impossible.';
-    if (r.devices && r.devices.length) m += ' Machines déjà actives : ' + r.devices.map(d => esc(d.name)).join(', ') + '.';
+    /* Une erreur reseau brute (« getaddrinfo ENOTFOUND … ») ne dit
+       rien a un DJ : on dit ce qui se passe et quoi faire. */
+    const brut = String(r.error || '');
+    let m = !brut || /ENOTFOUND|ECONN|ETIMEDOUT|EAI_AGAIN|getaddrinfo|socket|Delai depasse|injoignable|network/i.test(brut)
+      ? 'Pas de connexion au serveur de licences. L\'activation demande internet une seule fois — ' +
+        'réessaie une fois connecté (ensuite, Liaison marche hors ligne).'
+      : brut;
+    /* textContent : pas d'echappement HTML, il s'afficherait tel quel (« &amp;amp; »). */
+    if (r.devices && r.devices.length) m += ' Machines déjà actives : ' + r.devices.map(d => d.name).join(', ') + '.';
     $('#msg').textContent = m;
   }
 };
@@ -373,17 +388,21 @@ async function poserLeBilan() {
   let b;
   try { b = await window.liaison.bilan(); } catch (e) { return; }
   if (!b || (!b.sets && b.enchainements < 5)) return;
+  /* Des chiffres en gras au milieu d'une phrase : on l'ecrit dans
+     les deux langues plutot que de laisser traduire des morceaux. */
+  const en = window.enAnglais && window.enAnglais();
   const bouts = [];
   if (b.sets) bouts.push('<b>' + b.sets + ' set' + (b.sets > 1 ? 's' : '') + '</b>');
-  if (b.heures >= 1) bouts.push('<b>' + b.heures + ' h</b> de musique');
+  if (b.heures >= 1) bouts.push('<b>' + b.heures + ' h</b> ' + (en ? 'of music' : 'de musique'));
   if (b.enchainements >= 5) {
     const taux = b.enchainements ? Math.round(b.pris / b.enchainements * 100) : 0;
-    bouts.push('<b>' + b.enchainements + ' enchaînements</b>' +
-      (taux >= 5 ? ', dont <b>' + taux + ' %</b> sortis de Liaison' : ''));
+    bouts.push('<b>' + b.enchainements + (en ? ' transitions' : ' enchaînements') + '</b>' +
+      (taux >= 5 ? (en ? ', <b>' + taux + '%</b> of them from Liaison' : ', dont <b>' + taux + ' %</b> sortis de Liaison') : ''));
   }
   if (!bouts.length) return;
   const el = document.getElementById('bilan');
-  el.innerHTML = 'Depuis que tu l\'as installé : ' + bouts.join(', ') + '.';
+  if (en) el.setAttribute('data-no-i18n', '');
+  el.innerHTML = (en ? 'Since you installed it: ' : 'Depuis que tu l\'as installé : ') + bouts.join(', ') + '.';
   el.hidden = false;
 }
 

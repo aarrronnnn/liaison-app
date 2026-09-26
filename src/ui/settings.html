@@ -1,6 +1,9 @@
 <!doctype html><html lang="fr"><head><meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self' data:; connect-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
 <title>Liaison — reglages</title>
 <link rel="stylesheet" href="./da.css">
+<script src="./i18n-en.js"></script>
+<script src="./i18n.js"></script>
 <style>
 /* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
    Aucune police distante : hors ligne, le club coupe tout. */
@@ -1092,6 +1095,14 @@ display:flex;align-items:center;justify-content:center;letter-spacing:0}
     <div id="srcOpts"></div>
     <p class="tips" id="srcHelp"></p>
     <div class="state" id="srcState">—</div>
+    <!-- Bilingue exprès, et jamais traduit : c'est la seule ligne
+         qu'un DJ qui ne lit pas la langue affichée doit pouvoir lire. -->
+    <label style="margin-top:16px" data-no-i18n>Langue · Language</label>
+    <select id="optLangue" data-no-i18n style="max-width:320px">
+      <option value="auto">Automatique (système) · Automatic (system)</option>
+      <option value="fr">Français</option>
+      <option value="en">English</option>
+    </select>
     <label style="margin-top:16px">Comportement</label>
     <div style="display:flex;flex-direction:column;gap:8px;font-size:13.5px">
       <label style="display:flex;gap:9px;align-items:center;text-transform:none;letter-spacing:0;font-family:var(--b);font-size:13.5px;color:var(--ink);margin:0">
@@ -1497,6 +1508,8 @@ function essaiLong(st) {
          + '</b>. Les jours sont écoulés, mais l\'essai reste ouvert tant que tu n\'as pas '
          + 'pu juger Liaison en cabine.';
   }
+  if (window.enAnglais && window.enAnglais())
+    return 'Trial — <b>' + st.trialLeft + ' day' + (st.trialLeft > 1 ? 's' : '') + '</b> left';
   return 'Essai — <b>' + st.trialLeft + ' jour' + (st.trialLeft > 1 ? 's' : '') + '</b> restants';
 }
 
@@ -1515,7 +1528,9 @@ function renderLic(st){
   /* Le detail des droits arrive du processus principal. S'il manque une
      seule fois, on n'ecrit pas cette ligne plutot que de vider la fenetre. */
   const f = st.features;
-  if (f) bits.push('Ouvert : ' + f.suggestions + ' suggestions · sessions ' + (f.sessions ? 'oui' : 'non') + ' · rejeu de set ' + (f.replay ? 'oui' : 'non'));
+  if (f) bits.push(window.enAnglais && window.enAnglais()
+    ? 'Unlocked: ' + f.suggestions + ' suggestions · guest sessions ' + (f.sessions ? 'yes' : 'no') + ' · set replay ' + (f.replay ? 'yes' : 'no')
+    : 'Ouvert : ' + f.suggestions + ' suggestions · sessions ' + (f.sessions ? 'oui' : 'non') + ' · rejeu de set ' + (f.replay ? 'oui' : 'non'));
   $('#licState').innerHTML = bits.join('<br>');
   $('#licApi').textContent = 'Serveur de licences : ' + st.api;
   if (st.key) $('#licKey').value = st.key;
@@ -1616,16 +1631,22 @@ async function tarifsRendre() {
      cartes, avec son equivalent mensuel : c'est le chiffre qui
      compare, pas le total annuel. */
   const an = [];
-  if (t.resident_an) an.push('<a class="lienAn" data-plan="resident_an">Résident à l\'année</a> : '
-    + t.resident_an.euro + ' €'
-    + (t.resident_an.parMois ? ', soit ' + t.resident_an.parMois + ' €/mois' : ''));
-  if (t.collectif_an) an.push('<a class="lienAn" data-plan="collectif_an">Collectif à l\'année</a> : '
-    + t.collectif_an.euro + ' €');
+  const EN = window.enAnglais && window.enAnglais();
+  const prix = v => EN ? '€' + String(v).replace(',', '.') : v + ' €';
+  if (t.resident_an) an.push('<a class="lienAn" data-plan="resident_an">' + (EN ? 'Resident — yearly' : 'Résident à l\'année') + '</a>' + (EN ? ': ' : ' : ')
+    + prix(t.resident_an.euro)
+    + (t.resident_an.parMois ? (EN ? ', or ' + prix(t.resident_an.parMois) + '/month' : ', soit ' + t.resident_an.parMois + ' €/mois') : ''));
+  if (t.collectif_an) an.push('<a class="lienAn" data-plan="collectif_an">' + (EN ? 'Crew — yearly' : 'Collectif à l\'année') + '</a>' + (EN ? ': ' : ' : ')
+    + prix(t.collectif_an.euro));
   const mo = TARIFS_VUS.moisOfferts;
   const ligne = $('#licTarifs');
-  if (ligne) ligne.innerHTML = an.length
-    ? (mo ? '<b>' + mo + ' mois offerts</b> sur l\'année — ' : 'À l\'année — ') + an.join(' · ') + '.'
-    : '';
+  if (ligne) {
+    if (EN) ligne.setAttribute('data-no-i18n', '');
+    ligne.innerHTML = an.length
+      ? (EN ? (mo ? '<b>' + mo + ' months free</b> on a yearly plan — ' : 'Yearly — ')
+            : (mo ? '<b>' + mo + ' mois offerts</b> sur l\'année — ' : 'À l\'année — ')) + an.join(' · ') + '.'
+      : '';
+  }
 }
 $('#licGo').onclick = async () => {
   $('#licMsg').textContent = 'Activation…';
@@ -2005,6 +2026,7 @@ $('#event').onchange = renderPack;
 $('#gw').oninput = () => $('#gwv').textContent = $('#gw').value + ' %';
 $('#drop').oninput = () => $('#dropv').textContent = $('#drop').value + ' %';
 
+$('#optLangue').onchange = () => window.liaison.setConfig({ langue: $('#optLangue').value });
 ['optWidget','optLogin','optAnnounce','optPannes'].forEach(id => {
   $('#' + id).onchange = () => window.liaison.setConfig({
     autoWidget: $('#optWidget').checked,
@@ -2414,9 +2436,13 @@ function aaLigne(x, opt) {
   /* « 4 fois · 3 soirees » : c'est le nombre de SOIREES qui fait
      la difference entre un trou dans la bibliotheque et une table
      de huit personnes un samedi soir. */
+  /* L'artiste vient des invites (page QR, champ libre) ou d'un
+     classement : il est echappe comme le titre. Il ne l'etait pas —
+     un « artiste » en <img onerror=...> s'executait dans les
+     reglages, qui ont acces a la licence. */
   const sous = o.rang
-    ? (x.artist || '')
-    : [x.artist || '',
+    ? esc(x.artist || '')
+    : [esc(x.artist || ''),
        (x.soirees > 1 ? '<em>' + x.soirees + ' soirées</em>' : null),
        (x.deja && x.deja.length ? 'proche de « ' + esc(x.deja[0].title || '') + ' » que tu as déjà' : null)
       ].filter(Boolean).join(' · ');
@@ -2504,7 +2530,8 @@ function aaReleve(k) {
   if (!k.depuis) return '';
   const d = new Date(k.depuis);
   const quand = d.toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })
-              + ' à ' + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+              + (window.enAnglais && window.enAnglais() ? ' at ' : ' à ')
+              + d.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
   /* La phrase dit TOUJOURS ou en est la garde. « Gardé sur cet
      ordinateur » est la confirmation qu'on peut fermer l'app sans
      rien perdre ; si l'écriture a échoué, on le dit franchement
@@ -2687,6 +2714,7 @@ window.liaison.on('app', () => renderApps());
   if (C.libraryCount) $('#libState').innerHTML = '<b>' + nbfr(C.libraryCount) + '</b> titres prets' +
     (C.config.libraryPath ? ' <span class="oz">' + esc(C.config.libraryPath) + '</span>' : '');
   renderLic(C.license);
+  $('#optLangue').value = ['fr', 'en'].includes(C.config.langue) ? C.config.langue : 'auto';
   $('#optWidget').checked = C.config.autoWidget !== false;
   $('#optLogin').checked = C.config.launchAtLogin !== false;
   $('#optAnnounce').checked = !!C.config.prolinkAnnounce;

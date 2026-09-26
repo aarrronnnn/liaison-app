@@ -53,7 +53,7 @@ const exists = p => { try { return fs.existsSync(p); } catch (e) { return false;
    ============================================================ */
 function seratoPaths() {
   const out = [];
-  const bases = [path.join(HOME, 'Music'), path.join(HOME, 'Musique'), path.join(HOME, 'Musik')];
+  const bases = vol.dossiersMusique();
   for (const b of bases) out.push(path.join(b, '_Serato_', 'database V2'));
   /* Serato pose son dossier a la racine du volume, et aussi sous un
      dossier Music quand le DJ a range comme sur son Mac. */
@@ -66,7 +66,7 @@ function seratoPaths() {
   return out;
 }
 function traktorPaths() {
-  const racines = [path.join(HOME, 'Documents', 'Native Instruments')];
+  const racines = vol.dossiersDocuments().map(d => path.join(d, 'Native Instruments'));
   /* Traktor suit son utilisateur : un DJ qui travaille sur deux
      machines pose souvent sa collection sur le disque qu'il emporte. */
   for (const v of externalVolumes()) {
@@ -87,7 +87,7 @@ function traktorPaths() {
 }
 function virtualdjPaths() {
   const out = [
-    path.join(HOME, 'Documents', 'VirtualDJ', 'database.xml'),
+    ...vol.dossiersDocuments().map(d => path.join(d, 'VirtualDJ', 'database.xml')),
     path.join(HOME, 'Library', 'Application Support', 'VirtualDJ', 'database.xml'),
     win ? path.join(process.env.LOCALAPPDATA || '', 'VirtualDJ', 'database.xml') : ''
   ].filter(Boolean);
@@ -99,8 +99,8 @@ function rekordboxXmlPaths() {
   const dirs = [
     path.join(HOME, 'Library', 'Pioneer', 'rekordbox'),
     path.join(HOME, 'AppData', 'Roaming', 'Pioneer', 'rekordbox'),
-    path.join(HOME, 'Documents'), path.join(HOME, 'Desktop'),
-    path.join(HOME, 'Music', 'PioneerDJ'), path.join(HOME, 'Music')
+    ...vol.dossiersDocuments(), path.join(HOME, 'Desktop'),
+    ...vol.dossiersMusique().map(m => path.join(m, 'PioneerDJ')), ...vol.dossiersMusique()
   ];
   /* Un export rekordbox se pose la ou on le retrouvera : tres
      souvent a la racine du disque qui porte les morceaux. */
@@ -233,7 +233,7 @@ const TRAKTOR_KEY = ['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','
    Aucun format ne collisionnait avant l'ajout de « Year », qui est
    le nom le plus court de la liste. */
 const attr = (s, name) => { const m = s.match(new RegExp('\\b' + name + '="([^"]*)"')); return m ? m[1] : ''; };
-const unesc = s => String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'");
+const unesc = s => require('./library').xmlDecode(s);
 
 /* L'option « existe » n'est la que pour les essais : elle permet
    d'eprouver la resolution du volume sur une plateforme simulee,
@@ -267,7 +267,13 @@ function parseTraktor(file, opt) {
        iTunes aucun probleme » — iTunes ecrit un chemin ABSOLU.
        ------------------------------------------------------------ */
     const volume = unesc(attr(e, 'VOLUME'));
-    const kv = attr(e, 'VALUE');
+    /* La tonalite analysee vit dans <MUSICAL_KEY VALUE="n">. attr(e,
+       'VALUE') rendait '' pour un morceau jamais analyse — et
+       Number('') vaut 0, soit « 8B » dans la table : tout morceau
+       Traktor sans tonalite recevait 8B, avec une fiabilite qui
+       empechait l'analyse de Liaison de corriger. */
+    const mk = e.match(/<MUSICAL_KEY\b[^>]*\bVALUE="(\d+)"/);
+    const kv = mk ? Number(mk[1]) : null;
     const bpm = parseFloat(attr(e, 'BPM')) || 0;
     out.push({
       path: (function () {
@@ -279,7 +285,7 @@ function parseTraktor(file, opt) {
       artist: unesc(attr(head, 'ARTIST')),
       genre: unesc(attr(e, 'GENRE')),
       bpm: Math.round(bpm * 10) / 10,
-      key: TRAKTOR_KEY[Number(kv)] || lib.toCamelot(unesc(attr(e, 'KEY'))) || null,
+      key: (kv != null && TRAKTOR_KEY[kv]) || lib.toCamelot(unesc(attr(e, 'KEY'))) || null,
       bpmSrc: 'traktor', keySrc: 'traktor',
       duration: parseFloat(attr(e, 'PLAYTIME')) || 0,
       year: annee(attr(e, 'RELEASE_DATE')) || annee(attr(e, 'YEAR')),
@@ -504,11 +510,7 @@ async function readSource(src, onProgress, opt) {
    valeur. On ne charge pas un analyseur complet — on parcourt le bloc
    « Tracks » et on lit les cles qui nous interessent. Un plist iTunes
    de 20 000 titres fait 30 Mo et se lit en moins d'une seconde ainsi. */
-function plistUnesc(s) {
-  return String(s).replace(/&amp;/g, '&').replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&apos;/g, "'")
-    .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(+d));
-}
+function plistUnesc(s) { return lib.xmlDecode(s); }   /* une seule passe : voir library.xmlDecode */
 
 /** file:///Users/... -> /Users/... , avec les %20 decodes. */
 function fromFileURL(u) {

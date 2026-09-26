@@ -70,7 +70,7 @@ const dispo = process.platform !== 'win32';
 
 function run(cmd, args, cb) {
   try {
-    execFile(cmd, args, { timeout: 4000, maxBuffer: 8 * 1024 * 1024 }, (err, out) => cb(err ? '' : String(out || '')));
+    execFile(cmd, args, { timeout: 4000, maxBuffer: 8 * 1024 * 1024, windowsHide: true }, (err, out) => cb(err ? '' : String(out || '')));
   } catch (e) { cb(''); }
 }
 

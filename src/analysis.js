@@ -40,7 +40,10 @@ const os = require('os');
 const { Worker } = require('worker_threads');
 const lib = require('./library');
 
-const SAUVE_MS = 5000;         /* on n'ecrit jamais plus souvent que ca */
+/* 30 s : le cache d'une grosse bibliotheque pese plus de 10 Mo, et
+   le reecrire toutes les 5 s faisait des saccades et des gigaoctets
+   d'ecriture par nuit. Il est vide aussi a la fermeture (stop). */
+const SAUVE_MS = 30000;        /* on n'ecrit jamais plus souvent que ca */
 const RELANCE_MS = 60000;      /* delai avant de reessayer un fichier absent */
 
 /* ------------------------------------------------------------
@@ -243,10 +246,27 @@ class AnalysisService {
     this.mesuresUtiles = 0;   /* analyses qui ont rendu un tempo */
   }
 
+  /* ------------------------------------------------------------
+     LA CADENCE.
+
+     Pendant un set, ou sur batterie, un seul morceau a la fois :
+     le logiciel de mix passe avant, et un portable qui chauffe
+     ralentit tout le monde (waveforms qui saccadent, ventilateur
+     dans le micro du DJ). Le reste du temps, tous les fils.
+     main.js regle ce chiffre ; les fils en trop finissent leur
+     morceau et attendent.
+     ------------------------------------------------------------ */
+  cadence() { return Math.max(1, Math.min(this.nWorkers, this._cadence || this.nWorkers)); }
+  setCadence(n) {
+    const avant = this.cadence();
+    this._cadence = n > 0 ? n : 0;
+    if (this.cadence() > avant) this._pousser();
+  }
+
   /* ---- fils ---- */
   _demarrerWorkers() {
     if (this.workers.length) return;
-    const f = path.join(__dirname, 'analyze-worker.js').replace('app.asar', 'app.asar.unpacked');
+    const f = path.join(__dirname, 'analyze-worker.js').replace(/app\.asar(?!\.unpacked)/, 'app.asar.unpacked');
     for (let i = 0; i < this.nWorkers; i++) {
       let w;
       try { w = new Worker(f); } catch (e) { break; }
@@ -321,7 +341,11 @@ class AnalysisService {
     for (const t of library) {
       this.tracks.set(t.id, t);
       if (!t.path) { t.analyzed = true; continue; }
-      const st = AnalysisCache.stamp(t.path);
+      /* L'empreinte a deja ete prise par le fil de lecture (un stat
+         par fichier, hors du fil du widget) : on ne retouche pas le
+         disque 50 000 fois ici. */
+      const st = t._stamp !== undefined ? t._stamp : AnalysisCache.stamp(t.path);
+      delete t._stamp;
       if (st === null) {
         /* fichier injoignable : disque externe debranche, ou
            bibliotheque qui pointe un morceau efface */
@@ -428,7 +452,7 @@ class AnalysisService {
        tard. Le disque revenu, tout repart tout seul.
        ------------------------------------------------------------ */
     let echecs = 0;
-    while (this.libres.length) {
+    while (this.libres.length && this.encours.size < this.cadence()) {
       const id = this._suivant();
       if (id == null) return;
       const t = this.tracks.get(id);
@@ -518,7 +542,9 @@ class AnalysisService {
        ou face — et ce n'est pas avec ca qu'on contredit le DJ. */
     const surTonalite = patch.mKey && patch.mKeyConf >= SUR_TONALITE
                         && (patch.mKeyMarge === undefined || patch.mKeyMarge >= MARGE_TONALITE);
-    const mesureBpm = patch.mBpm > 40 ? Math.round(patch.mBpm * 10) / 10 : 0;
+    /* Confiance nulle = rien n'a ete mesure (silence, fichier vide) :
+       on ne comble pas un vide avec un tirage. */
+    const mesureBpm = patch.mBpm > 40 && !(patch.mBpmConf <= 0) ? Math.round(patch.mBpm * 10) / 10 : 0;
 
     /* ---------------- le tempo ---------------- */
     if (!rangBpm) {
@@ -595,7 +621,7 @@ class AnalysisService {
            faible. Le seuil severe reste la, a sa vraie place.
        ---------------- */
     if (!rangKey) {
-      if (patch.mKey) {
+      if (patch.mKey && !(patch.mKeyConf <= 0)) {
         t.key = patch.mKey;
         t.keyDeduite = true;
         t.keySource = surTonalite ? 'liaison' : 'liaison-incertain';
