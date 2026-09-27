@@ -1803,14 +1803,79 @@ function partDesMots(q, cible) {
 
 /** La requete, preparee une fois pour toute la bibliotheque. */
 function preparer(q) {
-  return { q: q, A: bigrams(q), mots: motsUtiles(q) };
+  return { q: q, A: bigrams(q), T: bigTries(q), mots: motsUtiles(q) };
+}
+
+/* ------------------------------------------------------------
+   LES BIGRAMMES, TRIES ET GARDES SUR LE MORCEAU.
+
+   Reconnaitre le deck recalculait trois ensembles de bigrammes par
+   morceau candidat, a chaque morceau charge : sur 50 000 titres et
+   une requete faite de mots courants (« The Love Club - The Night
+   Is Young »), 190 ms sur une machine rapide, 250 a 310 ms sur les
+   machines Windows et Mac de la CI — la ou un portable de DJ se
+   situe.
+
+   Les formes d'un morceau ne changent pas : leurs bigrammes non
+   plus. On les garde une fois, sous forme de tableau d'entiers trie
+   (4 octets par bigramme, pas un Set de plusieurs centaines d'octets),
+   et l'intersection devient une fusion de deux listes triees. Le
+   resultat est exactement le meme que diceEns sur des ensembles :
+   memes bigrammes uniques, meme formule.
+   ------------------------------------------------------------ */
+function bigTries(s) {
+  const n = s.length - 1;
+  if (n < 1) return new Int32Array(0);
+  const a = new Int32Array(n);
+  /* Tri par insertion : sur les quelques dizaines de bigrammes d'un
+     titre, il bat le tri natif des tableaux types, dont l'appel coute
+     plus que le tri lui-meme. */
+  for (let i = 0; i < n; i++) {
+    const v = s.charCodeAt(i) * 65536 + s.charCodeAt(i + 1);
+    let j = i - 1;
+    while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
+    a[j + 1] = v;
+  }
+  if (n > 200) a.sort();
+  let k = 0;
+  for (let i = 0; i < n; i++) if (i === 0 || a[i] !== a[i - 1]) a[k++] = a[i];
+  return k === n ? a : a.slice(0, k);
+}
+function diceTries(A, B) {
+  const na = A.length, nb = B.length;
+  if (!na || !nb) return 0;
+  let i = 0, j = 0, inter = 0;
+  while (i < na && j < nb) {
+    const x = A[i], y = B[j];
+    if (x === y) { inter++; i++; j++; } else if (x < y) i++; else j++;
+  }
+  return (2 * inter) / (na + nb);
+}
+const TRIES_VIDES = [new Int32Array(0), new Int32Array(0), new Int32Array(0)];
+/* Prechauffer une tranche de la bibliotheque : main.js l'appelle par
+   petits morceaux quand la bibliotheque arrive, pour que la premiere
+   reconnaissance du deck et la premiere recherche d'un invite ne
+   paient pas ce calcul. Rend l'indice ou reprendre. */
+function prechauffer(library, debut, n) {
+  if (!Array.isArray(library)) return 0;
+  const fin = Math.min(library.length, (debut | 0) + (n || 2000));
+  for (let i = debut | 0; i < fin; i++) triesDe(library[i]);
+  return fin;
+}
+function triesDe(t) {
+  if (!t || typeof t !== 'object') return TRIES_VIDES;
+  if (t._b) return t._b;
+  const f = formesDe(t);
+  const b = [bigTries(f[0]), bigTries(f[1]), bigTries(f[2])];
+  Object.defineProperty(t, '_b', { value: b, enumerable: false, writable: true });
+  return b;
 }
 
 /* « plafond » : dans match(), seul compte de battre la meilleure note
    deja vue. Quand meme un accord parfait des mots ne suffirait pas, on
    ne les compte pas — la note rendue est alors inferieure a ce
    plafond, et le resultat final est exactement le meme. */
-function combineP(P, cible, plafond) {
+function combineP(P, cible, plafond, tries) {
   /* ------------------------------------------------------------
      Rien ne ressemble a tout.
 
@@ -1824,7 +1889,7 @@ function combineP(P, cible, plafond) {
      Une chaine vide ne ressemble a rien.
      ------------------------------------------------------------ */
   if (!P.q || !cible) return 0;
-  const d = diceEns(P.A, bigrams(cible));
+  const d = tries && P.T ? diceTries(P.T, tries) : diceEns(P.A, bigrams(cible));
   /* inclusion franche : la requete est le titre, ou l'inverse */
   if (cible.includes(P.q) || P.q.includes(cible)) return Math.min(1, 0.86 + 0.14 * d);
   if (plafond != null && Math.max(d, 0.42 * d + 0.58) <= plafond) return d;
@@ -1910,6 +1975,19 @@ function indexDe(library) {
   }
   ix = { mots, debuts, n: library.length };
   INDEX.set(library, ix);
+  /* Les bigrammes tries se calculent ensuite en fond, par tranches de
+     deux mille titres, entre deux evenements : la premiere
+     reconnaissance du deck ne les paie pas, et le fil principal
+     n'est jamais bloque plus de quelques millisecondes. */
+  if (typeof setImmediate === 'function') {
+    const tranche = (i) => {
+      if (INDEX.get(library) !== ix) return;       /* bibliotheque remplacee entre-temps */
+      const j = prechauffer(library, i, 2000);
+      if (j < library.length) { const h = setImmediate(() => tranche(j)); if (h && h.unref) h.unref(); }
+    };
+    const h = setImmediate(() => tranche(0));
+    if (h && h.unref) h.unref();
+  }
   return ix;
 }
 
@@ -1946,8 +2024,8 @@ function candidats(q, library) {
 }
 
 function noteDe(P, t, plafond) {
-  const f = formesDe(t);
-  return Math.max(combineP(P, f[0], plafond), combineP(P, f[1], plafond), combineP(P, f[2], plafond));
+  const f = formesDe(t), b = triesDe(t);
+  return Math.max(combineP(P, f[0], plafond, b[0]), combineP(P, f[1], plafond, b[1]), combineP(P, f[2], plafond, b[2]));
 }
 
 /**
@@ -2042,4 +2120,4 @@ module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, cro
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
                    accordArtiste, partDesMots,
                    epoque, affinites, formesDe,
-                   chansonDe, memeChanson, tempoOk, cleOk, nombre, popDe, timbreOk };
+                   chansonDe, memeChanson, tempoOk, cleOk, nombre, popDe, timbreOk, prechauffer };

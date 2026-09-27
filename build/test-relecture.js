@@ -62,7 +62,11 @@ const lignes = [];
 for (let i = 0; i < N; i++) {
   const f = path.join(musique, 'titre-' + i + '.mp3');
   if (i % 50 !== 0) fs.writeFileSync(f, '');        /* un sur cinquante a ete efface */
-  const loc = 'file://localhost' + encodeURI(f.replace(/\\/g, '/')).replace(/&/g, '&amp;');
+  /* Comme rekordbox l'ecrit : « file://localhost/C:/... » sur
+     Windows (barre devant la lettre de lecteur), « file://localhost/Users/... »
+     ailleurs. */
+  const url = f.replace(/\\/g, '/');
+  const loc = 'file://localhost' + (/^[A-Za-z]:/.test(url) ? '/' : '') + encodeURI(url).replace(/&/g, '&amp;');
   lignes.push('<TRACK TrackID="' + i + '" Name="Titre ' + i + '" Artist="Artiste ' + (i % 900) +
     '" Location="' + loc + '" AverageBpm="' + (100 + i % 40) + '.00" Tonality="' + ['Am', 'C', 'Em', 'G'][i % 4] +
     '" TotalTime="' + (180 + i % 120) + '" Genre="House"/>');

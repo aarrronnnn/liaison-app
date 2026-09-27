@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('liaison', {
   replaySet: opts => invoke('sets:replay', opts),
   /* AUTOUR 1.9 */
   replayExport: () => invoke('sets:replayExport'),
+  /* CARTE 1.10 */
+  carteEnregistrer: o => invoke('carte:enregistrer', o),
+  carteCopier: dataUrl => invoke('carte:copier', dataUrl),
   sessionCompteurs: () => invoke('session:compteurs'),
   /* la tracklist */
   tracklist: id => invoke('sets:tracklist', id),

@@ -143,13 +143,36 @@ const nom = x => x.title;
 
   /* Le cas inverse, celui qui coute le plus cher : un volume entier
      qui ne repond pas. On ne doit RIEN retirer. */
-  const eVol = lib.elaguerDisparus([
-    { path: '/Volumes/SSD-du-DJ-qui-nexiste-pas/a.mp3', title: 'sur le SSD' }
-  ]);
+  /* Le chemin est celui du systeme sur lequel on tourne : un chemin
+     « /Volumes/... » n'a pas de volume sur Windows (il n'y a pas de
+     lettre de lecteur), et le test echouait sur la CI Windows pour
+     une raison qui ne concerne aucun DJ. Chaque systeme est ensuite
+     verifie explicitement, quel que soit celui qui fait tourner
+     l'essai. */
+  const ici = process.platform === 'win32'
+    ? 'Q:\\SSD-du-DJ-qui-nexiste-pas\\a.mp3'
+    : '/Volumes/SSD-du-DJ-qui-nexiste-pas/a.mp3';
+  const eVol = lib.elaguerDisparus([{ path: ici, title: 'sur le SSD' }]);
   verifier('3quinquies. disque debranche : on ne retire rien',
            eVol.disparus.length === 0 && eVol.horsLigne === 1 &&
            eVol.gardes[0].offline === true,
            'retires ' + eVol.disparus.length + ', hors ligne ' + eVol.horsLigne);
+  /* rekordbox sur Windows : barres obliques apres la lettre de lecteur.
+     C'est un fichier, pas une adresse « schema: » — il doit etre verifie. */
+  {
+    const e = lib.elaguerDisparus([{ path: 'C:/Musique/efface.mp3', title: 'a' }, { path: 'itunes:12', title: 'b' },
+      { path: 'C:\\Musique\\efface2.mp3', title: 'c' }], { plateforme: 'win32', existe: () => false, volumeVivant: () => true });
+    verifier('3septies. Windows : « C:/... » est verifie comme un fichier, « itunes:12 » non',
+             e.disparus.map(x => x.title).join() === 'a,c' && e.gardes.map(x => x.title).join() === 'b',
+             'retires ' + e.disparus.map(x => x.title).join() + ' · gardes ' + e.gardes.map(x => x.title).join());
+  }
+  for (const [plateforme, chemin] of [['darwin', '/Volumes/SSD-du-DJ/a.mp3'], ['win32', 'E:\\Musique\\a.mp3'], ['win32', '\\\\NAS\\Musique\\a.mp3']]) {
+    const e = lib.elaguerDisparus([{ path: chemin, title: 'x' }],
+      { plateforme: plateforme, existe: () => false, volumeVivant: () => false });
+    verifier('3sexies. ' + plateforme + ' : ' + chemin + ' injoignable, rien de retire',
+             e.disparus.length === 0 && e.horsLigne === 1,
+             'retires ' + e.disparus.length + ', hors ligne ' + e.horsLigne);
+  }
 }
 
 /* ============================================================

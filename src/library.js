@@ -910,7 +910,23 @@ function elaguerDisparus(tracks, opt) {
   for (const t of tracks) {
     /* Pas de chemin de fichier — une entree iTunes sans Location,
        par exemple. On ne peut rien verifier, on ne jette rien. */
-    if (!t.path || /^[a-z]+:/i.test(t.path) && t.path.indexOf(':\\') < 0 && t.path.charAt(0) !== '/') {
+    /* ------------------------------------------------------------
+       « C:/Users/... » EST UN FICHIER.
+
+       Le test d'origine prenait tout ce qui commence par des lettres
+       suivies de « : » pour un schema (« itunes:123 »), sauf « C:\ ».
+       Or rekordbox ecrit ses chemins Windows avec des barres
+       OBLIQUES (« file://localhost/C:/Users/... »), et c'est ainsi
+       qu'ils arrivent ici. Sur Windows, TOUTE bibliotheque rekordbox
+       passait donc pour une liste d'adresses : aucun fichier efface
+       n'etait jamais retire, et aucune empreinte n'etait prise a
+       l'import — l'analyse refaisait vingt mille « stat » sur le fil
+       principal. Trouve par la CI Windows, le premier jour.
+       Un schema, c'est au moins deux lettres ; une lettre suivie de
+       « : » et d'une barre, c'est un lecteur.
+       ------------------------------------------------------------ */
+    const lecteur = /^[A-Za-z]:[\\/]/.test(t.path || '');
+    if (!t.path || (!lecteur && /^[a-z][a-z0-9+.-]+:/i.test(t.path) && t.path.charAt(0) !== '/')) {
       gardes.push(t); continue;
     }
     /* ENOENT seul veut dire « pas la ». Un refus de permission ou

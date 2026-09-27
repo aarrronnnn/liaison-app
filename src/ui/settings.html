@@ -4,6 +4,7 @@
 <link rel="stylesheet" href="./da.css">
 <script src="./i18n-en.js"></script>
 <script src="./i18n.js"></script>
+<script src="./carte.js"></script>
 <style>
 /* La DA vit dans da.css. Ici, seulement ce que cette fenetre ajoute.
    Aucune police distante : hors ligne, le club coupe tout. */
@@ -1465,6 +1466,22 @@ ol.moments span{display:block;color:var(--ink2);line-height:1.45;margin-top:1px}
 .langsw button.f:hover{color:var(--blueTxt)}
 .langsw button.f[aria-pressed="true"]{background:var(--blue);color:#fff}
 
+/* CARTE 1.10 — la carte de soiree */
+.carte{display:grid;grid-template-columns:minmax(150px,210px) minmax(0,1fr);gap:22px;align-items:start;margin:0 0 22px;
+  padding:18px;border:1px solid color-mix(in srgb,var(--blue) 30%,var(--line));border-radius:18px;
+  background:linear-gradient(140deg,color-mix(in srgb,var(--blue) 9%,var(--card)),var(--card) 55%)}
+@media(max-width:700px){.carte{grid-template-columns:minmax(0,1fr)}.cprev{max-width:220px}}
+.cprev canvas{display:block;width:100%;height:auto;border-radius:14px;
+  box-shadow:0 18px 40px -22px rgba(0,0,0,.8),0 0 0 1px color-mix(in srgb,var(--ink) 10%,transparent)}
+.copt .dtt{margin:0 0 6px}
+.cdit{margin:0 0 12px;font-size:13.5px;line-height:1.55;color:var(--ink2)}
+.cdit b{color:var(--ink);font-weight:600}
+.copt label[for="carteDj"]{margin-top:4px}
+.copt input#carteDj{max-width:340px}
+.cbas{margin-top:12px}
+.cbas .bascule{padding:11px 14px}
+.copt .row{margin-top:14px}
+
 /* ============================================================
    LA COUCHE 1.9 — AUTOUR DE LA SOIREE.
 
@@ -2359,6 +2376,38 @@ svg.bande .ax{font-family:var(--m);font-size:10px;fill:var(--ink2)}
   </div>
   <div class="selrow"><label for="dbSel">Quelle soirée</label><select id="dbSel"></select></div>
   <div id="dbOut" hidden>
+    <!-- CARTE 1.10 — ta soiree en une image, a poster. Rien ne part :
+         la carte s'enregistre ou se copie, c'est le DJ qui poste. -->
+    <div class="carte" id="carteZone">
+      <div class="cprev"><canvas id="carteCv" role="img" aria-label="Aperçu de la carte de soirée"></canvas></div>
+      <div class="copt">
+        <div class="dtt">Ta carte de soirée</div>
+        <p class="cdit">Ta nuit en une image, prête pour ta story. <b>Rien n'est envoyé</b> : tu l'enregistres ou tu la copies, et c'est toi qui postes.</p>
+        <div class="seg" id="carteFmt" role="group" aria-label="Format">
+          <button type="button" class="f on" data-f="story">Story</button>
+          <button type="button" class="f" data-f="post">Publication</button>
+        </div>
+        <label for="carteDj">Ton nom de DJ</label>
+        <input type="text" id="carteDj" placeholder="DJ Aaron · @aaron.dj" maxlength="40">
+        <div class="bascules cbas">
+          <div class="bascule">
+            <div class="bq"><label for="carteNom">Afficher le nom de la soirée</label>
+              <span class="bd">Un mariage n'a pas toujours envie d'être en story.</span></div>
+            <input type="checkbox" class="interr" id="carteNom" checked>
+          </div>
+          <div class="bascule">
+            <div class="bq"><label for="carteTitres">Afficher les titres</label>
+              <span class="bd">Sinon, seulement les tonalités de tes meilleurs enchaînements.</span></div>
+            <input type="checkbox" class="interr" id="carteTitres" checked>
+          </div>
+        </div>
+        <div class="row">
+          <button id="carteSave">Enregistrer l'image</button>
+          <button class="g" id="carteCopy">Copier l'image</button>
+        </div>
+        <span class="climsg" id="carteMsg" role="status"></span>
+      </div>
+    </div>
     <dl class="fiche compteurs" id="dbStats"></dl>
     <div class="ctxviz dbviz">
       <div class="courbe">
@@ -4559,7 +4608,86 @@ async function dbAfficher() {
     '<div class="vide">Genres inconnus pour cette soirée.</div>';
   $('#dbPhrases').innerHTML = r.phrases.map(p => '<div class="phr"><b>' + esc(p.t) + '</b><span>' + esc(p.d) + '</span></div>').join('');
   $('#dbOut').hidden = false;
+  /* Le debrief est affiche : le bouton qui le demandait n'a plus
+     d'objet, et l'action principale devient la carte. */
+  $('#dbVoir').hidden = true;
+  CARTE = { D: D, attendu: attendu };
+  carteRendre();
 }
+
+/* ============================================================
+   CARTE 1.10 — LA CARTE DE SOIREE.
+   ============================================================ */
+let CARTE = null;
+function carteOpts() {
+  return {
+    format: ($('#carteFmt .f.on') || {}).dataset ? $('#carteFmt .f.on').dataset.f : 'story',
+    nom: $('#carteNom').checked, titres: $('#carteTitres').checked,
+    dj: $('#carteDj').value.trim().slice(0, 40), en: LOCD() === 'en-GB',
+    attendu: CARTE ? CARTE.attendu : null
+  };
+}
+async function carteRendre() {
+  if (!CARTE || !window.LiaisonCarte) return;
+  try {
+    await window.LiaisonCarte.polices();
+    window.LiaisonCarte.dessiner($('#carteCv'), CARTE.D, carteOpts());
+  } catch (e) { $('#carteMsg').textContent = 'Impossible de dessiner la carte.'; }
+}
+function cartePrefs() {
+  const c = (C && C.config) || {};
+  if (c.djNom) $('#carteDj').value = c.djNom;
+  if (c.carteNom === false) $('#carteNom').checked = false;
+  if (c.carteTitres === false) $('#carteTitres').checked = false;
+  if (c.carteFormat === 'post') $('#carteFmt').querySelectorAll('.f').forEach(b => b.classList.toggle('on', b.dataset.f === 'post'));
+}
+$('#carteFmt').addEventListener('click', e => {
+  const b = e.target.closest('button[data-f]'); if (!b) return;
+  $('#carteFmt').querySelectorAll('.f').forEach(x => x.classList.toggle('on', x === b));
+  window.liaison.setConfig({ carteFormat: b.dataset.f });
+  carteRendre();
+});
+['#carteNom', '#carteTitres'].forEach(sel => $(sel).addEventListener('change', () => {
+  window.liaison.setConfig({ carteNom: $('#carteNom').checked, carteTitres: $('#carteTitres').checked });
+  carteRendre();
+}));
+let carteT = null;
+$('#carteDj').addEventListener('input', () => {
+  clearTimeout(carteT);
+  carteT = setTimeout(() => { carteRendre(); window.liaison.setConfig({ djNom: $('#carteDj').value.trim().slice(0, 40) }); }, 300);
+});
+function carteMsg(t) {
+  $('#carteMsg').textContent = t;
+  clearTimeout(carteMsg.t); carteMsg.t = setTimeout(() => $('#carteMsg').textContent = '', 3200);
+}
+$('#carteSave').onclick = async () => {
+  if (!CARTE) return;
+  await carteRendre();
+  const r = await window.liaison.carteEnregistrer({ dataUrl: $('#carteCv').toDataURL('image/png'),
+    nom: carteOpts().nom ? CARTE.D.nom : 'Soirée', quand: CARTE.D.quand, format: carteOpts().format });
+  if (!r || r.canceled) return;
+  carteMsg(r.ok ? 'Carte enregistrée. Poste-la en story !' : (r.error || 'Échec de l\'enregistrement.'));
+};
+$('#carteCopy').onclick = async () => {
+  if (!CARTE) return;
+  await carteRendre();
+  const r = await window.liaison.carteCopier($('#carteCv').toDataURL('image/png'));
+  carteMsg(r && r.ok ? 'Image copiée — colle-la dans Instagram, WhatsApp ou tes messages.' : 'Impossible de copier l\'image.');
+};
+/* Ouverture demandee par la notification « Belle soiree » : la bonne
+   rubrique, la bonne soiree, la carte prete. */
+window.liaison.on('aller', async c => {
+  if (!c || !c.carte) return;
+  const carte = document.getElementById(c.carte);
+  const pan = carte && carte.closest('.pan');
+  const nav = pan && document.querySelector('.rnav[data-pan="' + pan.id + '"]');
+  if (nav) nav.click();
+  if (c.carte === 'debriefCard' && c.set != null) {
+    await setsRecharger();
+    if (setDe(c.set)) { $('#dbSel').value = String(c.set); await dbAfficher(); }
+    const z = $('#carteZone'); if (z) z.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  }
+});
 $('#dbVoir').onclick = dbAfficher;
 $('#dbSel').onchange = () => { if (aLeRejeu()) dbAfficher(); else { $('#dbOut').hidden = true; $('#dbVoir').hidden = false; dbEtat('info', 'Débrief', setDe($('#dbSel').value) ? setDe($('#dbSel').value).name : '—', 'Clique <b class="lu">Voir le débrief</b>.'); } };
 $('#dbCopier').onclick = () => {
@@ -5110,6 +5238,7 @@ window.liaison.on('app', () => renderApps());
   renderTracklist();
   rjEtatRendre();
   prepContexte();
+  cartePrefs();
 })();
 
 /* ============================================================

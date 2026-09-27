@@ -68,7 +68,12 @@ const CATALOGUE = [
    est dans la base mais plus sur le disque — le cas du DJ qui a
    vide sa corbeille sans reexporter. */
 let SUR_DISQUE = new Set(CATALOGUE.filter(x => !x.absent).map(x => x.f));
-const existe = x => SUR_DISQUE.has(String(x));
+/* Windows accepte les deux barres : « C:/Music/x.mp3 » et
+   « C:\\Music\\x.mp3 » designent le meme fichier. rekordbox ecrit la
+   premiere forme ; le faux disque doit donc repondre aux deux, comme
+   le vrai. (Le banc passait jusqu'ici parce que l'elagage ne
+   verifiait PAS les chemins « C:/... » — c'etait le defaut.) */
+const existe = x => SUR_DISQUE.has(String(x).replace(/\//g, '\\'));
 /* Les trois disques de la machine simulee. Le banc s'en sert pour
    distinguer « fichier efface » (le disque repond, le fichier n'y
    est plus) de « disque debranche » (le volume ne repond pas) —

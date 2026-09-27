@@ -232,7 +232,17 @@ function direBonneSoiree() {
     const bouts = [p.length + (en ? ' tracks' : ' titres'), duree];
     if (prisCeSoir > 0 && serieSoiree === s.id)
       bouts.push(prisCeSoir + (en ? ' Liaison transition' + (prisCeSoir > 1 ? 's' : '') : ' enchaînement' + (prisCeSoir > 1 ? 's' : '') + ' Liaison'));
-    new Notification({ title: en ? 'Great night.' : 'Belle soirée.', body: bouts.join(' · '), silent: true }).show();
+    /* CARTE 1.10 : la carte de soiree est le geste suivant. Un clic sur
+       la notification ouvre le debrief de CETTE soiree, carte prete.
+       On ne l'annonce que si le debrief est ouvert au DJ (Resident, ou
+       le premier, offert) : promettre une carte derriere une porte
+       fermee serait un appat. */
+    let carte = false;
+    try { carte = moments.debriefAutorise({ replay: !!feat().replay, dejaOffert: license.state.debriefOffert }).ok; } catch (err) {}
+    if (carte) bouts.push(en ? 'Your night card is ready' : 'Ta carte de soirée est prête');
+    const nte = new Notification({ title: en ? 'Great night.' : 'Belle soirée.', body: bouts.join(' · '), silent: true });
+    if (carte) nte.on('click', () => allerA({ carte: 'debriefCard', set: s.id }));
+    nte.show();
   } catch (e) { /* une notification ratee ne doit rien casser */ }
 }
 /* ------------------------------------------------------------
@@ -765,6 +775,19 @@ function openLicence(view) {
   licence.on('closed', () => { licence = null; });
 }
 
+/* CARTE 1.10 — ouvrir les reglages sur une rubrique precise (et, pour
+   le debrief, sur une soiree). La fenetre peut ne pas exister encore :
+   la demande attend qu'elle ait fini de charger. */
+let allerEnAttente = null;
+function allerA(cible) {
+  allerEnAttente = cible || null;
+  if (settings && !settings.isDestroyed() && !settings.webContents.isLoading()) {
+    settings.webContents.send('aller', allerEnAttente); allerEnAttente = null;
+    settings.show(); settings.focus();
+    return;
+  }
+  openSettings();
+}
 function openSettings() {
   if (settings && !settings.isDestroyed()) { settings.focus(); return; }
   /* 940×720 ne tient pas sur un ecran de 1366×768 ou a 150 % : la
@@ -777,6 +800,12 @@ function openSettings() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false }
   });
   settings.loadFile(path.join(__dirname, 'ui', 'settings.html'), avecLangue());
+  settings.webContents.on('did-finish-load', () => {
+    if (allerEnAttente && settings && !settings.isDestroyed()) {
+      const c = allerEnAttente; allerEnAttente = null;
+      setTimeout(() => { try { settings.webContents.send('aller', c); } catch (e) {} }, 400);
+    }
+  });
   settings.on('closed', () => { settings = null; });
 }
 
@@ -2340,7 +2369,7 @@ ipcMain.handle('config:get', () => ({ config: config, version: app.getVersion(),
    et desormais chaque changement de hauteur — relancait un calcul
    complet de suggestions sur toute la bibliotheque. Sur 22 000
    titres, ca se sent au doigt. */
-const DECOR = ['theme', 'densite', 'opacity', 'langue'];
+const DECOR = ['theme', 'densite', 'opacity', 'langue', 'djNom', 'carteFormat', 'carteNom', 'carteTitres'];
 
 ipcMain.handle('config:set', (e, patch) => {
   const p = patch || {};
@@ -3240,6 +3269,42 @@ ipcMain.on('drag:track', (e, id) => {
 ipcMain.handle('drag:possible', (e, id) => {
   const t = library.find(x => x.id === id);
   return !!(t && t.path);
+});
+
+/* ============================================================
+   CARTE 1.10 — la carte de soiree sort de l'app.
+
+   L'image est dessinee dans la fenetre (canvas) : ici on ne fait que
+   l'ecrire la ou le DJ le demande, ou la poser dans le presse-papiers.
+   On n'accepte qu'un PNG en data URL, de taille raisonnable : la
+   fenetre ne doit pas pouvoir ecrire n'importe quoi n'importe ou.
+   ============================================================ */
+const pngDe = u => {
+  const x = String(u || '');
+  if (x.indexOf('data:image/png;base64,') !== 0 || x.length > 20 * 1024 * 1024) return null;
+  try { return Buffer.from(x.slice(22), 'base64'); } catch (e) { return null; }
+};
+ipcMain.handle('carte:enregistrer', async (e, o) => {
+  o = o || {};
+  const png = pngDe(o.dataUrl);
+  if (!png) return { ok: false, error: 'Image illisible.' };
+  const d = new Date(o.quand || Date.now());
+  const jour = isNaN(d.getTime()) ? '' : d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+  const nom = String(o.nom || 'Soiree').replace(/[\/\\:*?"<>|]/g, '-').slice(0, 50);
+  const r = await dialog.showSaveDialog({
+    title: tr('Enregistrer la carte de soirée'),
+    defaultPath: path.join(app.getPath('pictures'), 'Liaison - ' + nom + (jour ? ' - ' + jour : '') + (o.format === 'post' ? ' (post)' : ' (story)') + '.png'),
+    filters: [{ name: 'PNG', extensions: ['png'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, png); } catch (err) { return { ok: false, error: String(err.message || err) }; }
+  return { ok: true, path: r.filePath };
+});
+ipcMain.handle('carte:copier', (e, dataUrl) => {
+  const png = pngDe(dataUrl);
+  if (!png) return { ok: false };
+  try { clipboard.writeImage(nativeImage.createFromBuffer(png)); return { ok: true }; }
+  catch (err) { return { ok: false, error: String(err.message || err) }; }
 });
 
 ipcMain.handle('qr:save', async (e, dataUrl) => {

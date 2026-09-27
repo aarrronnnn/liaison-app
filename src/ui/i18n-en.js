@@ -2015,7 +2015,29 @@
  "L'énergie du nouvel ordre": "The energy of the new order",
  "Le nouvel ordre": "The new order",
  "Set enregistré": "Saved set",
- "Reprends le vivier d'une soirée déjà jouée. Liaison garde les morceaux mais reconstruit l'ordre : jamais le même enchaînement deux fois, et la mixabilité tient toujours. Le résident qui joue le même bar chaque semaine garde son public sans lui resservir la même nuit.": "Take the pool from a night you've already played. Liaison keeps the tracks but rebuilds the order: never the same transition twice, and it still mixes. The resident who plays the same bar every week keeps the crowd without serving them the same night again."
+ "Reprends le vivier d'une soirée déjà jouée. Liaison garde les morceaux mais reconstruit l'ordre : jamais le même enchaînement deux fois, et la mixabilité tient toujours. Le résident qui joue le même bar chaque semaine garde son public sans lui resservir la même nuit.": "Take the pool from a night you've already played. Liaison keeps the tracks but rebuilds the order: never the same transition twice, and it still mixes. The resident who plays the same bar every week keeps the crowd without serving them the same night again.",
+ "Ta carte de soirée": "Your night card",
+ "Ta nuit en une image, prête pour ta story.": "Your night in one image, ready for your story.",
+ "Rien n'est envoyé": "Nothing is sent",
+ ": tu l'enregistres ou tu la copies, et c'est toi qui postes.": ": you save it or copy it, and you do the posting.",
+ "Story": "Story",
+ "Publication": "Post",
+ "Ton nom de DJ": "Your DJ name",
+ "Afficher le nom de la soirée": "Show the night's name",
+ "Un mariage n'a pas toujours envie d'être en story.": "A wedding doesn't always want to end up in a story.",
+ "Afficher les titres": "Show track titles",
+ "Sinon, seulement les tonalités de tes meilleurs enchaînements.": "Otherwise, only the keys of your best transitions.",
+ "Enregistrer l'image": "Save image",
+ "Copier l'image": "Copy image",
+ "Carte enregistrée. Poste-la en story !": "Card saved. Post it to your story!",
+ "Échec de l'enregistrement.": "Saving failed.",
+ "Image copiée — colle-la dans Instagram, WhatsApp ou tes messages.": "Image copied — paste it into Instagram, WhatsApp or your messages.",
+ "Impossible de copier l'image.": "Couldn't copy the image.",
+ "Impossible de dessiner la carte.": "Couldn't draw the card.",
+ "Aperçu de la carte de soirée": "Night card preview",
+ "Enregistrer la carte de soirée": "Save the night card",
+ "Ta carte de soirée est prête": "Your night card is ready",
+ "Format": "Format"
 };
   if (typeof module !== 'undefined' && module.exports) module.exports = EN; else r.LIAISON_EN = EN;
 })(typeof window !== 'undefined' ? window : this);
