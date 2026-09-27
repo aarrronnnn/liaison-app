@@ -79,8 +79,11 @@ jobs:
       - name: Poser playwright pour require()
         run: npm install --no-save playwright@1
 
+      # Un essai a la fois, jusqu'au bout : chaque echec devient une
+      # annotation lisible (nom de l'essai, systeme, dernieres lignes)
+      # au lieu d'un « exit code 1 » muet. Meme liste que `verifier`.
       - name: Toute la suite
-        run: npm run verifier
+        run: node build/essais-ci.js
 
       # Le site vit dans un autre depot. Quand il est disponible a
       # cote — ce qui n'est pas le cas ici — ses propres controles
