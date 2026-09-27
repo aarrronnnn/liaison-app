@@ -39,7 +39,7 @@ const TRAY_ICON = require('./tray-icon');
 const { License, TIERS, API } = require('./license');
 const rbFichiers = require('./sources/rekordbox');
 const { Gout } = require('./gout');
-const { Soirees } = require('./soirees');
+const { Soirees, enLigne: ficheLigne, serie: serieSemaines } = require('./soirees');
 
 const DIR = () => app.getPath('userData');
 const CFG = () => path.join(DIR(), 'config.json');
@@ -360,6 +360,11 @@ if (_minuteurJournal.unref) _minuteurJournal.unref();
 function soireeActiveId() {
   try { const a = lesSoirees().active(); return a ? a.id : null; } catch (e) { return null; }
 }
+/* SOIREE 1.8 : un set qui s'ouvre tout seul (un morceau detecte) porte
+   le nom de la soiree en cours et la fiche armee, pas « Session ». */
+function nommerSet() {
+  return { name: config.sessionName || 'Session', pack: config.pack || null, soiree: soireeActiveId() };
+}
 function chargerJournal() {
   if (journalManques) return journalManques;
   const lu = ecrire.lireJSON(AAVOIR(), null);
@@ -629,6 +634,13 @@ function avecLangue(opts) {
   const l = 'lang=' + langue();
   o.search = o.search ? o.search + '&' + l : l;
   return o;
+}
+function choisirLangue(l) {
+  const avant = langue();
+  config.langue = ['fr', 'en'].includes(l) ? l : 'auto';
+  saveConfig();
+  if (langue() !== avant) setTimeout(changerLangue, 50);
+  else { try { refreshTray(); } catch (e) {} }
 }
 function changerLangue() {
   _traducteur = null;
@@ -1361,6 +1373,15 @@ function rebuildClient() {
   const b = clientlist.resolve(config.clientBanned || [], library, engine.match);
 
   clientSet = {
+    /* --- SOIREE 1.8 : le detail, titre par titre, pour que « Le
+       client » montre une liste qu'on coche plutot qu'un total.
+       Les pistes restent en memoire ici ; client:get n'en sort que
+       l'artiste, le titre, le tempo et la tonalite. --- */
+    detail: {
+      wanted: w.matched.map(m => ({ e: m.entry, t: m.track })).concat(w.missing.map(e => ({ e: e, t: null }))),
+      banned: b.matched.map(m => ({ e: m.entry, t: m.track })).concat(b.missing.map(e => ({ e: e, t: null })))
+    },
+    /* --- fin SOIREE 1.8 --- */
     wanted: new Set(w.matched.map(m => m.track.id)),
     banned: new Set(b.matched.map(m => engine.keyOf(m.track))),
     dna: clientlist.dnaOf(w.matched.map(m => m.track)),
@@ -1474,6 +1495,7 @@ function currentFilter() {
     crate: crate ? { name: crate.name, ids: crate.ids } : null,
     skipPlayed: !!config.fSkipPlayed,
     playedIds: setlog ? setlog.playedIds() : new Set(),
+    playedSongs: setlog ? setlog.playedSongs() : new Set(),
     noExplicit: !!config.fNoExplicit,
     bpmMin: config.fBpmMin || 0, bpmMax: config.fBpmMax || 0,
     genres: config.fGenres || [],
@@ -1497,6 +1519,7 @@ function clotureEpinglee(vivier, ph) {
   if (!ph || !ph.liberer || !landPlan || !landPlan.closer || !current) { clotureRevue = null; return null; }
   const r = landing.clotureMaintenant(landPlan, current, vivier, {
     playedIds: setlog ? setlog.playedIds() : new Set(),
+    playedSongs: setlog ? setlog.playedSongs() : new Set(),
     banned: bannedSet(), wanted: clientSet.wanted
   });
   clotureRevue = r;
@@ -1882,7 +1905,7 @@ function computeSuggestions(limit) {
          affiche quand meme serait un aveu, pas une aide. */
       relance: r.plancherDit === 'relance',
       /* « tu l'as deja passe » : ce soir, ou une autre fois au meme endroit */
-      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
+      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName, track: r.track }) : null
     };
   });
 }
@@ -2028,7 +2051,10 @@ function setCurrent(track, how) {
     if (current && track && current.id !== track.id) {
       const soir = setlog && setlog.current ? setlog.current.id : null;
       if (soir !== serieSoiree) { serieSoiree = soir; serie = 0; prisCeSoir = 0; }
-      const rang = (dernieresPropositions || []).findIndex(c => c && c.track && c.track.id === track.id);
+      /* Meme chanson, autre fichier (le DJ a charge sa version longue) :
+         c'est bien la proposition qui a ete prise. */
+      const rang = (dernieresPropositions || []).findIndex(c => c && c.track &&
+        (c.track.id === track.id || engine.memeChanson(c.track, track)));
       if (rang >= 0) { serie++; prisCeSoir++; }
       else serie = 0;
       send('pris', { pris: rang >= 0, rang: rang, serie: serie, ceSoir: prisCeSoir });
@@ -2320,6 +2346,8 @@ ipcMain.handle('config:set', (e, patch) => {
   const p = patch || {};
   const avantLangue = langue();
   Object.assign(config, p); saveConfig();
+  /* SOIREE 1.8 : le contexte regle a la main suit la fiche armee. */
+  if ('pack' in p || 'sessionName' in p) ecrireFiche({ contexte: true });
   if (p.source) now.start(config.source, config.sourceOpts);
   if ('langue' in p && langue() !== avantLangue) setTimeout(changerLangue, 50);
   const clefs = Object.keys(p);
@@ -2530,8 +2558,61 @@ ipcMain.handle('client:get', () => ({
   banned: config.clientBanned || [],
   stats: clientSet.stats,
   dna: clientSet.dna,
-  spotify: !!(config.spotifyId && config.spotifySecret)
+  spotify: !!(config.spotifyId && config.spotifySecret),
+  /* --- SOIREE 1.8 --- */
+  detail: detailClient(),
+  fiche: (() => { try { const a = lesSoirees().active(); return a ? { id: a.id, nom: a.nom } : null; } catch (e) { return null; } })()
+  /* --- fin SOIREE 1.8 --- */
 }));
+
+/* ------------------------------------------------------------
+   SOIREE 1.8 — ce que « Le client » affiche, titre par titre.
+
+   Chaque titre voulu dit s'il est dans la bibliotheque, et s'il est
+   DEJA PASSE CE SOIR : la liste du client devient une liste qu'on
+   coche en jouant. On compare des chansons (artiste + titre sans la
+   version), pas des fichiers : l'edit club d'un titre voulu compte.
+   Lecture seule — rien n'est ecrit.
+   ------------------------------------------------------------ */
+function detailClient() {
+  const d = clientSet.detail;
+  if (!d) return null;
+  const joues = setlog && setlog.current ? setlog.playedSongs() : new Set();
+  const cle = e => ((e.artist || '') + '|' + (e.title || '')).toLowerCase();
+  const piste = t => t ? { artist: t.artist || '', title: t.title || '', bpm: t.bpm || null, key: t.key || null } : null;
+  const un = (x, avecPasse) => {
+    const o = { key: cle(x.e), artist: x.e.artist || '', title: x.e.title || '', have: !!x.t, piste: piste(x.t) };
+    if (avecPasse && x.t) o.passe = joues.has(engine.chansonDe(x.t));
+    return o;
+  };
+  return {
+    wanted: d.wanted.slice(0, 400).map(x => un(x, true)),
+    banned: d.banned.slice(0, 400).map(x => un(x, false)),
+    ceSoir: !!(setlog && setlog.current && setlog.current.played.length)
+  };
+}
+
+/* La fiche armee suit ce que le DJ change ailleurs. Sans ca, un titre
+   ajoute depuis « Le client » vivait dans la configuration globale et
+   disparaissait a la prochaine activation de la fiche — au moment
+   exact ou il comptait. */
+function ecrireFiche(quoi) {
+  let a = null;
+  try { a = lesSoirees().active(); } catch (e) { return; }
+  if (!a) return;
+  const p = {};
+  if (quoi.listes) {
+    p.voulus = (config.clientWanted || []).map(ficheLigne).filter(Boolean);
+    p.interdits = (config.clientBanned || []).map(ficheLigne).filter(Boolean);
+  }
+  if (quoi.contexte) {
+    const pk = String(config.pack || ''), i = pk.indexOf('-');
+    if (i > 0) { p.pays = pk.slice(0, i); p.evenement = pk.slice(i + 1); }
+    const nom = String(config.sessionName || '').trim();
+    if (nom && nom !== 'Session') p.nom = nom.slice(0, 120);
+  }
+  try { lesSoirees().modifier(a.id, p); } catch (e) {}
+}
 
 /** Ajoute des titres a une liste. `source` vaut 'texte' ou une adresse Spotify. */
 ipcMain.handle('client:import', async (e, opt) => {
@@ -2551,6 +2632,7 @@ ipcMain.handle('client:import', async (e, opt) => {
   const added = entries.filter(x => !seen.has(((x.artist || '') + '|' + x.title).toLowerCase()));
   config[side] = (config[side] || []).concat(added);
   saveConfig();
+  ecrireFiche({ listes: true });
   rebuildClient();
   if (current) send('suggestions', computeSuggestions(config.suggestCount));
   send('client', { stats: clientSet.stats });
@@ -2568,6 +2650,7 @@ ipcMain.handle('client:shopping', () => {
 ipcMain.handle('client:clear', (e, side) => {
   config[side === 'banned' ? 'clientBanned' : 'clientWanted'] = [];
   saveConfig();
+  ecrireFiche({ listes: true });
   rebuildClient();
   if (current) send('suggestions', computeSuggestions(config.suggestCount));
   send('client', { stats: clientSet.stats });
@@ -2575,12 +2658,15 @@ ipcMain.handle('client:clear', (e, side) => {
 });
 
 ipcMain.handle('client:remove', (e, opt) => {
+  opt = opt || {};
   const side = opt.side === 'banned' ? 'clientBanned' : 'clientWanted';
   config[side] = (config[side] || []).filter(x =>
     ((x.artist || '') + '|' + x.title).toLowerCase() !== String(opt.key).toLowerCase());
   saveConfig();
+  ecrireFiche({ listes: true });
   rebuildClient();
   if (current) send('suggestions', computeSuggestions(config.suggestCount));
+  send('client', { stats: clientSet.stats });
   return { ok: true, stats: clientSet.stats };
 });
 
@@ -2602,7 +2688,14 @@ ipcMain.handle('gout:etat', () => {
     n: g.d.n, pris: g.d.pris, ignore: g.d.ignore, force: Math.round(r.force * 100),
     mini: 12, resume: g.resume(),
     arcObserve: arcAuto(),
-    marge: r.marge ? Math.round(r.marge * 1000) / 10 : null
+    marge: r.marge ? Math.round(r.marge * 1000) / 10 : null,
+    /* --- REGLAGES 1.7 : les poids que le moteur applique DEJA
+       (gout.reglages()), exposes tels quels pour que la fenetre les
+       montre en barres bornees au lieu de les deviner. Rien n'est
+       recalcule ici. --- */
+    poids: r.appris ? r.poids : null,
+    plein: require('./gout').PLEIN
+    /* --- fin REGLAGES 1.7 --- */
   };
 });
 ipcMain.handle('gout:oublier', () => { leGout().oublier(); return { ok: true }; });
@@ -2621,7 +2714,14 @@ ipcMain.handle('soirees:liste', () => ({
   pays: locales.COUNTRIES, evenements: locales.EVENTS
 }));
 ipcMain.handle('soirees:creer', (e, patch) => lesSoirees().creer(patch || {}));
-ipcMain.handle('soirees:modifier', (e, o) => lesSoirees().modifier(o && o.id, (o && o.patch) || {}));
+ipcMain.handle('soirees:modifier', (e, o) => {
+  const s = lesSoirees().modifier(o && o.id, (o && o.patch) || {});
+  /* SOIREE 1.8 : la fiche armee s'applique tout de suite. Un titre
+     ajoute a la fiche en cours de soiree doit passer devant ce soir,
+     pas a la prochaine activation. */
+  try { const a = lesSoirees().active(); if (s && a && a.id === s.id) appliquerFiche(s.id); } catch (err) {}
+  return s;
+});
 ipcMain.handle('soirees:dupliquer', (e, o) => lesSoirees().dupliquer(o && o.id, o && o.nom));
 ipcMain.handle('soirees:supprimer', (e, id) => ({ ok: lesSoirees().supprimer(id) }));
 
@@ -2631,7 +2731,12 @@ ipcMain.handle('soirees:supprimer', (e, id) => ({ ok: lesSoirees().supprimer(id)
 ipcMain.handle('soirees:activer', (e, id) => {
   const s = lesSoirees().activer(id);
   if (!s) return { ok: false };
+  const r = appliquerFiche(id);
+  return { ok: true, soiree: s, reglages: r };
+});
+function appliquerFiche(id) {
   const r = lesSoirees().reglages(id);
+  if (!r) return null;
   config.sessionName = r.sessionName;
   config.pack = r.pack;
   config.clientWanted = r.clientWanted;
@@ -2643,13 +2748,93 @@ ipcMain.handle('soirees:activer', (e, id) => {
   rebuildClient();
   if (current) send('suggestions', computeSuggestions(config.suggestCount));
   send('client', { stats: clientSet.stats });
-  return { ok: true, soiree: s, reglages: r };
-});
+  return r;
+}
 ipcMain.handle('soirees:desactiver', () => {
   lesSoirees().desactiver();
   config.sessionToken = '';        /* on repart sur un jeton tire au hasard */
   saveConfig();
   return { ok: true };
+});
+
+/* ------------------------------------------------------------
+   SOIREE 1.8 — LE BILAN DES FICHES (lecture seule).
+
+   Ce que chaque fiche a deja donne : combien de fois elle a ete
+   jouee, combien de titres, combien de temps. Et le compteur du DJ :
+   vraies soirees jouees (memes seuils que l'essai), titres passes,
+   heures en cabine, semaines d'affilee. Tout vient du journal des
+   sets ; rien n'est ecrit.
+
+   Un set est rattache a une fiche par son identifiant quand il le
+   porte (depuis 1.5.4), sinon par son nom — les sets d'avant.
+   ------------------------------------------------------------ */
+ipcMain.handle('soirees:bilan', () => {
+  const sets = setlog ? setlog.list() : [];
+  const S = require('./session');
+  const vraie = x => (x.n | 0) >= S.SOIREE_TITRES && (x.duree | 0) >= S.SOIREE_MINUTES;
+  const par = {};
+  for (const f of lesSoirees().liste()) {
+    const les = sets.filter(x => x && (x.n | 0) > 0 &&
+      (x.soiree ? x.soiree === f.id : (!!x.name && x.name === f.nom)));
+    par[f.id] = {
+      fois: les.length,
+      titres: les.reduce((a, x) => a + (x.n | 0), 0),
+      minutes: les.reduce((a, x) => a + (x.duree | 0), 0),
+      dernier: les[0] ? { at: les[0].at, n: les[0].n | 0, duree: les[0].duree | 0 } : null
+    };
+  }
+  const reelles = sets.filter(vraie);
+  return {
+    par: par,
+    total: {
+      soirees: reelles.length,
+      titres: reelles.reduce((a, x) => a + (x.n | 0), 0),
+      minutes: reelles.reduce((a, x) => a + (x.duree | 0), 0),
+      serie: serieSemaines(reelles.map(x => x.at))
+    },
+    enCours: !!(setlog && setlog.current && setlog.current.played.length)
+  };
+});
+
+/* ------------------------------------------------------------
+   SOIREE 1.8 — LES LISTES D'UNE FICHE, CONFRONTEES A LA BIBLIOTHEQUE.
+
+   Pendant qu'on prepare une fiche, chaque titre colle dit tout de
+   suite s'il est dans la bibliotheque. Lecture seule : on ne touche
+   ni a la fiche ni aux listes actives. Le rapprochement est garde
+   ligne par ligne tant que la bibliotheque ne change pas : taper une
+   ligne de plus ne relance pas les quarante autres.
+   ------------------------------------------------------------ */
+const _analyseLignes = { sig: '', m: new Map() };
+function trouverLigne(ligne) {
+  const sig = library.length + ':' + (library[0] && library[0].id) + ':' + (library[library.length - 1] && library[library.length - 1].id);
+  if (_analyseLignes.sig !== sig) { _analyseLignes.sig = sig; _analyseLignes.m.clear(); }
+  const k = String(ligne).toLowerCase().replace(/\s+/g, ' ').trim();
+  if (_analyseLignes.m.has(k)) return _analyseLignes.m.get(k);
+  const e = clientlist.splitPair(String(ligne));
+  const r = clientlist.resolve([e], library, engine.match);
+  const t = r.matched[0] ? r.matched[0].track : null;
+  if (_analyseLignes.m.size > 5000) _analyseLignes.m.clear();
+  _analyseLignes.m.set(k, t);
+  return t;
+}
+ipcMain.handle('soirees:analyser', (e, o) => {
+  o = o || {};
+  const nettoie = v => (Array.isArray(v) ? v : []).map(x => String(x || '').trim()).filter(Boolean).slice(0, 500);
+  const voulus = nettoie(o.voulus), interdits = nettoie(o.interdits);
+  if (!library.length) return { pret: false, voulus: { total: voulus.length, trouves: 0 }, interdits: { total: interdits.length, trouves: 0 }, manquants: [] };
+  const tv = voulus.map(trouverLigne), ti = interdits.map(trouverLigne);
+  const manque = [];
+  voulus.forEach((l, i) => { if (!tv[i]) manque.push(clientlist.splitPair(l)); });
+  const dna = clientlist.dnaOf(tv.filter(Boolean));
+  return {
+    pret: true,
+    voulus: { total: voulus.length, trouves: tv.filter(Boolean).length },
+    interdits: { total: interdits.length, trouves: ti.filter(Boolean).length },
+    manquants: manque.slice(0, 12).map(m => ({ artist: m.artist, title: m.title, achats: acquire.buyLinks(m) })),
+    genres: Object.entries(dna).sort((a, b) => b[1] - a[1]).slice(0, 6).map(x => x[0])
+  };
 });
 
 /* Ou en est l'analyse de fond, et pourquoi le widget dit ce qu'il dit. */
@@ -2720,7 +2905,7 @@ ipcMain.handle('rescue', () => {
          que le DJ jugeait cassees. null se tait proprement. */
       delta: current.bpm > 0 ? Math.round((r.tempo.delta / current.bpm) * 1000) / 10 : null,
       plan: planFor(r.track),
-      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName }) : null
+      deja: setlog ? setlog.lastPlay(r.track.id, { sameName: config.sessionName, track: r.track }) : null
     };
   });
 });
@@ -2798,9 +2983,9 @@ ipcMain.handle('session:start', async (e, opts) => {
      Sans ca, un DJ qui affiche le QR une heure apres le debut coupait
      sa tracklist en deux et remettait a zero « ce que j'ai deja joue
      ce soir ». */
-  if (!setlog) setlog = new SetLog(SETS());
+  if (!setlog) { setlog = new SetLog(SETS()); setlog.nommer = nommerSet; }
   if (!setlog.current) {
-    setlog.open(config.sessionName, config.pack);
+    setlog.open(config.sessionName, config.pack, soireeActiveId());
     /* La soiree qui vient de se terminer entre dans la memoire des
        enchainements : elle comptera des ce soir. */
     oublierAffinites();
@@ -2891,6 +3076,15 @@ async function demarrerRelais() {
 /* Fermer la session : les telephones affichent « fermee », la file
    reste pour le debrief, le QR imprime restera valable la prochaine fois. */
 ipcMain.handle('session:stop', async () => {
+  /* AUTOUR 1.9 : les demandes restent attachees a la soiree qui les a
+     recues — titres et compte seulement — pour que son debrief les
+     retrouve quand la file aura change. */
+  try {
+    if (setlog && setlog.current) {
+      setlog.current.demandes = guests.top().slice(0, 80).map(r => ({ title: r.title || '', artist: r.artist || '', n: r.n || 1 }));
+      setlog._save(true);
+    }
+  } catch (err) {}
   invitesOuvert = false;
   guests.ferme = true;
   _etatCache = null;
@@ -2970,6 +3164,14 @@ ipcMain.handle('qr:affiche', async () => {
   }
 });
 ipcMain.handle('session:requests', () => requestList());
+/* AUTOUR 1.9 — les compteurs de la salle, sur toute la file et pas
+   seulement les douze lignes affichees. Lecture seule. */
+ipcMain.handle('session:compteurs', () => {
+  const tout = guests.top();
+  const l = requestList();
+  return { demandes: tout.reduce((a, r) => a + (r.n || 1), 0), titres: tout.length,
+           jouees: l.filter(r => r.joue).length, absentes: l.filter(r => !r.have).length };
+});
 /* Ce qui sort vers le navigateur ou une autre app. La page peut
    demander n'importe quelle adresse : on n'accepte que le web
    chiffre, le mail et le SMS — jamais file:, un partage reseau
@@ -3272,6 +3474,7 @@ ipcMain.handle('landing:plan', (e, minutes) => {
     restantMin: m,
     library: tam.tracks.tracks,
     playedIds: setlog ? setlog.playedIds() : new Set(),
+    playedSongs: setlog ? setlog.playedSongs() : new Set(),
     playedDurs: setlog ? setlog.playedDurations() : [],
     banned: bannedSet(), wanted: clientSet.wanted
   });
@@ -3324,9 +3527,14 @@ ipcMain.handle('prepare:build', async (e, opt) => {
   const eviter = new Set();
   if (opt.eviterDejaJoues && setlog) {
     const nom = String(config.sessionName || '').trim().toLowerCase();
+    const fiche = soireeActiveId();
+    /* AUTOUR 1.9 : meme fiche OU meme nom. Sans nom ni fiche, on
+       n'evite rien plutot que tout. */
     for (const s of setlog.sets) {
-      if (nom && String(s.name || '').trim().toLowerCase() !== nom) continue;
-      for (const p of s.played) eviter.add(p.id);
+      const memeFiche = fiche && s.soiree === fiche;
+      const memeNom = nom && nom !== 'session' && String(s.name || '').trim().toLowerCase() === nom;
+      if (!memeFiche && !memeNom) continue;
+      for (const p of (s.played || [])) eviter.add(p.id);
     }
   }
   dernierePrepa = await prepare.preparer({
@@ -3387,7 +3595,11 @@ ipcMain.handle('sets:debrief', (e, id) => {
   if (!setlog) return null;
   const s = (id ? setlog.get(Number(id)) : null) || setlog.current;
   if (!s) return null;
-  const D = debriefmod.debrief(s, { demandes: guests.top() });
+  /* AUTOUR 1.9 : les demandes de CETTE soiree. On passait la file en
+     cours quel que soit le set choisi : le debrief d'il y a trois
+     semaines comptait les demandes de ce soir. */
+  const dem = Array.isArray(s.demandes) ? s.demandes : (s === setlog.current ? guests.top() : []);
+  const D = debriefmod.debrief(s, { demandes: dem });
   if (!D) return { court: true, morceaux: (s.played || []).length };
 
   const droit = moments.debriefAutorise({
@@ -3403,7 +3615,7 @@ ipcMain.handle('sets:debrief', (e, id) => {
     license.state.debriefOffert = Date.now();
     license._save();
   }
-  return { debrief: D, phrases: debriefmod.enPhrases(D), offert: droit.offert };
+  return { debrief: D, phrases: debriefmod.enPhrases(D), offert: droit.offert, pack: s.pack || null };
 });
 
 ipcMain.handle('sets:tracklist', (e, id) => (setlog ? setlog.tracklist(id) : null));
@@ -3440,10 +3652,27 @@ ipcMain.handle('sets:export', async (e, opt) => {
   } catch (err) { return { ok: false, error: String(err.message || err) }; }
   return { ok: true, path: r.filePath, n: t.lignes.length };
 });
+let dernierRejeu = null;
+/* AUTOUR 1.9 — le nouvel ordre part en playlist, comme la preparation :
+   un fichier pose a cote, jamais une ecriture dans la base du logiciel. */
+ipcMain.handle('sets:replayExport', async () => {
+  if (!dernierRejeu || !dernierRejeu.ordre.length) return { ok: false, error: 'Rien à exporter.' };
+  const nom = String(dernierRejeu.nom).replace(/[\/\\:*?"<>|]/g, '-').slice(0, 50);
+  const r = await dialog.showSaveDialog({
+    title: 'Enregistrer le nouvel ordre',
+    defaultPath: nom + ' - rejoué.m3u8',
+    filters: [{ name: 'Playlist à importer', extensions: ['m3u8', 'm3u'] }]
+  });
+  if (r.canceled || !r.filePath) return { ok: false, canceled: true };
+  try { fs.writeFileSync(r.filePath, prepare.m3u(dernierRejeu), 'utf8'); }
+  catch (err) { return { ok: false, error: String(err.message || err) }; }
+  return { ok: true, path: r.filePath, n: dernierRejeu.ordre.length };
+});
 ipcMain.handle('sets:replay', (e, opts) => {
   if (!feat().replay) return { error: 'Le rejeu de set demande une licence Résident ou Collectif.', locked: true };
   if (!setlog) return null;
-  const prev = setlog.hydrate(opts.id, library);
+  opts = opts || {};
+  const prev = setlog.hydrate(Number(opts.id), library);
   if (!prev.length) return { error: 'Set introuvable dans la bibliothèque actuelle.' };
   const additions = (opts.addIds || []).map(id => library.find(t => t.id === id)).filter(Boolean);
   const r = reshuffle(prev, additions, {
@@ -3453,6 +3682,8 @@ ipcMain.handle('sets:replay', (e, opts) => {
     dna: currentDNA(), arc: config.arc === 'auto' ? (arcAuto() || 'hold') : config.arc, drop: opts.drop || 0,
     trends: trends, banned: new Set((config.banned || []).map(s => s.toLowerCase()))
   });
+  dernierRejeu = { ok: true, nom: (setlog.get(Number(opts.id)) || {}).name || 'Set',
+    ordre: r.order.map(t => ({ path: t.path, duration: t.duration || 0, artist: t.artist, title: t.title })) };
   return {
     novelty: r.novelty, movedAvg: r.movedAvg, kept: r.kept, added: r.added,
     order: r.order.map((t, i) => ({ n: i + 1, id: t.id, title: t.title, artist: t.artist, key: t.key, bpm: t.bpm, energy: t.energy }))
@@ -3520,6 +3751,18 @@ ipcMain.handle('library:scanInfo', () => {
   return { connus: n, octets: taille, dossiers: librarySources.filter(s => s.kind === 'folder').length };
 });
 ipcMain.handle('library:sources', () => autolib.detect());
+/* --- REGLAGES 1.7 : ce que chaque source a rendu au dernier import.
+   dernierImport existe deja pour le diagnostic ; la fenetre le lit
+   pour dire « Serato : 0 titre » au lieu de seulement « Serato
+   detecte ». Chemins et comptes, pas d'exemples de fichiers. --- */
+ipcMain.handle('library:rapport', () => dernierImport ? {
+  quand: dernierImport.quand,
+  sources: dernierImport.sources.map(x => ({ kind: x.kind, path: x.path, manuel: !!x.manuel,
+                                             erreur: x.erreur || null, lus: x.lus | 0 })),
+  retires: dernierImport.retires | 0, doublons: dernierImport.doublons | 0,
+  horsLigne: dernierImport.horsLigne | 0, gardes: dernierImport.gardes | 0
+} : null);
+/* --- fin REGLAGES 1.7 --- */
 ipcMain.handle('apps:running', () => watcher.current().map(a => ({ id: a.id, label: a.label, nowSource: a.nowSource })));
 ipcMain.handle('widget:settings', () => openSettings());
 ipcMain.handle('widget:close', () => { if (widget) widget.hide(); });
@@ -3638,6 +3881,15 @@ function refreshTray() {
     { label: 'Masquer le widget', click: () => widget && widget.hide() },
     { label: 'Licence…', click: () => openLicence() },
     { label: 'Réglages…', click: openSettings },
+    /* La langue, a deux clics de n'importe ou : au premier lancement
+       elle suit le systeme, et un DJ qui ne lit pas cette langue doit
+       pouvoir la changer sans chercher dans des reglages qu'il ne
+       comprend pas. Libelles bilingues et jamais traduits. */
+    { label: 'Langue / Language', submenu: [
+      { label: 'Auto', type: 'radio', checked: !['fr', 'en'].includes(config.langue), click: () => choisirLangue('auto') },
+      { label: 'Français', type: 'radio', checked: config.langue === 'fr', click: () => choisirLangue('fr') },
+      { label: 'English', type: 'radio', checked: config.langue === 'en', click: () => choisirLangue('en') }
+    ] },
     { type: 'separator' },
     { label: 'Relire la bibliothèque', click: () => autoImport(activeApp && activeApp.librarySource).catch(e => console.warn('import :', e && e.message)) },
     /* Un testeur qui a vu quelque chose d'anormal doit pouvoir
@@ -3902,6 +4154,7 @@ app.whenReady().then(async () => {
   buildMenu();
   license = new License(LIC());
   setlog = new SetLog(SETS());
+  setlog.nommer = nommerSet;
   /* ------------------------------------------------------------
      L'essai a besoin de savoir combien de vraies soirees ont ete
      jouees — c'est ce qui decide maintenant quand il se ferme.

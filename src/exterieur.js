@@ -99,7 +99,10 @@ async function depuisFichier(chemin, pris) {
 
   /* Un tempo de tag aberrant est un tag faux, pas une raison de
      refuser le morceau : on le laisse a null et l'analyse tranchera. */
-  const bpmTag = Number(tags.tbpm || tags.bpm || 0);
+  /* Lu comme a l'import (library.js, num()) : « 128,5 » et
+     « 128.00 BPM » sont des tempos. Number() les rendait NaN, et le
+     morceau hors bibliotheque perdait son tempo de tag. */
+  const bpmTag = parseFloat(String(tags.tbpm || tags.bpm || 0).replace(',', '.')) || 0;
   const bpm = (bpmTag > 40 && bpmTag < 220) ? bpmTag : null;
 
   return base({

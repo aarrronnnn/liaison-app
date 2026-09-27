@@ -218,7 +218,13 @@ async function structure(file, bpm) {
   const env = envelopes(pcm);
   const toSec = f => f / env.rate;
 
-  if (!bpm || bpm < 60) bpm = 124;                     // secours : grille indicative
+  /* Sans tempo connu, la grille de phrases est posee sur 124 BPM par
+     convention. Les reperes qui en sortent sont des estimations — et
+     le widget doit le dire (« estime »), comme pour une structure
+     deduite : un point de lancement faux mais annonce sur est pire
+     qu'aucun point. */
+  const grilleSecours = !(bpm >= 60);
+  if (grilleSecours) bpm = 124;                        // secours : grille indicative
   const g = grid(env, bpm);
   const barF = g.beat * 4;                             // trames par mesure
   const phraseF = barF * 8;                            // phrase de 8 mesures
@@ -295,6 +301,7 @@ async function structure(file, bpm) {
     /* Un seul des deux bouts a ete vu : le plan reste utilisable,
        mais le DJ doit savoir que la moitie est deduite. */
     partiel: !introVue || !outroVue,
+    estime: grilleSecours || undefined,
     duration: Math.round(duration * 10) / 10,
     bpm: bpm,
     beatSec: Math.round(beatSec * 1000) / 1000,

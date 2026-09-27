@@ -73,7 +73,10 @@ const MINI = 12;          /* en dessous, on observe sans rien changer */
 const PLEIN = 40;         /* au-dela, l'apprentissage vaut a plein */
 const AMPLITUDE = 2.2;    /* de l'ecart moyen au multiplicateur */
 
-const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+const fini = v => typeof v === 'number' && isFinite(v);
+/* Un NaN n'est pas une valeur bornee : l'ancien clamp(NaN) rendait
+   NaN. Ce qui n'est pas un nombre vaut zero, puis est borne. */
+const clamp = (v, a, b) => Math.max(a, Math.min(b, fini(v) ? v : v === Infinity ? b : v === -Infinity ? a : 0));
 const mediane = a => { if (!a.length) return 0; const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
 
 function vide() {
@@ -146,6 +149,33 @@ class Gout {
         for (const k of ['emaPop', 'ecartTempo', 'repetitionArtiste', 'sautEnergie',
                          'pasHaut', 'pasBas'])
           if (!(typeof this.d[k] === 'number' && isFinite(this.d[k]))) this.d[k] = 0;
+        /* ------------------------------------------------------------
+           Les compteurs, verifies comme le reste.
+
+           Banc de robustesse, 27 septembre 2026. Un « "n": "abc" »
+           (fichier edite a la main, ecriture interrompue) survivait
+           au chargement : force() rendait NaN, donc « rien appris »,
+           et n++ donnait NaN a son tour — l'apprentissage etait mort
+           pour toujours, sans un mot, puisque le fichier se reecrivait
+           avec son NaN a chaque soiree. Un compteur est un entier
+           positif ou nul ; sinon il repart de zero.
+
+           Les moyennes aussi sont ramenees dans leur plage : elles ne
+           peuvent pas en sortir par le calcul, seulement par un
+           fichier abime, et une moyenne a 1e9 faisait viser au
+           moteur un pas d'energie de 2,6 points pour toujours.
+           ------------------------------------------------------------ */
+        for (const k of ['n', 'pris', 'prisPremier', 'ignore']) {
+          const v = this.d[k];
+          this.d[k] = (typeof v === 'number' && isFinite(v) && v >= 0) ? Math.floor(v) : 0;
+        }
+        for (const c of CRITERES) this.d.ema[c] = clamp(this.d.ema[c], -1, 1);
+        this.d.emaPop = clamp(this.d.emaPop, -1, 1);
+        this.d.ecartTempo = clamp(this.d.ecartTempo, 0, 0.3);
+        this.d.repetitionArtiste = clamp(this.d.repetitionArtiste, 0, 1);
+        this.d.sautEnergie = clamp(this.d.sautEnergie, -4, 4);
+        this.d.pasHaut = clamp(this.d.pasHaut, 0, 4);
+        this.d.pasBas = clamp(this.d.pasBas, -4, 0);
       }
     } catch (e) { /* premier lancement, ou fichier abime : on repart de zero */ }
   }
@@ -177,10 +207,18 @@ class Gout {
     o = o || {};
     const cur = o.cur, joue = o.joue;
     if (!cur || !joue || cur.id === joue.id) return;
+    /* La meme chanson sous un autre fichier (le DJ recharge la version
+       longue du titre qui tourne) n'est pas un enchainement : rien a
+       apprendre. Voir chansonDe() dans engine.js. */
+    if (engine.memeChanson(cur, joue)) return;
     if (!(cur.bpm > 0) || !(joue.bpm > 0)) return;
 
     const props = (o.propositions || []).filter(p => p && p.track);
-    const rang = props.findIndex(p => p.track.id === joue.id);
+    /* Proposee sous un fichier, jouee sous un autre copie : c'est la
+       meme proposition, prise. Compter « ignoree » apprenait l'inverse
+       de ce qui s'etait passe. */
+    let rang = props.findIndex(p => p.track.id === joue.id);
+    if (rang < 0) rang = props.findIndex(p => engine.memeChanson(p.track, joue));
 
     /* Le rythme d'apprentissage depend de a quel point on avait
        tort. Avoir raison ne doit presque rien changer. */
@@ -209,9 +247,9 @@ class Gout {
 
            null = axe ignore pour cet enchainement.
            ------------------------------------------------------------ */
-        en: (cur.analyzed && joue.analyzed)
+        en: (cur.analyzed && joue.analyzed && fini(cur.energy) && fini(joue.energy))
               ? engine.energyScore(cur.energy, joue.energy, o.arc || 'hold') : null,
-        ti: (cur.analyzed && joue.analyzed)
+        ti: (cur.analyzed && joue.analyzed && engine.timbreOk(cur.timbre) && engine.timbreOk(joue.timbre))
               ? engine.timbreScore(cur.timbre, joue.timbre) : null,
         cr: 0, td: 0,
         fr: engine.epoque.fraicheur(joue, o.annee),
@@ -245,8 +283,8 @@ class Gout {
          qu'on lui proposait ? C'est le seul critere qui separe
          vraiment un DJ de mariage d'un DJ de club, et il n'etait
          mesure nulle part. */
-      const popJoue = joue.pop == null ? 40 : joue.pop;
-      const popMed = mediane(props.map(p => p.track.pop == null ? 40 : p.track.pop));
+      const popJoue = engine.popDe(joue);
+      const popMed = mediane(props.map(p => engine.popDe(p.track)));
       /* ------------------------------------------------------------
          Ce qu'une soiree a theme n'a pas le droit d'enseigner.
 
@@ -278,11 +316,17 @@ class Gout {
         /* Mesure absente : on n'apprend rien de cet axe cette fois-ci.
            Mieux vaut apprendre lentement que d'apprendre faux. */
         if (valeurs[c] == null) continue;
+        /* Une note NaN — un morceau a l'energie illisible — donnait
+           NaN a la moyenne glissante, et l'axe cessait d'apprendre
+           pour tout le reste de la session. On l'ignore, comme une
+           mesure absente. Meme chose pour la mediane. */
+        if (!(typeof valeurs[c] === 'number' && isFinite(valeurs[c]))) continue;
         const med = mediane(props.map(p => (
           c === 'h' ? p.h : c === 'tp' ? p.tempo.s : c === 'en' ? p.energyScore :
           c === 'ti' ? p.timbreScore : c === 'cr' ? p.crowd :
           c === 'fr' ? p.fraicheur : c === 'af' ? p.affinite :
           c === 'pl' ? p.plancher : c === 'pa' ? p.parente : p.trend)));
+        if (!isFinite(med)) continue;
         const z = clamp((valeurs[c] - med) / 100, -1, 1);
         this.d.ema[c] = (1 - a) * this.d.ema[c] + a * z;
       }
@@ -301,7 +345,7 @@ class Gout {
     /* --- 3. rejoue-t-il les memes artistes ? --- */
     const nom = String(joue.artist || '').toLowerCase().trim();
     if (nom) {
-      const recents = (o.recents || []).slice(-48)
+      const recents = (Array.isArray(o.recents) ? o.recents : []).slice(-48).filter(t => t && typeof t === 'object')
         .map(t => String(t.artist || '').toLowerCase().trim());
       const revient = recents.includes(nom) ? 1 : 0;
       this.d.repetitionArtiste = (1 - 0.06) * this.d.repetitionArtiste + 0.06 * revient;
@@ -312,7 +356,7 @@ class Gout {
        dans le style. Apprendre « ce DJ tient toujours le niveau »
        d'un bloc annees 80 fausserait toutes ses autres soirees —
        on n'apprend pas d'une pente qu'on a imposee soi-meme. */
-    if (!o.bulle && cur.energy != null && joue.energy != null) {
+    if (!o.bulle && fini(cur.energy) && fini(joue.energy)) {
       const pas = clamp(joue.energy - cur.energy, -4, 4);
       this.d.sautEnergie = (1 - 0.07) * this.d.sautEnergie + 0.07 * pas;
       /* Chaque pas n'alimente que sa moitie : sinon les montees et

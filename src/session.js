@@ -10,7 +10,7 @@ const fs = require('fs');
 const path = require('path');
 const ecrire = require('./ecrire');
 const QR = require('qrcode');
-const { match, search, keyOf } = require('./engine');
+const { match, search, keyOf, chansonDe } = require('./engine');
 
 /* L'adresse que les telephones des invites peuvent joindre.
    La premiere IPv4 venue pouvait etre une carte virtuelle (WSL,
@@ -365,7 +365,14 @@ class SetLog {
   /* Appelee avant de quitter : on n'attend pas le regroupement. */
   vider() { try { this._save(true); } catch (e) {} }
 
-  open(name, pack) { this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] }; this.sets.unshift(this.current); this._save(true); return this.current; }
+  open(name, pack, soiree) {
+    this.current = { id: Date.now(), name: name, pack: pack, at: new Date().toISOString(), played: [] };
+    /* La fiche de soiree armee au moment ou le set commence : c'est
+       ce qui relie « Mariage Lea & Sam » a ce qui y a ete joue, meme
+       si la fiche est renommee ensuite. */
+    if (soiree) this.current.soiree = soiree;
+    this.sets.unshift(this.current); this._save(true); return this.current;
+  }
   /* ------------------------------------------------------------
      Une soiree finit. Rien ne refermait `current` : l'app vit dans
      la barre de menus et le Mac dort au lieu de s'eteindre, donc la
@@ -390,8 +397,17 @@ class SetLog {
     return false;
   }
   play(track, transition) {
-    if (this.current && this.fermerSiPerimee()) this.open(this.sets[0] && this.sets[0].name || 'Session', this.sets[0] && this.sets[0].pack || null);
-    if (!this.current) this.open('Session', null);
+    /* `nommer`, quand main.js le fournit, dit comment s'appelle la
+       soiree EN COURS (la fiche armee) : un set ouvert tout seul par
+       un morceau detecte portait jusqu'ici le nom « Session », et
+       l'historique d'une fiche restait vide. Sans lui, rien ne
+       change. */
+    const n = typeof this.nommer === 'function' ? (() => { try { return this.nommer() || null; } catch (e) { return null; } })() : null;
+    if (this.current && this.fermerSiPerimee()) {
+      if (n) this.open(n.name || 'Session', n.pack || null, n.soiree);
+      else this.open(this.sets[0] && this.sets[0].name || 'Session', this.sets[0] && this.sets[0].pack || null);
+    }
+    if (!this.current) this.open(n && n.name || 'Session', n && n.pack || null, n && n.soiree);
     const last = this.current.played[this.current.played.length - 1];
     if (last && last.id === track.id) return;
     /* Les genres sont conserves. Sans eux, la penalite de saturation du
@@ -416,6 +432,7 @@ class SetLog {
   list() { return (this.sets || []).map(s => {
     const j = Array.isArray(s && s.played) ? s.played : [];
     return { id: s && s.id, name: s && s.name, pack: s && s.pack, at: s && s.at, n: j.length,
+             soiree: (s && s.soiree) || null,
              duree: j.length > 1 ? Math.round((j[j.length - 1].at - j[0].at) / 60000) : 0 };
   }); }
 
@@ -475,6 +492,10 @@ class SetLog {
      ---------------------------------------------------------- */
   lastPlay(trackId, opt) {
     opt = opt || {};
+    /* La meme chanson dans un autre fichier (« Extended Mix », copie sur
+       le disque externe) est la meme chanson pour la salle : le moteur
+       la penalise deja comme telle, la pastille doit dire pareil. */
+    const chanson = opt.track ? chansonDe(opt.track) : '';
     const memeLieu = opt.sameName ? String(opt.sameName).trim().toLowerCase() : null;
     const now = Date.now();
     let ceSoir = null, avant = null;
@@ -484,7 +505,7 @@ class SetLog {
       if (memeLieu && !courant && String(s.name || '').trim().toLowerCase() !== memeLieu) continue;
       for (let i = s.played.length - 1; i >= 0; i--) {
         const p = s.played[i];
-        if (p.id !== trackId) continue;
+        if (p.id !== trackId && !(chanson && chansonDe(p) === chanson)) continue;
         if (courant) { if (!ceSoir) ceSoir = { at: p.at, min: Math.round((now - p.at) / 60000) }; }
         else if (!avant) avant = { at: p.at, set: s.name || 'Session',
                                    jours: Math.max(1, Math.round((now - p.at) / 86400000)) };
@@ -505,6 +526,13 @@ class SetLog {
       /* ce soir, c'est bloquant ; une autre soiree, c'est consultatif */
       grave: !!ceSoir
     };
+  }
+
+  /** Les chansons deja passees ce soir (artiste + titre sans la version). */
+  playedSongs() {
+    const out = new Set();
+    if (this.current) for (const p of this.current.played) { const c = chansonDe(p); if (c) out.add(c); }
+    return out;
   }
 
   /** Les identifiants deja passes ce soir — pour le filtre de cabine. */

@@ -29,9 +29,29 @@ on:
   workflow_dispatch:
 
 jobs:
+  # ------------------------------------------------------------
+  #  SUR LES TROIS SYSTEMES, PAS SEULEMENT LINUX.
+  #
+  #  Jusqu'ici la suite ne tournait que sur Linux : les chemins
+  #  Windows, les lecteurs D:\, OneDrive, /private/var sur Mac
+  #  n'etaient verifies que par SIMULATION. Les bugs du changement
+  #  d'ordinateur venaient exactement de la. Le depot est public :
+  #  les machines Mac et Windows de GitHub sont gratuites. Chaque
+  #  poussee rejoue donc les memes controles sur un vrai Windows et
+  #  un vrai macOS. fail-fast: false — un systeme en echec n'empeche
+  #  pas de voir le resultat des deux autres.
+  # ------------------------------------------------------------
   essais:
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: essais (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 25
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@v4
 
@@ -50,7 +70,7 @@ jobs:
           ELECTRON_SKIP_BINARY_DOWNLOAD: '1'
 
       - name: Navigateur de rendu
-        run: npx --yes playwright@1 install --with-deps chromium
+        run: npx --yes playwright@1 install ${{ runner.os == 'Linux' && '--with-deps' || '' }} chromium
 
       # Playwright est installe par npx, donc absent de node_modules :
       # les essais le cherchent avec require(). On le pose sans

@@ -70,6 +70,20 @@ function anneeDe(t) {
   return n;
 }
 
+/* ------------------------------------------------------------
+   Une notoriete ou un timbre illisibles valent une mesure absente.
+   « pop == null ? 40 » laissait passer NaN et le texte, et un seul
+   morceau abime rendait NaN a sa note de bulle — puis a son total,
+   ce qui brouillait le tri de toute la liste (voir engine.js).
+   ------------------------------------------------------------ */
+function popDe(t) {
+  const p = t && t.pop;
+  const n = typeof p === 'number' ? p : (typeof p === 'string' && p.trim() !== '' ? Number(p) : NaN);
+  return isFinite(n) ? n : 40;
+}
+const timbreOk = v => Array.isArray(v) && v.length >= 3 &&
+  [v[0], v[1], v[2]].every(x => typeof x === 'number' && isFinite(x));
+
 /* La famille dominante d'un morceau, pour l'afficher. */
 function familleLisible(t) {
   let best = null, bv = 0;
@@ -149,8 +163,8 @@ function ancrer(cur, library) {
     familles: familles,
     annee: an,
     avecAnnees: avecAnnees,
-    pop: cur.pop == null ? 40 : cur.pop,
-    timbre: cur.analyzed ? cur.timbre : null,
+    pop: popDe(cur),
+    timbre: cur.analyzed && timbreOk(cur.timbre) ? cur.timbre : null,
     id: cur.id,
     titre: cur.title || '',
     artiste: cur.artist || '',
@@ -195,12 +209,13 @@ function noteEre(t, bulle, deja) {
 
 /** Meme registre : un tube appelle un tube, une perle appelle une perle. */
 function noteRegistre(t, bulle) {
-  const p = t.pop == null ? 40 : t.pop;
-  return Math.max(20, 100 - Math.abs(p - bulle.pop) * 1.1);
+  const p = popDe(t);
+  const ref = typeof bulle.pop === 'number' && isFinite(bulle.pop) ? bulle.pop : 40;
+  return Math.max(20, 100 - Math.abs(p - ref) * 1.1);
 }
 
 function noteCouleur(t, bulle) {
-  if (!bulle.timbre || !t.analyzed || !t.timbre) return 50;
+  if (!timbreOk(bulle.timbre) || !t.analyzed || !timbreOk(t.timbre)) return 50;
   return Math.max(10, 100 - Math.hypot(t.timbre[0] - bulle.timbre[0],
                                        t.timbre[1] - bulle.timbre[1],
                                        t.timbre[2] - bulle.timbre[2]) * 11);

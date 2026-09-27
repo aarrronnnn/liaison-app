@@ -90,6 +90,13 @@ function build(f) {
   const played = f.skipPlayed && f.playedIds
     ? (f.playedIds instanceof Set ? f.playedIds : new Set(f.playedIds))
     : null;
+  /* Le filtre compare aussi les CHANSONS, pas seulement les fichiers :
+     l'« Extended Mix » d'un titre passe il y a vingt minutes n'est pas
+     « pas deja joue ». */
+  const chansonsJouees = played && f.playedSongs
+    ? (f.playedSongs instanceof Set ? f.playedSongs : new Set(f.playedSongs))
+    : null;
+  const chansonDe = chansonsJouees && chansonsJouees.size ? require('./engine').chansonDe : null;
   if (played) active.push('Pas déjà joué');
 
   if (f.noExplicit) active.push('Sans paroles explicites');
@@ -108,10 +115,16 @@ function build(f) {
      filtre, on ne fait pas une intersection.
      ------------------------------------------------------------ */
   let genres = null;
-  if (f.genres && f.genres.length) {
-    genres = new Set(Array.from(f.genres).map(g => genresmod.aplatir(g)).filter(Boolean));
+  /* Un seul genre passe en texte (« House ») n'est pas une liste de
+     cinq lettres : Array.from le decoupait en h, o, u, s, e, aucun
+     morceau ne passait, et le tamis rendait « le filtre ne laisse
+     rien » sur un genre bien present. */
+  const voulus = typeof f.genres === 'string' ? [f.genres]
+               : (f.genres && typeof f.genres !== 'number' ? Array.from(f.genres) : []);
+  if (voulus.length) {
+    genres = new Set(voulus.map(g => genresmod.aplatir(g)).filter(Boolean));
     if (!genres.size) genres = null;
-    else active.push(genres.size === 1 ? Array.from(f.genres)[0] : genres.size + ' genres');
+    else active.push(genres.size === 1 ? voulus[0] : genres.size + ' genres');
   }
 
   const emin = f.energyMin > 0 ? f.energyMin : null;
@@ -122,11 +135,12 @@ function build(f) {
     if (!t) return false;
     if (crateIds && !crateIds.has(t.id)) return false;
     if (played && played.has(t.id)) return false;
+    if (chansonDe && chansonsJouees.has(chansonDe(t))) return false;
     if (f.noExplicit && estExplicite(t)) return false;
     if (bmin && t.bpm < bmin) return false;
     if (bmax && t.bpm > bmax) return false;
     if (genres) {
-      const tags = t.tags || [];
+      const tags = Array.isArray(t.tags) ? t.tags : [];
       let vu = false;
       for (const tag of tags) { if (genres.has(genresmod.aplatir(tag))) { vu = true; break; } }
       if (!vu) return false;

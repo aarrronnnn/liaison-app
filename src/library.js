@@ -1098,8 +1098,23 @@ function finalize(tracks) {
        deduire le tempo. Un DJ sans logiciel de mix, avec un dossier de
        MP3 achetes sans tag TBPM, voyait « 0 titre pret » sans la
        moindre explication. */
-    .map(t => (t.bpm > 40 && t.bpm < 220) ? t
-              : Object.assign({}, t, { bpm: null, aMesurer: true }))
+    /* ------------------------------------------------------------
+       Un tempo ecrit en texte reste un tempo.
+
+       Banc de robustesse, 27 septembre 2026 : « 128,5 » (virgule
+       francaise, iTunes et certains tags ID3) et « 128.00 BPM »
+       comparaient NaN a 40 et partaient a la mesure comme s'ils
+       n'avaient pas de tempo — le DJ perdait son beatgrid pour une
+       estimation. Et « 128 » en texte passait le test mais restait
+       une CHAINE : 128 + 1 y fait « 1281 ». On lit donc comme num()
+       le fait a l'import, et on rend toujours un nombre.
+       ------------------------------------------------------------ */
+    .map(t => {
+      const b = typeof t.bpm === 'number' ? t.bpm
+              : (t.bpm == null ? NaN : parseFloat(String(t.bpm).replace(',', '.')));
+      if (b > 40 && b < 220) return b === t.bpm ? t : Object.assign({}, t, { bpm: b });
+      return Object.assign({}, t, { bpm: null, aMesurer: true });
+    })
     .map((t, i) => {
       /* Sans chemin — ca arrive avec une base incomplete — on se
          rabat sur artiste + titre, qui est stable lui aussi. */

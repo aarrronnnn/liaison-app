@@ -51,6 +51,10 @@ contextBridge.exposeInMainWorld('liaison', {
   soireeSupprimer: id => invoke('soirees:supprimer', id),
   soireeActiver: id => invoke('soirees:activer', id),
   soireeDesactiver: () => invoke('soirees:desactiver'),
+  /* SOIREE 1.8 — lecture seule : le bilan des fiches, et une liste
+     confrontee a la bibliotheque pendant qu'on la prepare */
+  soireesBilan: () => invoke('soirees:bilan'),
+  soireeAnalyser: o => invoke('soirees:analyser', o),
   /* sante de la bibliotheque */
   healthScan: opt => invoke('health:scan', opt),
   healthReveal: id => invoke('health:reveal', id),
@@ -73,6 +77,9 @@ contextBridge.exposeInMainWorld('liaison', {
   saveQR: dataUrl => invoke('qr:save', dataUrl),
   listSets: () => invoke('sets:list'),
   replaySet: opts => invoke('sets:replay', opts),
+  /* AUTOUR 1.9 */
+  replayExport: () => invoke('sets:replayExport'),
+  sessionCompteurs: () => invoke('session:compteurs'),
   /* la tracklist */
   tracklist: id => invoke('sets:tracklist', id),
   copySet: id => invoke('sets:copy', id),
@@ -108,6 +115,8 @@ contextBridge.exposeInMainWorld('liaison', {
   rescanLibrary: opt => invoke('library:rescan', opt),
   scanInfo: () => invoke('library:scanInfo'),
   librarySources: () => invoke('library:sources'),
+  /* ce que chaque source a rendu au dernier import */
+  libraryRapport: () => invoke('library:rapport'),
   runningApps: () => invoke('apps:running'),
   openSettings: () => invoke('widget:settings'),
   hideWidget: () => invoke('widget:close'),

@@ -21,7 +21,7 @@
    Sinon il sort au milieu du set et il n'y a plus de fin.
    ============================================================ */
 
-const { keyOf, mmss, tempoScore, doubleAdmis } = require('./engine');
+const { keyOf, mmss, tempoScore, doubleAdmis, chansonDe } = require('./engine');
 
 const MIN = 60;
 
@@ -77,6 +77,7 @@ function phases(restant, moyenne) {
 function closer(library, opt) {
   opt = opt || {};
   const played = opt.playedIds || new Set();
+  const chansons = opt.playedSongs || null;
   const banned = opt.banned || new Set();
   const wanted = opt.wanted || new Set();
   const keep = opt.keep || (() => true);
@@ -84,6 +85,9 @@ function closer(library, opt) {
   let best = null, bestScore = -1;
   for (const t of library) {
     if (played.has(t.id) || banned.has(keyOf(t)) || !keep(t)) continue;
+    /* le dernier morceau de la nuit ne doit pas etre la version longue
+       d'un titre deja passe */
+    if (chansons && chansons.size && chansons.has(chansonDe(t))) continue;
     if (!(t.bpm > 0)) continue;
     const e = t.energy == null ? 5 : t.energy;
     /* ni une berceuse, ni le plus gros drop de la nuit */

@@ -239,6 +239,11 @@ function bilan(library, opt) {
       effet: 'Liaison n\'a pas réussi à les décoder : fichier tronqué, format exotique, ou protection.',
       geste: 'Essaie de les ouvrir dans ton logiciel. S\'il n\'y arrive pas non plus, ils sont perdus.' });
 
+  /* AUTOUR 1.9 — ce que chaque geste rapporterait sur la note. Les
+     memes poids que le calcul ci-dessus : un chiffre qui ne serait
+     pas tenu apres correction serait un mensonge. */
+  const POIDS = { bpm: 45, key: 20, fichiers: 25, doublons: 8, artiste: 6, tonalite: 6, illisibles: 10, tempo: 0 };
+  for (const a of actions) a.gain = Math.round(part(a.n) * (POIDS[a.cle] || 0));
   R.actions = actions;
   R.note = actions.length
     ? actions.length + (actions.length > 1 ? ' points à regarder.' : ' point à regarder.')

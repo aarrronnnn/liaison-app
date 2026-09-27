@@ -48,7 +48,7 @@ const FAMILLE = {
 
 /** Ce que le tempo seul dit du plancher, de 0 a 100. */
 function parTempo(bpm) {
-  if (!(bpm > 0)) return null;
+  if (!(bpm > 0) || !(bpm < Infinity)) return null;
   if (bpm >= 115 && bpm <= 136) return 100;          /* le coeur de piste */
   if (bpm > 136 && bpm <= 150) return 92;
   if (bpm > 150) return 74;                          /* dnb, hardstyle : ca danse */
@@ -90,9 +90,20 @@ function plancher(track) {
 
   /* Analyse faite : l'energie et la densite d'attaques entrent.
      timbre[1] est la densite — percussif contre tenu. */
-  const en = (track.energy == null ? 5 : track.energy) * 10;
-  const dens = Array.isArray(track.timbre) && track.timbre.length > 1
-    ? Math.max(0, Math.min(10, track.timbre[1])) * 10 : 50;
+  /* ------------------------------------------------------------
+     Une mesure illisible vaut une mesure absente.
+
+     « energy == null » laissait passer NaN et le texte : un seul
+     morceau a l'energie NaN — l'analyse d'un fichier de silence —
+     rendait NaN a sa force de plancher, puis a la continuite de
+     CHAQUE candidat quand il etait le morceau en cours, et la note
+     finale avec. Meme chose pour une densite NaN : Math.min et
+     Math.max rendent NaN des qu'on leur en donne un.
+     ------------------------------------------------------------ */
+  const en = (typeof track.energy === 'number' && isFinite(track.energy) ? track.energy : 5) * 10;
+  const d1 = Array.isArray(track.timbre) ? track.timbre[1] : null;
+  const dens = typeof d1 === 'number' && isFinite(d1)
+    ? Math.max(0, Math.min(10, d1)) * 10 : 50;
   const base = fam == null ? t : t * 0.72 + fam * 0.28;
   const v = Math.round(Math.max(2, Math.min(100, base * 0.50 + en * 0.32 + dens * 0.18)));
   return { v: v, sur: 0.9 };

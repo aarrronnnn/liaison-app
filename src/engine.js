@@ -17,13 +17,67 @@ const affinites = require('./affinites');
 const plancher = require('./plancher');
 const parente = require('./parente');
 
-const camelot = k => ({ n: parseInt(k, 10), l: String(k).slice(-1).toUpperCase() });
+const camelot = k => ({ n: parseInt(k, 10), l: String(k).trim().slice(-1).toUpperCase() });
+
+/* ------------------------------------------------------------
+   LES NOMBRES QUI N'EN SONT PAS.
+
+   Banc de robustesse, 27 septembre 2026. Un seul morceau dont
+   l'analyse a rendu une energie NaN — un fichier de silence
+   numerique suffit, la moyenne d'un tableau vide vaut NaN — et la
+   note de TOUS les candidats devenait NaN des qu'il etait le
+   morceau en cours : energyScore, puis plancher.js, puis le total.
+   Le widget affichait « NaN » sur chaque ligne.
+
+   Et le pire ne se voyait pas : quand c'est un CANDIDAT qui porte
+   le NaN, sa note NaN entre dans le tri. Un comparateur qui rend NaN
+   n'ordonne plus rien — la tete de liste dependait alors de l'ordre
+   des fichiers dans la bibliotheque, pas des notes.
+
+   Meme chose pour Infinity dans un tempo (division par l'infini :
+   pct NaN), une notoriete ecrite en texte, un timbre a deux cases.
+   Ces deux petites fonctions disent ce qu'est un nombre utilisable ;
+   tout ce qui n'en est pas un est traite comme une mesure ABSENTE,
+   avec les regles d'absence qui existent deja dans ce fichier.
+   ------------------------------------------------------------ */
+/** Un tempo exploitable : positif et fini. « 128 » en texte passe. */
+const tempoOk = v => v > 0 && v < Infinity;
+/** Un nombre fini, ou la valeur par defaut. « 7 » en texte passe. */
+function nombre(v, defaut) {
+  const n = typeof v === 'number' ? v
+          : (typeof v === 'string' && v.trim() !== '') ? Number(v) : NaN;
+  return isFinite(n) ? n : defaut;
+}
+/** La notoriete, 40 quand elle manque — comme partout ailleurs. */
+const popDe = t => nombre(t && t.pop, 40);
+/** Un timbre utilisable : trois nombres finis. */
+const timbreOk = v => Array.isArray(v) && v.length >= 3 &&
+  isFinite(v[0]) && isFinite(v[1]) && isFinite(v[2]) &&
+  typeof v[0] === 'number' && typeof v[1] === 'number' && typeof v[2] === 'number';
+
+/** Une cle Camelot lisible : 1 a 12, A ou B. */
+function cleOk(k) {
+  if (!k) return false;
+  const c = camelot(k);
+  return c.n >= 1 && c.n <= 12 && (c.l === 'A' || c.l === 'B');
+}
 
 function harmScore(a, b) {
   if (!a || !b) return 50;
+  /* ------------------------------------------------------------
+     « 8a » et « 8A », « 08A » et « 8A » : la meme tonalite.
+
+     La comparaison de chaines disait « differentes », puis la
+     distance sur la roue valait zero — cas qu'aucune branche ne
+     prevoyait. On tombait dans le dernier recours : 60 sur 100 pour
+     deux morceaux dans la MEME tonalite. Et une cle hors de la roue
+     (« 13A », un tag abime) recevait une distance inventee au lieu
+     de la note neutre qu'on donne a toute cle illisible.
+     ------------------------------------------------------------ */
+  if (!cleOk(a) || !cleOk(b)) return 50;
   if (a === b) return 100;
   const A = camelot(a), B = camelot(b);
-  if (!A.n || !B.n) return 50;
+  if (A.n === B.n && A.l === B.l) return 100;
   const d = Math.min((A.n - B.n + 12) % 12, (B.n - A.n + 12) % 12);
   if (A.l === B.l && d === 1) return 93;
   if (A.n === B.n && A.l !== B.l) return 89;
@@ -102,6 +156,10 @@ function doubleAdmis(a, b) {
    erreur. doubleOk doit maintenant etre demande explicitement.
    ============================================================ */
 function tempoScore(a, b, doubleOk) {
+  /* Un tempo absent ou infini ne se compare pas : sans ce garde,
+     |b - Infinity| / Infinity rendait NaN, et la note avec. */
+  if (!tempoOk(a) || !tempoOk(b)) return { s: 50, pct: null, ratio: 1, delta: 0, muet: true };
+  a = Number(a); b = Number(b);
   const rapports = doubleOk === true ? [1, 2, 0.5] : [1];
   let best = Infinity, ratio = 1;
   for (const r of rapports) {
@@ -137,8 +195,15 @@ const RAIDEUR = 16;
 
 const energyScore = (cur, e, arc, pas) => {
   const p = pas || PAS;
-  const cible = cur + (arc === 'up' ? p.up : arc === 'down' ? p.down : p.hold);
-  return Math.max(4, 100 - Math.abs(e - cible) * RAIDEUR);
+  /* Chaque pas est verifie a part : un pas appris NaN (gout.json
+     nourri d'une energie NaN) rendait NaN a la note de CHAQUE
+     candidat, pour toute la soiree. Un pas illisible reprend le
+     repere d'origine ; une energie illisible vaut « on ne sait pas ». */
+  const pas1 = arc === 'up' ? nombre(p.up, PAS.up) : arc === 'down' ? nombre(p.down, PAS.down) : nombre(p.hold, PAS.hold);
+  const c = nombre(cur, null), x = nombre(e, null);
+  if (c == null || x == null) return 50;
+  const cible = c + pas1;
+  return Math.max(4, 100 - Math.abs(x - cible) * RAIDEUR);
 };
 
 /* Ce que vaut un morceau qu'on n'a pas encore ecoute.
@@ -154,7 +219,8 @@ const TI_INCONNU = 34;
 const EN_NEUTRE  = 55;
 
 const timbreScore = (a, b) => {
-  if (!a || !b) return 60;
+  /* Un timbre a deux cases, ou avec un NaN, compte comme absent. */
+  if (!timbreOk(a) || !timbreOk(b)) return 60;
   return Math.max(10, 100 - Math.hypot(a[0] - b[0], a[1] - b[1], a[2] - b[2]) * 11);
 };
 
@@ -184,7 +250,9 @@ function crowdScore(track, dna, dnaPret) {
      presque, et le contexte de soiree ne se voit pas dans la liste. */
   const rel = max ? hit / max : 0.5;
   const base = Math.pow(rel, 1.6) * 100;
-  return Math.round(base * 0.82 + (track.pop || 40) * 0.18);
+  /* « || 40 » garde la lecture d'origine (une notoriete de 0 vaut 40) ;
+     popDe ecarte en plus le NaN et le texte, qui rendaient NaN. */
+  return Math.round(base * 0.82 + (popDe(track) || 40) * 0.18);
 }
 
 function transitionOf(cur, nx, tp, h) {
@@ -210,7 +278,7 @@ function transitionOf(cur, nx, tp, h) {
      cas rare. Il merite sa propre reponse — un conseil vrai, et
      l'aveu de ce qu'on ne sait pas.
      ------------------------------------------------------------ */
-  if (!cur.key || !nx.key) {
+  if (!cleOk(cur.key) || !cleOk(nx.key)) {
     const ecart = Math.abs(tp.delta);
     if (ecart > 2.2)
       return { n: 'Echo out + pitch ride',
@@ -241,6 +309,70 @@ const keyOf = t => {
   return k;
 };
 
+/* ============================================================
+   LA MEME CHANSON, SOUS UN AUTRE FICHIER.
+
+   « Il me propose le morceau que je suis en train de jouer. »
+
+   Banc de robustesse, 27 septembre 2026. Le moteur ecartait le
+   morceau en cours par son IDENTIFIANT — c'est-a-dire par son
+   chemin de fichier. Or une vraie bibliotheque porte la meme
+   chanson plusieurs fois : la copie rekordbox et la copie iTunes,
+   la version « (Extended Mix) » achetee pour le club et la
+   « (Radio Edit) » pour le mariage, le « [Clean] » d'un pool DJ.
+   dedoublonner() ne replie que les copies de meme duree, et c'est
+   juste : un edit n'est pas une copie. Mais pour le moteur, ces
+   fichiers etaient des inconnus parfaits — meme tempo, meme
+   tonalite, meme genre, meme artiste — et ils prenaient les
+   PREMIERES places, derriere eux-memes.
+
+   Trois autres fuites avaient la meme cause :
+     — deux copies d'une meme chanson occupaient deux lignes sur
+       cinq ;
+     — un titre joue il y a dix minutes revenait sans penalite ni
+       pastille par son autre fichier ;
+     — un titre interdit par le client (« surtout pas celle-la »)
+       revenait par sa version radio.
+
+   L'identite d'une chanson, c'est donc l'artiste et le titre, une
+   fois retires ce qui ne designe qu'une VERSION : extended, radio,
+   original, club, clean, dirty, instrumental, remaster, intro, et
+   le featuring. Un remix nomme — « (Purple Disco Machine Remix) » —
+   reste un autre morceau : c'est une autre oeuvre, que le DJ peut
+   vouloir enchainer.
+
+   La mise a plat garde toutes les ecritures. La premiere version
+   s'appuyait sur normalize(), qui ne garde que a-z : deux titres
+   cyrilliques du meme artiste devenaient identiques, et l'un
+   aurait efface l'autre. Sans artiste ou sans titre, on ne sait pas
+   dire « c'est la meme » : pas d'identite, rien n'est ecarte.
+   ============================================================ */
+const MOTS_VERSION = 'original|extended|radio|club|clean|dirty|explicit|edit|mix|version|instrumental|' +
+                     'remaster(?:ed)?|\\d{4}\\s*remaster(?:ed)?|intro|outro|short|quick\\s*hit|album|single|mono|stereo';
+const VERSION_ENTRE = new RegExp('[\\(\\[]\\s*(?:' + MOTS_VERSION + '|feat\\.?|ft\\.?|featuring)\\b[^\\)\\]]*[\\)\\]]', 'gi');
+const VERSION_TIRET = new RegExp('\\s[-–—]\\s*(?:' + MOTS_VERSION + ')\\b.*$', 'i');
+function aPlatUnicode(s) {
+  return String(s || '').toLowerCase()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/ø/g, 'o').replace(/æ/g, 'ae').replace(/œ/g, 'oe').replace(/ß/g, 'ss').replace(/ł/g, 'l').replace(/đ/g, 'd')
+    .replace(/[^\p{L}\p{N}]+/gu, ' ')
+    .trim();
+}
+function chansonDe(t) {
+  if (!t || typeof t !== 'object') return '';
+  if (t._ch !== undefined) return t._ch;
+  const titre = aPlatUnicode(String(t.title || '').replace(VERSION_ENTRE, ' ').replace(VERSION_TIRET, ''));
+  const artiste = aPlatUnicode(String(t.artist || '').replace(/\s(?:feat\.?|ft\.?|featuring)\s.*$/i, ''));
+  const k = titre && artiste ? artiste + '|' + titre : '';
+  try { Object.defineProperty(t, '_ch', { value: k, enumerable: false, writable: true }); } catch (e) {}
+  return k;
+}
+/** Deux morceaux sont-ils la meme chanson ? Sans identite : non. */
+function memeChanson(a, b) {
+  const x = chansonDe(a);
+  return !!x && x === chansonDe(b);
+}
+
 /* ------------------------------------------------------------
    La memoire de la derniere heure.
 
@@ -257,8 +389,14 @@ const keyOf = t => {
    remonte quand meme.
    ------------------------------------------------------------ */
 function memoireDe(recent) {
-  const M = { artistes: new Map(), familles: new Map(), titres: new Map(), n: 0 };
-  if (!recent || !recent.length) return M;
+  const M = { artistes: new Map(), familles: new Map(), titres: new Map(), chansons: new Map(), n: 0 };
+  /* L'historique vient d'un fichier JSON sur le disque du DJ : on ne
+     garde que des entrees qui sont des objets. Un nombre ou un texte
+     egare faisait jeter genres.famillesDe (defineProperty sur un
+     non-objet), et avec lui toute la liste de suggestions. */
+  if (!recent || !recent.length || typeof recent === 'string') return M;
+  recent = Array.from(recent).filter(x => x && typeof x === 'object');
+  if (!recent.length) return M;
   /* ------------------------------------------------------------
      Le meme morceau, deux fois dans la nuit.
 
@@ -280,8 +418,12 @@ function memoireDe(recent) {
      ------------------------------------------------------------ */
   for (let i = 0; i < recent.length; i++) {
     const id = recent[i] && recent[i].id;
-    if (id == null) continue;
     const rang = recent.length - 1 - i;
+    /* Et la chanson, pour que son autre fichier soit « deja passe »
+       lui aussi — voir chansonDe(). */
+    const ch = chansonDe(recent[i]);
+    if (ch && (!M.chansons.has(ch) || M.chansons.get(ch) > rang)) M.chansons.set(ch, rang);
+    if (id == null) continue;
     if (!M.titres.has(id) || M.titres.get(id) > rang) M.titres.set(id, rang);
   }
   /* Deux fenetres differentes, parce que les deux problemes n'ont
@@ -328,8 +470,12 @@ function penaliteVariete(t, M, opt) {
   /* Deja joue ce soir. Le sauvetage fait exception, et c'est
      delibere : quand la piste se vide, le titre qui a marche il y a
      une heure est justement le bon. */
-  if (!o.rejeu && M.titres && M.titres.size) {
-    const r = M.titres.get(t.id);
+  if (!o.rejeu && ((M.titres && M.titres.size) || (M.chansons && M.chansons.size))) {
+    /* Par le fichier, ou par la chanson sous un autre fichier : le
+       plus recent des deux fait foi. */
+    const r1 = M.titres ? M.titres.get(t.id) : undefined;
+    const r2 = M.chansons && M.chansons.size ? M.chansons.get(chansonDe(t)) : undefined;
+    const r = r1 == null ? r2 : r2 == null ? r1 : Math.min(r1, r2);
     /* La penalite s'estompe comme les autres. Un morceau passe il y a
        vingt minutes ne doit pas revenir ; le meme, joue a 21 h, peut
        reparaitre a 3 h du matin devant une salle a moitie renouvelee.
@@ -446,17 +592,60 @@ const PALIERS = [0.06, 0.10, null];
    de club qui ne sort jamais de la grille ; le plafond a 12 % borne
    ce qu'une platine sait faire, pas ce qu'un DJ ose faire. */
 function passeLeCrible(bpmRef, bpm, marge, doubleOk) {
-  if (!(bpm > 0)) return false;
+  if (!tempoOk(bpm)) return false;
   if (marge === null) return true;                 /* repli ultime : plus de crible */
+  if (!tempoOk(bpmRef)) return false;
   const M = (typeof marge === 'number' && isFinite(marge)) ? Math.max(0.01, Math.min(0.12, marge)) : FENETRE;
   /* Le crible suit la meme regle que la note : s'il laissait passer
      un rapport que tempoScore refuse ensuite, le candidat sortirait
      avec une note de tempo catastrophique au lieu de ne pas sortir. */
   const rapports = doubleOk === true ? [1, 2, 0.5] : [1];
   for (const r of rapports) {
-    if (Math.abs(bpm * r - bpmRef) / bpmRef <= M) return true;
+    /* Le bord de la fenetre en fait partie. 128 -> 131,84, c'est 3 %
+       tout rond ; en virgule flottante, 3,0000000000000027 %. Le
+       morceau pile au bord etait refuse au premier passage — et, si
+       le repli le repechait, affiche « dans la fenetre » quand meme,
+       puisque l'etiquette tolere un centieme. On absorbe l'erreur
+       d'arrondi, rien de plus. */
+    if (Math.abs(bpm * r - bpmRef) / bpmRef <= M + 1e-9) return true;
   }
   return false;
+}
+
+/* ------------------------------------------------------------
+   Les entrees de suggest() et rescue(), verifiees a la porte.
+
+   Banc de robustesse, 27 septembre 2026 :
+     — une bibliotheque absente, ou qui contient un trou (null au
+       milieu d'un tableau : une entree de cache abimee), faisait
+       jeter le moteur — plus aucune suggestion jusqu'au prochain
+       import ;
+     — une liste d'interdits ou de titres voulus passee en tableau
+       au lieu d'un Set jetait sur « .has » ;
+     — une limite negative rendait TOUTE la liste moins trois
+       titres (slice(0, -3)), une limite infinie la bibliotheque
+       entiere — et main.js lance un calcul de structure par ligne.
+   ------------------------------------------------------------ */
+function ensemble(v) {
+  if (v instanceof Set) return v;
+  if (v && typeof v.has === 'function') return v;
+  if (Array.isArray(v)) return new Set(v);
+  return new Set();
+}
+function borneLimite(v, defaut) {
+  const n = Math.floor(nombre(v, 0));
+  if (!(n >= 1)) return v != null && nombre(v, 0) < 0 ? 1 : defaut;
+  return Math.min(n, 100);
+}
+function bibliothequeSaine(library) {
+  if (!Array.isArray(library)) return [];
+  /* Le cas normal ne coute qu'un parcours : on ne recopie que s'il y
+     a vraiment un trou. */
+  for (let i = 0; i < library.length; i++) {
+    const t = library[i];
+    if (!t || typeof t !== 'object') return library.filter(x => x && typeof x === 'object');
+  }
+  return library;
 }
 
 function suggest(cur, library, opt) {
@@ -467,12 +656,13 @@ function suggest(cur, library, opt) {
   /* La bulle : un morceau d'ancrage fige, auquel tout est compare.
      Absente, rien ne change d'un iota — c'est un mode, pas un
      nouveau comportement par defaut. */
-  const B = opt.bulle || null;
-  const banned = opt.banned || new Set();
-  const trends = opt.trends || new Map();
-  const wanted = opt.wanted || new Set();     /* les titres que le client a demandes */
-  const limit = opt.limit || 5;
-  if (!cur) return [];
+  const B = (opt.bulle && !opt.bulle.impossible) ? opt.bulle : null;
+  const banned = ensemble(opt.banned);
+  const trends = (opt.trends && typeof opt.trends.has === 'function' && typeof opt.trends.get === 'function') ? opt.trends : new Map();
+  const wanted = ensemble(opt.wanted);     /* les titres que le client a demandes */
+  const limit = borneLimite(opt.limit, 5);
+  if (!cur || typeof cur !== 'object') return [];
+  library = bibliothequeSaine(library);
   /* ------------------------------------------------------------
      Le morceau en cours n'a pas de tempo. Ce n'est pas une raison
      de ne rien proposer.
@@ -494,7 +684,7 @@ function suggest(cur, library, opt) {
      Le tempo du morceau en cours finira par arriver : l'analyse de
      fond le mesure. En attendant, on aide.
      ------------------------------------------------------------ */
-  const sansTempo = !(cur.bpm > 0);
+  const sansTempo = !tempoOk(cur.bpm);
   /* Une note de tempo constante : presente pour que le reste du
      calcul et l'affichage fonctionnent, neutre pour qu'elle ne
      classe personne. */
@@ -525,7 +715,9 @@ function suggest(cur, library, opt) {
          soit. On retire donc l'axe du calcul au lieu de le laisser
          ecraser l'echelle.
      ------------------------------------------------------------ */
-  const sansTonalite = !cur.key;
+  /* Une tonalite hors de la roue (« n/a », « Am » non converti) ne
+     classe personne non plus : meme traitement que l'absence. */
+  const sansTonalite = !cleOk(cur.key);
   const H_INCONNU = 42;
   /* ------------------------------------------------------------
      Les poids, et pourquoi ils ne sont plus fixes.
@@ -718,6 +910,11 @@ function suggest(cur, library, opt) {
   /* Le morceau en cours est-il mesure ? S'il ne l'est pas, comparer
      son energie a celle des autres n'a aucun sens. */
   const curMesure = !!cur.analyzed && !cur.illisible;
+  /* Mesure, mais avec une energie illisible : l'axe se neutralise
+     comme pour un morceau non mesure, au lieu de rendre NaN. */
+  const curEnergie = nombre(cur.energy, null);
+  const curMesureEn = curMesure && curEnergie != null;
+  const curTimbreOk = curMesure && timbreOk(cur.timbre);
 
   /* Combien de morceaux de la bibliotheque portent un tempo ? S'ils
      sont trop peu nombreux pour remplir une liste, on ouvre la porte
@@ -725,7 +922,7 @@ function suggest(cur, library, opt) {
      calee qu'un ecran vide. */
   let avecTempo = 0;
   for (let i = 0; i < library.length && avecTempo < limit * 4; i++)
-    if (library[i].bpm > 0) avecTempo++;
+    if (tempoOk(library[i].bpm)) avecTempo++;
   const accepterSansTempo = avecTempo < limit * 4;
 
   /* ------------------------------------------------------------
@@ -777,10 +974,28 @@ function suggest(cur, library, opt) {
      ------------------------------------------------------------ */
   const jouable = t => !t.disparu;
 
+  /* Les doubles : le morceau en cours sous un autre fichier, et les
+     autres versions d'un titre interdit. Voir chansonDe(). */
+  const chCur = chansonDe(cur);
+  let chInterdites = null;
+  if (banned.size) {
+    for (const t of library) {
+      if (banned.has(keyOf(t))) {
+        const ch = chansonDe(t);
+        if (ch) (chInterdites || (chInterdites = new Set())).add(ch);
+      }
+    }
+  }
+  const double = t => {
+    if (!chCur && !chInterdites) return false;
+    const ch = chansonDe(t);
+    return !!ch && (ch === chCur || (chInterdites !== null && chInterdites.has(ch)));
+  };
+
   /* Le crible, avec son repli par paliers. Il rend la liste des
      morceaux retenus ET la fenetre qui a servi, pour que l'affichage
      puisse dire lesquels sont entres par la porte elargie. */
-  const retenir = (marge) => library.filter(t => t.id !== cur.id && !banned.has(keyOf(t)) &&
+  const retenir = (marge) => library.filter(t => t !== cur && t.id !== cur.id && !banned.has(keyOf(t)) &&
       (jouable(t) || t.id === epingle) &&
       /* Le morceau epingle traverse le crible de tempo. Sans cette
          exception, une cloture reservee a 118 BPM alors que le set
@@ -803,10 +1018,13 @@ function suggest(cur, library, opt) {
          un tempo ne suffisent pas a remplir la liste. Ils ne
          volent la place de personne : ils comblent un vide.
          ------------------------------------------------------------ */
-      (t.bpm > 0
+      (tempoOk(t.bpm)
         ? (sansTempo || t.id === epingle ||
            passeLeCrible(cur.bpm, t.bpm, marge, doubleOk(cur, t)))
-        : accepterSansTempo));
+        : accepterSansTempo) &&
+      /* En dernier : l'identite de chanson ne se calcule ainsi que pour
+         ce qui a passe le crible, pas pour toute la bibliotheque. */
+      !double(t));
 
   /* La fenetre demandee : celle du DJ si elle est apprise, sinon 3 %. */
   const fenetreVoulue = (typeof opt.marge === 'number' && isFinite(opt.marge))
@@ -856,7 +1074,7 @@ function suggest(cur, library, opt) {
          correction marchait sur l'etabli et pas en cabine.
          ------------------------------------------------------------ */
       t.mesure = !!t.analyzed && !t.illisible;   /* illisible = valeurs par defaut, pas une mesure */
-      const h = sansTonalite ? 50 : (t.key ? harmScore(cur.key, t.key) : H_INCONNU);
+      const h = sansTonalite ? 50 : (cleOk(t.key) ? harmScore(cur.key, t.key) : H_INCONNU);
       const tp = sansTempo ? TEMPO_MUET : tempoScore(cur.bpm, t.bpm, doubleOk(cur, t));
       /* ------------------------------------------------------------
          « Inconnu » n'est pas « parfait ».
@@ -890,10 +1108,13 @@ function suggest(cur, library, opt) {
          veut plus rien dire pour personne : on neutralise l'axe pour
          tout le monde au lieu de punir au hasard.
          ------------------------------------------------------------ */
-      const en = curMesure
-        ? (t.mesure ? energyScore(cur.energy, t.energy, arc, PASDJ) : EN_INCONNU)
+      /* Une energie ou un timbre illisibles sur un morceau « mesure »
+         valent une mesure absente — voir nombre() en tete de fichier. */
+      const tEnergie = nombre(t.energy, null);
+      const en = curMesureEn
+        ? ((t.mesure && tEnergie != null) ? energyScore(curEnergie, tEnergie, arc, PASDJ) : EN_INCONNU)
         : EN_NEUTRE;
-      const ti = (curMesure && t.mesure) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
+      const ti = (curTimbreOk && t.mesure && timbreOk(t.timbre)) ? timbreScore(cur.timbre, t.timbre) : TI_INCONNU;
       const cr = crowdScore(t, dna, dnaPret);
       const td = trends.has(keyOf(t)) ? trends.get(keyOf(t)) : 20;
       /* note() rend aussi la reponse a « dans la bulle ? » : la
@@ -908,7 +1129,7 @@ function suggest(cur, library, opt) {
       let total = (h * wH + tp.s * wT + en * wE + ti * wI + cr * wCrowd + td * wTrend
                    + (nb ? nb.note * wBulle : 0) + fr * wFr + af * wAf + pl * wPl
                    + pa * wPa + rp * wRp) / W;
-      if (mode === 'deep') total += (100 - (t.pop || 40)) * 0.06;
+      if (mode === 'deep') total += (100 - (popDe(t) || 40)) * 0.06;
       /* ------------------------------------------------------------
          La notoriete, qui n'etait nulle part.
 
@@ -924,7 +1145,7 @@ function suggest(cur, library, opt) {
          positif pour qui joue les tubes, negatif pour qui creuse.
          ------------------------------------------------------------ */
       const kPop = typeof P.pop === 'number' && isFinite(P.pop) ? Math.max(-1, Math.min(1, P.pop)) : 0;
-      const noto = kPop ? ((t.pop == null ? 40 : t.pop) - 50) * kPop * 0.30 : 0;
+      const noto = kPop ? (popDe(t) - 50) * kPop * 0.30 : 0;
       const voc = cur.vocal && t.vocal ? -6 : 0;
       /* Un titre demande par le client remonte, mais ne double jamais un
          morceau injouable : le bonus s'ajoute au score, il ne le remplace pas. */
@@ -940,6 +1161,10 @@ function suggest(cur, library, opt) {
          aussi. */
       const va = pin ? 0 : penaliteVariete(t, M, { sansFamille: !!B }) * ECHELLE_VARIETE;
       total = Math.max(4, Math.min(99, Math.round(total + voc + ask + va + pin + noto)));
+      /* La ceinture : si une valeur illisible a encore echappe aux
+         gardes ci-dessus, ce candidat passe en queue au lieu de rendre
+         le tri incoherent pour TOUTE la liste (voir nombre()). */
+      if (!isFinite(total)) total = 4;
       return { track: t, h: h, tempo: tp, energyScore: en, timbreScore: ti, crowd: cr, trend: td,
                client: wanted.has(t.id), variete: va, cloture: !!pin, total: total,
                fraicheur: fr, affinite: af, plancher: pl, parente: pa,
@@ -961,7 +1186,8 @@ function suggest(cur, library, opt) {
                horsFenetre: !sansTempo && tp.pct != null && tp.pct > fenetreVoulue * 100 + 0.01,
                fenetre: Math.round(fenetreVoulue * 1000) / 10,
                epinglee: !!pin,
-               rejoue: !pin && !!(M.titres && M.titres.has(t.id)),
+               rejoue: !pin && !!((M.titres && M.titres.has(t.id)) ||
+                                  (M.chansons && M.chansons.size && M.chansons.has(chansonDe(t)))),
                transition: transitionOf(cur, t, tp, h) };
     })
     .sort((a, b) => b.total - a.total);
@@ -1127,12 +1353,28 @@ function suggest(cur, library, opt) {
       else if (c.dansBulle || c.epinglee) dans.push(c);
       else dehors.push(c);
     }
-    vivier = dans.length >= limit ? ordonner(dans)
+    /* Compter les CHANSONS, pas les fichiers : deux copies d'un meme
+       titre dans la bulle ne remplissent pas deux lignes. */
+    vivier = sansDoubles(dans, limit).length >= limit ? ordonner(dans)
                                   : ordonner(dans).concat(ordonner(dehors), ordonner(revus));
   } else {
     vivier = ordonner(candidats);
   }
-  return vivier.slice(0, limit);
+  return sansDoubles(vivier, limit);
+}
+
+/* Une chanson, une ligne : la mieux placee de ses copies garde la
+   place, les autres cedent la leur au suivant. Sans identite (pas
+   d'artiste ou pas de titre), un morceau n'est le double de rien. */
+function sansDoubles(liste, limit) {
+  const out = [], vues = new Set();
+  for (const c of liste) {
+    if (out.length >= limit) break;
+    const ch = chansonDe(c.track);
+    if (ch) { if (vues.has(ch)) continue; vues.add(ch); }
+    out.push(c);
+  }
+  return out;
 }
 
 
@@ -1169,16 +1411,17 @@ const mmss = t => {
 };
 
 function mixPlan(cur, next, curS, nextS, tp) {
+  cur = cur || {}; next = next || {};
   /* Sans tempo des deux cotes, le plan n'a pas de sens : un BPM absent
      donnait un etirement nul, une intro « infinie » et un plan
      annonce sur « Lance a 0:45 » avec 93 mesures de recouvrement ;
      deux absents, « Lance a 0:00 ». Un repere faux est pire qu'aucun. */
-  const bA = cur && cur.bpm > 0 ? cur.bpm : (curS && curS.bpm > 0 ? curS.bpm : 0);
-  const bB = next && next.bpm > 0 ? next.bpm : (nextS && nextS.bpm > 0 ? nextS.bpm : 0);
+  const bA = cur && tempoOk(cur.bpm) ? Number(cur.bpm) : (curS && tempoOk(curS.bpm) ? Number(curS.bpm) : 0);
+  const bB = next && tempoOk(next.bpm) ? Number(next.bpm) : (nextS && tempoOk(nextS.bpm) ? Number(nextS.bpm) : 0);
   if (!(bA > 0) || !(bB > 0)) {
     return { ok: false, note: 'Tempo inconnu — pas de repère de mix tant qu\'il n\'est pas mesuré.' };
   }
-  if (!(cur.bpm > 0) || !(next.bpm > 0)) {
+  if (!tempoOk(cur.bpm) || !tempoOk(next.bpm)) {
     cur = Object.assign({}, cur, { bpm: bA });
     next = Object.assign({}, next, { bpm: bB });
     tp = null;
@@ -1195,9 +1438,41 @@ function mixPlan(cur, next, curS, nextS, tp) {
     };
   }
 
+  /* ------------------------------------------------------------
+     Des reperes qu'on peut suivre, ou aucun.
+
+     Banc de robustesse, 27 septembre 2026. Deux defauts, tous deux
+     visibles en cabine :
+
+       — une structure abimee (cache d'une ancienne version, fichier
+         tronque, champ manquant) donnait des NaN partout. mmss() les
+         affichait « 0:00 » : « Lance a 0:00, bascule les basses a
+         0:00, sors A a 0:00 », un plan faux annonce avec assurance.
+         On refuse maintenant, et on dit pourquoi.
+
+       — sur un morceau court — un jingle, un edit de trente
+         secondes, une batterie qui n'arrive qu'a la fin — le plancher
+         « jamais dans l'intro de A, plus une phrase » tombait APRES
+         la fin du morceau. Le plan disait « lance a 0:36, sors A a
+         0:08 » : lancer B huit secondes apres la fin de A, et couper
+         A avant de l'avoir lance. On garde le calcul, mais on le
+         borne au morceau : lancer au plus tard une mesure avant la
+         fin, basculer puis sortir dans l'ordre, jamais apres la fin.
+     ------------------------------------------------------------ */
+  const num = v => (typeof v === 'number' && isFinite(v)) ? v : null;
+  if (num(curS.duration) == null || !(curS.duration > 0) || num(curS.readyAt) == null ||
+      num(curS.outPoint) == null || num(nextS.readyAt) == null) {
+    return { ok: false, note: 'Repères de mix illisibles sur ce morceau — cale-le au casque.' };
+  }
   const beat = 60 / (cur.bpm || 124);
   const bar = beat * 4;
   const phrase = beat * 32;
+  const fin = curS.duration;
+  curS = Object.assign({}, curS, {
+    firstBeat: num(curS.firstBeat) == null ? 0 : curS.firstBeat,
+    lastCall: num(curS.lastCall) == null ? Math.max(0, fin - phrase) : curS.lastCall
+  });
+  nextS = Object.assign({}, nextS, { inPoint: num(nextS.inPoint) == null ? 0 : nextS.inPoint });
 
   /* l'intro de B, telle qu'elle durera une fois calee sur A */
   const introPlayed = Math.max(0, (nextS.readyAt - nextS.inPoint) / stretch);
@@ -1214,8 +1489,11 @@ function mixPlan(cur, next, curS, nextS, tp) {
   const snap = curS.firstBeat + Math.floor((start - curS.firstBeat) / phrase) * phrase;
   if (snap >= floor && snap < curS.duration) start = snap;
 
-  const swap = Math.max(start + bar, curS.outPoint);
-  const outAt = Math.min(curS.duration, Math.max(swap + phrase, curS.lastCall));
+  /* Les bornes : voir plus haut. Elles ne mordent que quand le
+     calcul sortait du morceau. */
+  start = Math.max(0, Math.min(start, fin - bar));
+  const swap = Math.max(start, Math.min(fin, Math.max(start + bar, curS.outPoint)));
+  const outAt = Math.max(swap, Math.min(fin, Math.max(swap + phrase, curS.lastCall)));
   const overlapBars = Math.max(1, Math.round((outAt - start) / bar));
 
   /* une intro courte ne laisse pas le temps de fondre */
@@ -1251,15 +1529,21 @@ function mixPlan(cur, next, curS, nextS, tp) {
 function rescue(cur, library, opt) {
   opt = opt || {};
   const dna = opt.dna || {};
-  const banned = opt.banned || new Set();
-  const structures = opt.structures || new Map();
-  const wanted = opt.wanted || new Set();
-  const limit = opt.limit || 3;
-  if (!cur) return [];
+  const banned = ensemble(opt.banned);
+  const structures = (opt.structures && typeof opt.structures.get === 'function') ? opt.structures : new Map();
+  const wanted = ensemble(opt.wanted);
+  const limit = borneLimite(opt.limit, 3);
+  if (!cur || typeof cur !== 'object') return [];
+  library = bibliothequeSaine(library);
   /* Meme raison que dans suggest() : sans tempo on ne cale pas, mais
      on propose quand meme. Un bouton de sauvetage qui repond « rien »
      est exactement l'inverse de ce pour quoi il existe. */
-  const sansTempo = !(cur.bpm > 0);
+  const sansTempo = !tempoOk(cur.bpm);
+  /* Les doubles du morceau en cours, et les versions d'un titre
+     interdit : memes raisons que dans suggest(). */
+  const chCur = chansonDe(cur);
+  const chInterdites = new Set();
+  if (banned.size) for (const t of library) if (banned.has(keyOf(t)) && chansonDe(t)) chInterdites.add(chansonDe(t));
 
   /* Le sauvetage ignore la courbe de soiree, mais pas la memoire :
      remonter la piste avec le meme artiste qu'il y a trois titres
@@ -1270,7 +1554,7 @@ function rescue(cur, library, opt) {
   /* Le sauvetage reste dans la bulle. Une soiree annees 80 dont la
      piste se vide veut un tube des annees 80, pas un tube. Comme
      ailleurs, la porte s'ouvre plutot que de ne rien rendre. */
-  const B = opt.bulle || null;
+  const B = (opt.bulle && !opt.bulle.impossible) ? opt.bulle : null;
 
   const out = [];
   for (const t of library) {
@@ -1278,13 +1562,13 @@ function rescue(cur, library, opt) {
        n'est pas un mauvais morceau, c'est un morceau pas encore
        mesure. Le bouton de sauvetage ne peut pas se permettre de
        l'ignorer — c'est souvent le seul vivier disponible. */
-    if (t.id === cur.id || banned.has(keyOf(t))) continue;
+    if (t === cur || t.id === cur.id || banned.has(keyOf(t))) continue;
     /* Un fichier efface ne sauve aucune piste. Un fichier sur un
        disque parti non plus — et ici, contrairement a suggest(), on
        l'ecarte vraiment : le sauvetage sert a charger un titre dans
        les trente secondes, pas a esperer qu'un volume revienne. */
     if (t.disparu || t.offline) continue;
-    if (!(t.bpm > 0) && !sansTempo) continue;
+    if (!tempoOk(t.bpm) && !sansTempo) continue;
     const tp = sansTempo ? { s: 50, pct: null, ratio: 1, delta: 0, muet: true }
                          : tempoScore(cur.bpm, t.bpm, opt.demiDouble === true && doubleAdmis(cur, t));
     /* Le sauvetage est le moment ou l'on cale le plus vite et le plus
@@ -1292,6 +1576,9 @@ function rescue(cur, library, opt) {
        large. Au-dela de trois pour cent, on ne rattrape pas une
        piste qui se vide, on l'acheve. */
     if (!sansTempo && tp.pct > 3) continue;      /* injouable maintenant : on passe */
+    /* Apres la fenetre : l'identite ne se calcule que pour ce qui reste. */
+    const ch = chansonDe(t);
+    if (ch && (ch === chCur || chInterdites.has(ch))) continue;
     /* ------------------------------------------------------------
        Le sauvetage ne fait jamais retomber la salle.
 
@@ -1326,8 +1613,12 @@ function rescue(cur, library, opt) {
        notoriete dit deja s'il remonte une salle, et c'est meme le
        critere principal d'un sauvetage.
        ------------------------------------------------------------ */
-    const mesuree = !!t.analyzed;   /* finalize() pose une energie sur tout : seul analyzed fait foi */
-    const e = t.energy == null ? 5 : t.energy;
+    /* Une energie illisible sur un morceau analyse vaut « pas
+       mesuree » : sinon « Énergie NaN/10 » s'affichait, et la note
+       du sauvetage devenait NaN. */
+    const mesuree = !!t.analyzed && nombre(t.energy, null) != null;   /* finalize() pose une energie sur tout : seul analyzed fait foi */
+    const e = nombre(t.energy, 5);
+    const pop = popDe(t);
     /* ------------------------------------------------------------
        « Assez fort » est relatif a la salle, pas a une constante.
 
@@ -1348,24 +1639,27 @@ function rescue(cur, library, opt) {
        ------------------------------------------------------------ */
     const releve = pl >= 88;                                  /* egal ou plus fort */
     if (mesuree && e < 5.4 && !releve) continue;
-    if (!mesuree && (t.pop == null ? 40 : t.pop) < 30) continue;
+    if (!mesuree && pop < 30) continue;
     /* pas encore analyse : c'est la notoriete qui tient lieu d'impact */
 
     /* reconnaissance immediate : notoriete d'abord, ADN de la salle ensuite */
-    const fam = (t.pop == null ? 40 : t.pop) * 0.62 + crowdScore(t, dna, dnaPret) * 0.38;
+    const fam = pop * 0.62 + crowdScore(t, dna, dnaPret) * 0.38;
 
     /* impact : energie, voix, et une intro courte */
     const st = structures.get(t.id);
-    const introBars = st && st.ok ? st.introBars : null;
+    const introBars = st && st.ok && nombre(st.introBars, null) != null ? nombre(st.introBars, null) : null;
     const quick = introBars == null ? 60 : Math.max(0, 100 - Math.max(0, introBars - 4) * 9);
-    const impact = (mesuree ? e * 7 : (t.pop == null ? 40 : t.pop) * 0.62)
+    const impact = (mesuree ? e * 7 : pop * 0.62)
                  + (t.vocal ? 14 : 0) + quick * 0.3;
 
     const nb = B ? bulle.note(t, B) : null;
-    const total = Math.round(
+    let total = Math.round(
       tp.s * 0.24 + h * 0.12 + fam * 0.31 + Math.min(100, impact) * 0.21 + pl * 0.12
     ) + (wanted.has(t.id) ? 12 : 0) + Math.round(penaliteVariete(t, M, { sansFamille: !!B, rejeu: true }) * 0.5)
       + (nb ? Math.round((nb.note - 50) * 0.24) : 0);
+    /* Meme ceinture que dans suggest() : un NaN residuel ne doit pas
+       rendre le tri incoherent pour les autres. */
+    if (!isFinite(total)) total = 4;
     out.push({
       track: t, total: Math.max(4, Math.min(99, total)),
       bulle: nb ? nb.note : null, dansBulle: nb ? nb.dedans : true,
@@ -1374,7 +1668,7 @@ function rescue(cur, library, opt) {
       why: wanted.has(t.id) ? 'Demandé par le client'
         : (introBars != null && introBars <= 4
             ? 'Entre en ' + introBars + ' mesures'
-            : (t.pop >= 70 ? 'La salle la connaît'
+            : (pop >= 70 ? 'La salle la connaît'
                : (mesuree ? 'Énergie ' + e + '/10' : 'Valeur sûre'))),
       transition: transitionOf(cur, t, tp, h)
     });
@@ -1387,11 +1681,12 @@ function rescue(cur, library, opt) {
        serait le pire moment pour perdre la soiree. */
     const dans = [], dehors = [];
     for (const c of classes) (c.dansBulle ? dans : dehors).push(c);
-    return (dans.length >= limit ? dans : dans.concat(dehors)).slice(0, limit);
+    const seuls = sansDoubles(dans, limit);
+    return seuls.length >= limit ? seuls : sansDoubles(dans.concat(dehors), limit);
     /* Pas de troisieme groupe ici : le sauvetage a le droit de
        rejouer le titre qui a rempli la piste il y a une heure. */
   }
-  return classes.slice(0, limit);
+  return sansDoubles(classes, limit);
 }
 
 /* ============================================================
@@ -1434,17 +1729,50 @@ function normalize(s) {
     .trim();
 }
 
+/* ------------------------------------------------------------
+   La recherche, sans refaire cent mille fois le meme calcul.
+
+   Banc de robustesse, 27 septembre 2026, sur 50 000 titres : un
+   texte de deck dont un mot est tres courant (« the », « la »,
+   « love », ou un nom d'artiste present partout) fait entrer des
+   dizaines de milliers de candidats par l'index. Chacun etait
+   compare en refabriquant, pour CHACUNE de ses trois formes, les
+   bigrammes de la requete, la liste de ses mots, et les bigrammes
+   de chaque paire de mots proches — des chaines decoupees par
+   millions. Mesure : 0,8 seconde par annonce du logiciel, dans le
+   processus principal, donc widget et deck figes d'autant.
+
+   Le calcul est le meme, a l'identique ; il n'est simplement plus
+   refait. La requete est preparee une fois ; les bigrammes sont des
+   nombres (deux codes de caractere) au lieu de sous-chaines ; ceux
+   d'un mot sont gardes, puisqu'une bibliotheque reutilise sans
+   cesse les memes mots.
+   ------------------------------------------------------------ */
 function bigrams(s) {
   const out = new Set();
-  for (let i = 0; i < s.length - 1; i++) out.add(s.slice(i, i + 2));
+  for (let i = 0; i < s.length - 1; i++) out.add(s.charCodeAt(i) * 65536 + s.charCodeAt(i + 1));
   return out;
 }
-function dice(a, b) {
-  const A = bigrams(a), B = bigrams(b);
+function diceEns(A, B) {
   if (!A.size || !B.size) return 0;
   let inter = 0;
-  for (const g of A) if (B.has(g)) inter++;
+  const petit = A.size <= B.size ? A : B, grand = petit === A ? B : A;
+  for (const g of petit) if (grand.has(g)) inter++;
   return (2 * inter) / (A.size + B.size);
+}
+function dice(a, b) {
+  return diceEns(bigrams(a), bigrams(b));
+}
+/* Les bigrammes d'un mot, gardes : borne large, jamais d'echec. */
+const BIG_MOTS = new Map();
+function bigMot(w) {
+  let b = BIG_MOTS.get(w);
+  if (!b) {
+    b = bigrams(w);
+    if (BIG_MOTS.size >= 60000) BIG_MOTS.clear();
+    BIG_MOTS.set(w, b);
+  }
+  return b;
 }
 
 /* Deux mots se ressemblent-ils assez ? On accepte le prefixe (« eurythmic »
@@ -1453,29 +1781,58 @@ function motProche(a, b) {
   if (a === b) return true;
   if (a.length >= 4 && b.length >= 4 && (a.startsWith(b) || b.startsWith(a))) return true;
   if (Math.abs(a.length - b.length) <= 2 && Math.min(a.length, b.length) >= 4)
-    return dice(a, b) >= 0.72;
+    return diceEns(bigMot(a), bigMot(b)) >= 0.72;
   return false;
 }
+
+const motsUtiles = s => s.split(' ').filter(w => w.length > 1);
 
 /* Quelle part des mots tapes retrouve-t-on dans le titre ?
    C'est l'indice qui sauve « sweet dreams eurythmics » face a
    « Eurythmics - Sweet Dreams (Are Made of This) » : l'ordre ne
    compte pas, les mots en trop du titre ne penalisent pas. */
-function partDesMots(q, cible) {
-  const A = q.split(' ').filter(w => w.length > 1);
-  const B = cible.split(' ').filter(w => w.length > 1);
+function partMots(A, B) {
   if (!A.length || !B.length) return 0;
   let trouves = 0;
   for (const a of A) if (B.some(b => motProche(a, b))) trouves++;
   return trouves / A.length;
 }
+function partDesMots(q, cible) {
+  return partMots(motsUtiles(q), motsUtiles(cible));
+}
 
-function combine(q, cible) {
-  const d = dice(q, cible);
-  const t = partDesMots(q, cible);
+/** La requete, preparee une fois pour toute la bibliotheque. */
+function preparer(q) {
+  return { q: q, A: bigrams(q), mots: motsUtiles(q) };
+}
+
+/* « plafond » : dans match(), seul compte de battre la meilleure note
+   deja vue. Quand meme un accord parfait des mots ne suffirait pas, on
+   ne les compte pas — la note rendue est alors inferieure a ce
+   plafond, et le resultat final est exactement le meme. */
+function combineP(P, cible, plafond) {
+  /* ------------------------------------------------------------
+     Rien ne ressemble a tout.
+
+     Un titre entierement en cyrillique, en arabe ou en emoji se met
+     a plat en chaine VIDE — normalize() ne garde que a-z et 0-9. Or
+     « q.includes('') » est toujours vrai : ce morceau recevait 0,86
+     face a N'IMPORTE QUELLE requete, au-dessus du seuil de 0,58 et
+     meme du rapprochement franc qui dispense de verifier l'artiste.
+     Un titre inconnu annonce par le logiciel etait donc reconnu
+     comme ce morceau-la, et toutes les suggestions partaient de lui.
+     Une chaine vide ne ressemble a rien.
+     ------------------------------------------------------------ */
+  if (!P.q || !cible) return 0;
+  const d = diceEns(P.A, bigrams(cible));
   /* inclusion franche : la requete est le titre, ou l'inverse */
-  if (cible.includes(q) || q.includes(cible)) return Math.min(1, 0.86 + 0.14 * d);
+  if (cible.includes(P.q) || P.q.includes(cible)) return Math.min(1, 0.86 + 0.14 * d);
+  if (plafond != null && Math.max(d, 0.42 * d + 0.58) <= plafond) return d;
+  const t = partMots(P.mots, motsUtiles(cible));
   return Math.max(d, 0.42 * d + 0.58 * t);
+}
+function combine(q, cible) {
+  return combineP(preparer(q), cible);
 }
 
 /* ------------------------------------------------------------
@@ -1491,7 +1848,9 @@ function combine(q, cible) {
    les calcule une fois, on les garde, et la recherche redevient
    instantanee.
    ------------------------------------------------------------ */
+const FORMES_VIDES = ['', '', ''];
 function formesDe(t) {
+  if (!t || typeof t !== 'object') return FORMES_VIDES;   /* un trou dans la bibliotheque */
   if (t._n) return t._n;
   const artist = t.artist || '', title = t.title || '';
   const n = [
@@ -1586,9 +1945,9 @@ function candidats(q, library) {
   return vus;
 }
 
-function noteDe(q, t) {
+function noteDe(P, t, plafond) {
   const f = formesDe(t);
-  return Math.max(combine(q, f[0]), combine(q, f[1]), combine(q, f[2]));
+  return Math.max(combineP(P, f[0], plafond), combineP(P, f[1], plafond), combineP(P, f[2], plafond));
 }
 
 /**
@@ -1634,10 +1993,12 @@ function accordArtiste(text, cible, note) {
 function match(text, library, threshold) {
   threshold = threshold == null ? 0.58 : threshold;
   const q = normalize(text);
-  if (q.length < 3) return null;
+  if (q.length < 3 || !Array.isArray(library)) return null;
   let best = null, bestScore = 0;
+  const P = preparer(q);
   for (const i of candidats(q, library)) {
-    const sc = noteDe(q, library[i]);
+    if (!library[i]) continue;
+    const sc = noteDe(P, library[i], bestScore);
     if (sc > bestScore) { bestScore = sc; best = library[i]; }
   }
   if (bestScore < threshold) return null;
@@ -1648,14 +2009,30 @@ function match(text, library, threshold) {
 /** Les n meilleurs, pour proposer un choix plutot qu'imposer une reponse. */
 function search(text, library, limit, threshold) {
   const q = normalize(text);
-  if (q.length < 2) return [];
+  if (q.length < 2 || !Array.isArray(library)) return [];
   const seuil = threshold == null ? 0.34 : threshold;
+  const k = borneLimite(limit, 8);
   const out = [];
+  const P = preparer(q);
+  /* Les k meilleures notes vues jusqu'ici, de la plus haute a la plus
+     basse. Un candidat qui ne peut pas depasser la k-ieme n'entrera
+     pas dans la liste rendue : a egalite, le tri stable le place
+     derriere celui qui etait la avant lui. On lui epargne donc le
+     comptage des mots (voir combineP) — la liste rendue est la meme. */
+  const top = [];
   for (const i of candidats(q, library)) {
-    const sc = noteDe(q, library[i]);
-    if (sc >= seuil) out.push({ track: library[i], score: sc });
+    if (!library[i]) continue;
+    const plafond = top.length >= k ? top[k - 1] : null;
+    const sc = noteDe(P, library[i], plafond);
+    if (sc < seuil) continue;
+    if (plafond != null && sc <= plafond) continue;       /* ne peut pas entrer */
+    out.push({ track: library[i], score: sc });
+    let j = Math.min(top.length, k - 1);
+    top[j] = sc;
+    while (j > 0 && top[j - 1] < sc) { top[j] = top[j - 1]; top[j - 1] = sc; j--; }
+    if (top.length > k) top.length = k;
   }
-  return out.sort((a, b) => b.score - a.score).slice(0, limit || 8);
+  return out.sort((a, b) => b.score - a.score).slice(0, k);
 }
 
 module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, crowdScore,
@@ -1664,4 +2041,5 @@ module.exports = { camelot, harmScore, tempoScore, energyScore, timbreScore, cro
                    transitionOf, suggest, keyOf, normalize, match, search, dice, combine,
                    mixPlan, rescue, mmss, memoireDe, penaliteVariete, passeLeCrible, genres, bulle,
                    accordArtiste, partDesMots,
-                   epoque, affinites, formesDe };
+                   epoque, affinites, formesDe,
+                   chansonDe, memeChanson, tempoOk, cleOk, nombre, popDe, timbreOk };

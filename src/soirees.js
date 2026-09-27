@@ -27,6 +27,10 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
+/* « Artiste - Titre » coupe comme le fait la liste du client : une
+   fiche activee doit donner EXACTEMENT les memes entrees qu'un
+   collage dans « Le client », sinon le meme titre compte double. */
+const { splitPair } = require('./clientlist');
 
 /* Les champs d'une fiche, et rien d'autre. Une fiche inconnue
    venue d'une version future est ignoree champ par champ plutot
@@ -173,8 +177,8 @@ class Soirees {
     return {
       sessionName: s.nom,
       pack: s.pays + '-' + s.evenement,
-      clientWanted: s.voulus.map(t => ({ artist: '', title: t })),
-      clientBanned: s.interdits.map(t => ({ artist: '', title: t })),
+      clientWanted: s.voulus.map(splitPair),
+      clientBanned: s.interdits.map(splitPair),
       /* le jeton du QR : propre a la soiree, donc les demandes du
          samedi ne reviennent pas le dimanche */
       sessionToken: s.jeton || s.id,
@@ -206,4 +210,40 @@ class Soirees {
   }
 }
 
-module.exports = { Soirees, vide, idDe };
+/* L'inverse de splitPair : une entree du client redevient une ligne
+   de fiche. Sert a garder la fiche active a jour quand le DJ touche
+   aux listes depuis « Le client ». */
+const enLigne = e => e ? ((e.artist ? e.artist + ' - ' : '') + (e.title || '')).trim() : '';
+
+/* ------------------------------------------------------------
+   LA SERIE — combien de semaines d'affilee tu as joue.
+
+   Une semaine compte si elle porte au moins une vraie soiree (les
+   seuils de session.js : huit titres, quarante-cinq minutes). La
+   semaine en cours ne casse pas la serie tant qu'elle n'est pas
+   finie : un DJ du samedi ne perd pas sa serie le mardi.
+   Semaines du lundi au dimanche, heure locale.
+   ------------------------------------------------------------ */
+function lundiDe(t) {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getTime();
+}
+function serie(dates, maintenant) {
+  const sem = new Set();
+  for (const t of dates || []) {
+    const x = typeof t === 'number' ? t : Date.parse(t);
+    if (x > 0) sem.add(lundiDe(x));
+  }
+  if (!sem.size) return 0;
+  const SEM = 7 * 86400e3;
+  let l = lundiDe(maintenant || Date.now());
+  /* +2 h de marge : un changement d'heure raccourcit une semaine */
+  if (!sem.has(l)) l = lundiDe(l - SEM + 2 * 3600e3);
+  let n = 0;
+  while (sem.has(l)) { n++; l = lundiDe(l - SEM + 2 * 3600e3); }
+  return n;
+}
+
+module.exports = { Soirees, vide, idDe, enLigne, serie, lundiDe };
