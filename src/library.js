@@ -54,20 +54,23 @@ const FIABILITE = { rekordbox: 3, serato: 3, traktor: 3, virtualdj: 3,
 const fiabilite = src => FIABILITE[src] || 1;
 
 /* ---------- tonalite musicale -> Camelot ---------- */
-const CAMELOT = {
-  'Abm':'1A','G#m':'1A','B':'1B',
+/* Sans prototype, et avec les huit ecritures enharmoniques qui
+   manquaient (Cb, Fb, E#, B#, majeures et mineures) : un tag « Cb »
+   rendait « pas de tonalite » au lieu de 1B. */
+const CAMELOT = Object.assign(Object.create(null), {
+  'Abm':'1A','G#m':'1A','B':'1B','Cb':'1B',
   'Ebm':'2A','D#m':'2A','F#':'2B','Gb':'2B',
   'Bbm':'3A','A#m':'3A','Db':'3B','C#':'3B',
-  'Fm':'4A','Ab':'4B','G#':'4B',
-  'Cm':'5A','Eb':'5B','D#':'5B',
+  'Fm':'4A','E#m':'4A','Ab':'4B','G#':'4B',
+  'Cm':'5A','B#m':'5A','Eb':'5B','D#':'5B',
   'Gm':'6A','Bb':'6B','A#':'6B',
-  'Dm':'7A','F':'7B',
-  'Am':'8A','C':'8B',
-  'Em':'9A','G':'9B',
-  'Bm':'10A','D':'10B',
+  'Dm':'7A','F':'7B','E#':'7B',
+  'Am':'8A','C':'8B','B#':'8B',
+  'Em':'9A','Fbm':'9A','G':'9B',
+  'Bm':'10A','Cbm':'10A','D':'10B',
   'F#m':'11A','Gbm':'11A','A':'11B',
-  'C#m':'12A','Dbm':'12A','E':'12B'
-};
+  'C#m':'12A','Dbm':'12A','E':'12B','Fb':'12B'
+});
 /* ============================================================
    TOUTES LES FACONS D'ECRIRE UNE TONALITE.
 
@@ -172,7 +175,7 @@ function parseRekordboxXML(xmlPath) {
   try { xml = fs.readFileSync(xmlPath, 'utf8'); }
   catch (e) {
     throw new Error('Impossible de lire ' + xmlPath +
-      ' — le fichier a peut-peut-être été déplacé ou renommé. Réexporte ta collection depuis rekordbox, ' +
+      ' — le fichier a peut-être été déplacé ou renommé. Réexporte ta collection depuis rekordbox, ' +
       'ou choisis le nouveau chemin dans les réglages.');
   }
   const out = [];
@@ -925,8 +928,7 @@ function elaguerDisparus(tracks, opt) {
        Un schema, c'est au moins deux lettres ; une lettre suivie de
        « : » et d'une barre, c'est un lecteur.
        ------------------------------------------------------------ */
-    const lecteur = /^[A-Za-z]:[\\/]/.test(t.path || '');
-    if (!t.path || (!lecteur && /^[a-z][a-z0-9+.-]+:/i.test(t.path) && t.path.charAt(0) !== '/')) {
+    if (!estFichier(t.path)) {
       gardes.push(t); continue;
     }
     /* ENOENT seul veut dire « pas la ». Un refus de permission ou
@@ -934,10 +936,50 @@ function elaguerDisparus(tracks, opt) {
     let existe = true;
     try { existe = !!surLeDisque(t.path); } catch (e) { existe = true; }
     if (existe) { t.disparu = false; gardes.push(t); continue; }
+    /* ------------------------------------------------------------
+       LA COPIE VIVANTE, RANGEE EN ALIAS.
+
+       Le dedoublonnage passe AVANT l'elagage, et garde la copie de
+       la source la plus sure — rekordbox — sans savoir encore si son
+       fichier existe. Le DJ a deplace sa musique sur un SSD, le vieux
+       rekordbox.xml pointe toujours l'ancien dossier, le scan de
+       dossier pointe le bon : on gardait l'entree morte, on rangeait
+       la vivante en alias, puis on jetait l'entree morte… et l'alias
+       avec elle. Le morceau disparaissait de la bibliotheque (audit
+       du 5 octobre 2026).
+
+       Avant de declarer un morceau efface ou hors ligne, on regarde
+       donc ses autres adresses. La premiere qui repond devient son
+       chemin ; l'ancien reste un alias, pour que le deck qui
+       l'annoncerait encore retrouve le morceau. Le reste — tempo,
+       tonalite, identifiant rekordbox — ne bouge pas.
+       ------------------------------------------------------------ */
+    if (Array.isArray(t.alias) && t.alias.length) {
+      let vivant = null;
+      for (const a of t.alias) {
+        if (!estFichier(a) || a === t.path) continue;
+        let ok = false;
+        try { ok = !!surLeDisque(a); } catch (e) { ok = false; }
+        if (ok) { vivant = a; break; }
+      }
+      if (vivant) {
+        const ancien = t.path;
+        t.alias = [ancien].concat(t.alias.filter(a => a !== vivant && a !== ancien));
+        t.path = vivant;
+        t.disparu = false;
+        t.offline = false;
+        gardes.push(t); continue;
+      }
+    }
     if (volumeRepond(t.path)) { t.disparu = true; disparus.push(t); }
     else { t.offline = true; horsLigne++; gardes.push(t); }
   }
   return { gardes: gardes, disparus: disparus, horsLigne: horsLigne };
+}
+function estFichier(p) {
+  if (!p) return false;
+  const lecteur = /^[A-Za-z]:[\\/]/.test(p);
+  return lecteur || !/^[a-z][a-z0-9+.-]+:/i.test(p) || p.charAt(0) === '/';
 }
 
 /* ============================================================
@@ -982,24 +1024,42 @@ function elaguerDisparus(tracks, opt) {
    differents replies en un seul des que leurs durees se tenaient a
    quatre secondes. Et « avec » n'en est pas un : « Danse avec moi »
    et « Danse avec toi » devenaient tous deux « danse ». */
+/* ------------------------------------------------------------
+   Toutes les ecritures (audit du 5 octobre 2026).
+
+   La mise a plat ne gardait que a-z et 0-9 : un titre arabe, grec
+   ou coreen devenait VIDE, et deux chansons differentes du meme
+   artiste \u2014 \u00ab Khaled|\u00bb et \u00ab Khaled| \u00bb \u2014 se repliaient en une seule
+   des que leurs durees se tenaient a quatre secondes. L'une
+   disparaissait des propositions, son fichier devenait un alias de
+   l'autre (rekordbox jouait \u0648\u0647\u0631\u0627\u0646, le widget affichait \u062f\u064a\u062f\u064a), et
+   l'ecran de sante proposait d'effacer une vraie chanson.
+
+   On garde donc toute lettre et tout chiffre, de toute ecriture. Et
+   un titre qui ne contient AUCUNE lettre (\u00ab ??? \u00bb) n'identifie rien :
+   pas de cle, jamais replie. Voir build/test-alphabets.js.
+   ------------------------------------------------------------ */
 function aPlat(s) {
   return String(s || '')
     .toLowerCase()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
-    .replace(/[\u0153]/g, 'oe').replace(/[\u00e6]/g, 'ae').replace(/[\u00f8]/g, 'o');
+    .replace(/[\u0153]/g, 'oe').replace(/[\u00e6]/g, 'ae').replace(/[\u00f8]/g, 'o')
+    .replace(/\u00df/g, 'ss').replace(/\u0142/g, 'l').replace(/\u0111/g, 'd').replace(/\u0131/g, 'i')
+    .normalize('NFC');
 }
 function normaliserNom(s) {
   return aPlat(s)
     .replace(/[\[(][^\])]*[\])]/g, ' ')
     .replace(/\s(feat|ft|featuring)\b.*$/, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, ' ')
     .trim();
 }
 function cleMorceau(t) {
   const art = aPlat(t.artist)
     .replace(/\s(feat\.?|ft\.?|featuring|x|&|et|and)\s.*$/, ' ').replace(/,\s.*$/, ' ')
-    .replace(/[^a-z0-9]+/g, ' ').trim();
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, ' ').trim();
   const tit = normaliserNom(t.title);
+  if (!tit) return '';                         /* un titre sans lettres n'identifie rien */
   return (art + ' ' + tit).trim().length < 4 ? '' : art + '|' + tit;
 }
 

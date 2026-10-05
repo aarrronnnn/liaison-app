@@ -337,8 +337,11 @@ function chargerClassements() {
 let classementsEcritKO = null;
 
 function enregistrerClassements() {
+  /* ecrireJSON ne jette pas : il rend faux. Le « catch » d'ici ne
+     voyait donc jamais rien, et la panne annoncee au panneau ne
+     s'affichait jamais (audit du 5 octobre 2026). */
   try {
-    ecrire.ecrireJSON(CLASSEMENTS(), chargerClassements());
+    if (!ecrire.ecrireJSON(CLASSEMENTS(), chargerClassements())) throw new Error(derniereEcritureKO || 'écriture refusée par le disque');
     classementsEcritKO = null;
     return true;
   } catch (e) {
@@ -347,6 +350,35 @@ function enregistrerClassements() {
     return false;
   }
 }
+
+/* ------------------------------------------------------------
+   Toute ecriture de donnees qui rate, dite une fois au DJ.
+
+   Dossier en lecture seule, disque plein, OneDrive ou un antivirus
+   qui verrouille : rien n'etait garde de la nuit — journal, listes
+   du client, apprentissage — et rien ne le disait. ecrire.js
+   previent maintenant ici, une fois par fichier ; on n'en fait
+   qu'un conseil par session.
+   ------------------------------------------------------------ */
+let derniereEcritureKO = null, ecritureSignalee = false;
+ecrire.surEchec((fichier, err) => {
+  derniereEcritureKO = String((err && (err.code || err.message)) || err);
+  console.warn('[liaison] ecriture impossible :', fichier, derniereEcritureKO);
+  if (ecritureSignalee) return;
+  try {
+    send('conseils', [{
+      cle: 'ecriture-impossible', quand: 'deck',
+      titre: 'Liaison n\'arrive pas à enregistrer sur ce disque',
+      texte: 'Le journal de la soirée, tes listes et ce que Liaison apprend ne sont pas gardés.',
+      marche: ['Vérifie qu\'il reste de la place sur le disque',
+               'Si ton dossier utilisateur est dans OneDrive, mets OneDrive en pause pendant la soirée',
+               'Relance Liaison après avoir libéré de la place',
+               require('path').basename(fichier) + ' — ' + derniereEcritureKO],
+      repli: 'Les suggestions continuent : seul ce qui doit être enregistré est perdu.'
+    }]);
+    ecritureSignalee = true;
+  } catch (e) { /* trop tot au demarrage : le prochain echec le dira */ }
+});
 
 let journalManques = null;
 /* Le journal s'ecrit APRES coup, pas a chaque demande : a 1 h du

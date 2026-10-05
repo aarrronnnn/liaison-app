@@ -259,6 +259,24 @@ function transitionOf(cur, nx, tp, h) {
   if (tp.ratio !== 1)
     return { n: 'Bascule tempo x' + (tp.ratio === 2 ? '2' : '0,5'), d: 'Double ou moitié tempo — la grille rythmique reste alignée.' };
   /* ------------------------------------------------------------
+     Pas de calage annonce sur un tempo qu'on ne connait pas.
+
+     Un tempo absent rend un ecart FORCE a zero (tempoScore, ou
+     TEMPO_MUET quand c'est le morceau en cours qui n'en a pas). Les
+     branches ci-dessous le lisaient comme un calage parfait : « Les
+     tempos se calent », « Blend long — 32 temps », pour un morceau
+     dont personne n'a mesure le tempo (audit du 5 octobre 2026).
+     C'est la meme faute que celle des tonalites inconnues, plus bas,
+     et la meme reponse : dire ce qu'on ne sait pas.
+     ------------------------------------------------------------ */
+  if (tp.muet || tp.pct == null) {
+    if (cleOk(cur.key) && cleOk(nx.key) && h >= 89)
+      return { n: 'Tempo à vérifier',
+               d: 'Tonalités compatibles, mais un des deux tempos n\'est pas encore mesuré : cale au casque avant de lancer.' };
+    return { n: 'Tempo inconnu',
+             d: 'Un des deux tempos n\'est pas encore mesuré : écoute au casque, ou coupe net sur une fin de phrase.' };
+  }
+  /* ------------------------------------------------------------
      Ne pas prescrire une technique harmonique sans tonalite.
 
      « Il y a beaucoup de ? dans la description des sons, avec des
@@ -1042,10 +1060,29 @@ function suggest(cur, library, opt) {
      On s'arrete au premier palier qui remplit la liste : tant que
      trois propositions calees existent, on ne va pas chercher la
      quatrieme a huit pour cent.
+
+     « Remplir », c'est avec ce qui finira VRAIMENT dans la liste
+     (audit du 5 octobre 2026) : des CHANSONS — quatre versions d'un
+     titre ne font qu'une ligne apres sansDoubles() — et des morceaux
+     qu'on peut CHARGER. Compter les fichiers d'un SSD debranche
+     arretait le repli sur cinq propositions inchargeables, alors
+     que dix titres du disque interne attendaient a 4 %.
      ------------------------------------------------------------ */
+  const pleins = l => {
+    const vues = new Set(), objets = new Set();
+    let k = 0;
+    for (const t of l) {
+      if (t.offline || objets.has(t)) continue;
+      objets.add(t);
+      const ch = chansonDe(t);
+      if (ch) { if (vues.has(ch)) continue; vues.add(ch); }
+      if (++k >= limit) break;
+    }
+    return k;
+  };
   if (!sansTempo) {
     for (const palier of PALIERS) {
-      if (retenus.length >= limit) break;
+      if (pleins(retenus) >= limit) break;
       if (palier !== null && palier <= fenetreUtilisee) continue;
       fenetreUtilisee = palier;
       retenus = retenir(palier);
@@ -1365,11 +1402,15 @@ function suggest(cur, library, opt) {
 
 /* Une chanson, une ligne : la mieux placee de ses copies garde la
    place, les autres cedent la leur au suivant. Sans identite (pas
-   d'artiste ou pas de titre), un morceau n'est le double de rien. */
+   d'artiste ou pas de titre), un morceau n'est le double de rien —
+   sauf de lui-meme : le MEME objet present deux fois dans la
+   bibliotheque (une source lue deux fois) ne prend qu'une ligne. */
 function sansDoubles(liste, limit) {
-  const out = [], vues = new Set();
+  const out = [], vues = new Set(), objets = new Set();
   for (const c of liste) {
     if (out.length >= limit) break;
+    if (objets.has(c.track)) continue;
+    objets.add(c.track);
     const ch = chansonDe(c.track);
     if (ch) { if (vues.has(ch)) continue; vues.add(ch); }
     out.push(c);
@@ -1714,19 +1755,51 @@ const BRUIT = [
   /\.(mp3|wav|aiff?|flac|m4a|ogg|aac)\b/g
 ];
 
+/* ------------------------------------------------------------
+   TOUTES LES ECRITURES.
+
+   La mise a plat ne gardait que a-z et 0-9. Audit du 5 octobre
+   2026 : « Khaled - عبد القادر » devenait « khaled », et tous les
+   titres de Khaled ressemblaient alors a 1,00 — le widget affichait
+   un AUTRE morceau, et les propositions partaient de lui. Un titre
+   entierement cyrillique devenait vide : « hors bibliotheque » alors
+   qu'il y etait. Voir build/test-alphabets.js.
+
+   On garde donc toute lettre, tout chiffre et toute marque qui fait
+   partie d'une lettre (les voyelles du hindi, du thai). On retire
+   seulement ce qui varie d'une saisie a l'autre pour un meme mot :
+   les accents latins, grecs et cyrilliques, les voyelles ecrites de
+   l'arabe et de l'hebreu (presentes dans un tag, absentes dans
+   l'autre), le tatweel. NFKD ramene les formes de compatibilite
+   (pleine chasse japonaise, ligatures) ; NFC recompose a la fin le
+   coreen et les kana qu'un nom de fichier macOS livre decomposes.
+
+   Les lettres latines qui ne se decomposent pas — ø æ œ ß ł đ ı þ ð
+   — sont repliees a la main, comme dans aPlatUnicode : sans quoi
+   « Røyksopp » devenait « r yksopp » et « MO » ne trouvait plus « MØ ».
+   ------------------------------------------------------------ */
+const REPLIS = { 'ø': 'o', 'æ': 'ae', 'œ': 'oe', 'ß': 'ss', 'ł': 'l', 'đ': 'd', 'ı': 'i', 'þ': 'th', 'ð': 'd' };
+const A_REPLIER = /[øæœßłđıþð]/g;
+const VARIANTES = /[̀-֑ͯ-ׇֽֿׁׂׅׄؐ-ًؚ-ٰٟۖ-ۜ۟-۪ۨ-ۭـ]/g;
 function normalize(s) {
   let t = String(s || '').toLowerCase()
-    .normalize('NFD').replace(/[̀-ͯ]/g, '')     /* accents */
-    .replace(/[_–—]/g, ' ')                     /* tirets longs, underscores */
-    .replace(/^\s*\d{1,3}\s*[-.)]\s*/, ' ');              /* « 03. » en tete */
+    .normalize('NFKD').replace(VARIANTES, '')     /* accents, harakat, niqqud */
+    .replace(A_REPLIER, c => REPLIS[c])
+    /* « 03. », « 03 - », et « 03_ » des noms de fichier : le numero de
+       piste en tete. Le souligne est lu AVANT d'etre change en espace,
+       sinon « 03_Daft_Punk » gardait son « 03 » — et « 7 Rings » ou
+       « 99 Luftballons », sans separateur, gardent le leur. */
+    .replace(/^\s*\d{1,3}\s*[-.)_]\s*/, ' ')
+    .replace(/[_–—]/g, ' ');                    /* tirets longs, underscores */
   for (const r of BRUIT) t = t.replace(r, ' ');
   return t
     .replace(/\b(feat|ft|featuring|avec|with)\b\.?/g, ' ')
     .replace(/\((original|extended|radio|club|edit|mix|remix|version|instrumental)[^)]*\)/g, ' ')
     .replace(/\[[^\]]*\]/g, ' ')
-    .replace(/[^a-z0-9]+/g, ' ')
+    .replace(/[^\p{L}\p{N}\p{M}]+/gu, ' ')
     .replace(/\s+/g, ' ')
-    .trim();
+    .trim()
+    .normalize('NFC');
 }
 
 /* ------------------------------------------------------------
@@ -1802,8 +1875,11 @@ function partDesMots(q, cible) {
 }
 
 /** La requete, preparee une fois pour toute la bibliotheque. */
-function preparer(q) {
-  return { q: q, A: bigrams(q), T: bigTries(q), mots: motsUtiles(q) };
+function preparer(q, texte) {
+  /* le noyau : le texte sans ses parentheses, featurings et mentions
+     de version — voir noteDe() */
+  const N = texte == null ? q : (normalize(noyau(texte)) || q);
+  return { q: q, A: bigrams(q), T: bigTries(q), mots: motsUtiles(q), noyau: N };
 }
 
 /* ------------------------------------------------------------
@@ -1825,18 +1901,26 @@ function preparer(q) {
    ------------------------------------------------------------ */
 function bigTries(s) {
   const n = s.length - 1;
-  if (n < 1) return new Int32Array(0);
-  const a = new Int32Array(n);
+  if (n < 1) return new Uint32Array(0);
+  const a = new Uint32Array(n);
   /* Tri par insertion : sur les quelques dizaines de bigrammes d'un
      titre, il bat le tri natif des tableaux types, dont l'appel coute
-     plus que le tri lui-meme. */
-  for (let i = 0; i < n; i++) {
-    const v = s.charCodeAt(i) * 65536 + s.charCodeAt(i + 1);
-    let j = i - 1;
-    while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
-    a[j + 1] = v;
+     plus que le tri lui-meme. Au-dela, il devient quadratique : le
+     « sort » qui le suivait arrivait APRES coup et ne protegeait de
+     rien — 288 ms pour un titre de 20 000 caracteres, sur le fil du
+     widget (audit du 5 octobre 2026). Les longs passent donc
+     directement par le tri natif. */
+  if (n > 64) {
+    for (let i = 0; i < n; i++) a[i] = s.charCodeAt(i) * 65536 + s.charCodeAt(i + 1);
+    a.sort();
+  } else {
+    for (let i = 0; i < n; i++) {
+      const v = s.charCodeAt(i) * 65536 + s.charCodeAt(i + 1);
+      let j = i - 1;
+      while (j >= 0 && a[j] > v) { a[j + 1] = a[j]; j--; }
+      a[j + 1] = v;
+    }
   }
-  if (n > 200) a.sort();
   let k = 0;
   for (let i = 0; i < n; i++) if (i === 0 || a[i] !== a[i - 1]) a[k++] = a[i];
   return k === n ? a : a.slice(0, k);
@@ -1851,7 +1935,7 @@ function diceTries(A, B) {
   }
   return (2 * inter) / (na + nb);
 }
-const TRIES_VIDES = [new Int32Array(0), new Int32Array(0), new Int32Array(0)];
+const TRIES_VIDES = [new Uint32Array(0), new Uint32Array(0), new Uint32Array(0)];
 /* Prechauffer une tranche de la bibliotheque : main.js l'appelle par
    petits morceaux quand la bibliotheque arrive, pour que la premiere
    reconnaissance du deck et la premiere recherche d'un invite ne
@@ -1875,12 +1959,13 @@ function triesDe(t) {
    deja vue. Quand meme un accord parfait des mots ne suffirait pas, on
    ne les compte pas — la note rendue est alors inferieure a ce
    plafond, et le resultat final est exactement le meme. */
-function combineP(P, cible, plafond, tries) {
+function combineP(P, cible, plafond, tries, sansInclusion) {
   /* ------------------------------------------------------------
      Rien ne ressemble a tout.
 
-     Un titre entierement en cyrillique, en arabe ou en emoji se met
-     a plat en chaine VIDE — normalize() ne garde que a-z et 0-9. Or
+     Un titre fait seulement d'emoji ou de symboles se met a plat en
+     chaine VIDE (avant le 5 octobre 2026, un titre cyrillique ou
+     arabe aussi). Or
      « q.includes('') » est toujours vrai : ce morceau recevait 0,86
      face a N'IMPORTE QUELLE requete, au-dessus du seuil de 0,58 et
      meme du rapprochement franc qui dispense de verifier l'artiste.
@@ -1889,12 +1974,17 @@ function combineP(P, cible, plafond, tries) {
      Une chaine vide ne ressemble a rien.
      ------------------------------------------------------------ */
   if (!P.q || !cible) return 0;
+  /* 1 est reserve au texte qui EST le morceau. Les bigrammes sont un
+     ENSEMBLE : « paradise golden echo » et « paradise golden golden
+     echo » ont exactement les memes, donc 1 aussi — et a egalite, le
+     premier de la bibliotheque gagnait, juste ou pas. */
+  if (cible === P.q) return 1;
   const d = tries && P.T ? diceTries(P.T, tries) : diceEns(P.A, bigrams(cible));
   /* inclusion franche : la requete est le titre, ou l'inverse */
-  if (cible.includes(P.q) || P.q.includes(cible)) return Math.min(1, 0.86 + 0.14 * d);
+  if (cible.includes(P.q) || (!sansInclusion && P.q.includes(cible))) return Math.min(0.999, 0.86 + 0.14 * d);
   if (plafond != null && Math.max(d, 0.42 * d + 0.58) <= plafond) return d;
   const t = partMots(P.mots, motsUtiles(cible));
-  return Math.max(d, 0.42 * d + 0.58 * t);
+  return Math.min(0.999, Math.max(d, 0.42 * d + 0.58 * t));
 }
 function combine(q, cible) {
   return combineP(preparer(q), cible);
@@ -1926,6 +2016,16 @@ function formesDe(t) {
   Object.defineProperty(t, '_n', { value: n, enumerable: false, writable: true });
   return n;
 }
+/* L'artiste seul, mis a plat — calcule a la demande : il ne sert
+   qu'a verifier ce qui entoure un titre reconnu seul, c'est-a-dire
+   pour une poignee de candidats, pas pour toute la bibliotheque. */
+function artisteDe(t) {
+  if (!t || typeof t !== 'object') return '';
+  if (t._na !== undefined) return t._na;
+  const a = normalize(t.artist || '');
+  try { Object.defineProperty(t, '_na', { value: a, enumerable: false, writable: true }); } catch (e) {}
+  return a;
+}
 
 /* ------------------------------------------------------------
    L'index de recherche.
@@ -1951,9 +2051,29 @@ function formesDe(t) {
    ------------------------------------------------------------ */
 const INDEX = new WeakMap();
 
+/* Les mots d'au moins deux lettres — et les sigles. « Y.M.C.A. » se
+   met a plat en « y m c a » : quatre lettres seules, qui n'entraient
+   pas dans l'index. Le morceau n'etait retrouve que par le balayage
+   de secours, c'est-a-dire jamais des qu'un AUTRE mot du texte
+   trouvait un candidat (« 1978 » et « Remplissage 197 »). Une suite
+   de lettres seules forme donc aussi un mot : « ymca ». */
 function motsDe(s) {
   const out = [];
-  for (const m of String(s || '').split(' ')) if (m.length >= 2) out.push(m);
+  let sigle = '';
+  for (const m of String(s || '').split(' ')) {
+    if (m.length >= 2) { out.push(m); if (sigle.length >= 2) out.push(sigle); sigle = ''; }
+    else if (m.length === 1) sigle += m;
+  }
+  if (sigle.length >= 2) out.push(sigle);
+  return out;
+}
+
+/* Les ecritures sans espaces entre les mots : han, kana, thai, lao,
+   khmer, birman. Le coreen, lui, espace ses mots. */
+const SANS_ESPACES = /[\p{Script=Han}\p{Script=Hiragana}\p{Script=Katakana}\p{Script=Thai}\p{Script=Lao}\p{Script=Khmer}\p{Script=Myanmar}]/u;
+function pairesDe(m) {
+  const out = new Set();
+  for (let i = 0; i + 1 < m.length; i++) out.add(m.slice(i, i + 2));
   return out;
 }
 
@@ -1971,6 +2091,12 @@ function indexDe(library) {
     for (const m of motsDe(f[0])) {
       ajoute(mots, m, i);
       if (m.length >= 3) ajoute(debuts, m.slice(0, 3), i);
+      /* Le japonais, le chinois et le thai n'ecrivent pas d'espaces :
+         un titre entier est un seul « mot », et l'invite qui tape un
+         bout du titre ne partageait ni le mot ni son debut. On range
+         donc chaque paire de signes de ces ecritures (cle de deux
+         caracteres : elle ne croise jamais un debut, qui en a trois). */
+      if (SANS_ESPACES.test(m)) for (const p of pairesDe(m)) ajoute(debuts, p, i);
     }
   }
   ix = { mots, debuts, n: library.length };
@@ -2002,6 +2128,12 @@ function candidats(q, library) {
       const pre = ix.debuts.get(m.slice(0, 3));
       if (pre) for (const i of pre) vus.add(i);
     }
+    if (SANS_ESPACES.test(m)) {
+      for (const p of pairesDe(m)) {
+        const l = ix.debuts.get(p);
+        if (l) for (const i of l) vus.add(i);
+      }
+    }
   }
   /* Filet : quand l'index ne propose rien — mots colles
      (« djpaxel »), faute sur les trois premieres lettres — on
@@ -2023,9 +2155,77 @@ function candidats(q, library) {
   return vus;
 }
 
+/* ------------------------------------------------------------
+   LE TITRE SEUL NE SUFFIT PAS QUAND LE TEXTE NOMME QUELQU'UN D'AUTRE.
+
+   Audit du 5 octobre 2026, present depuis toujours. La troisieme
+   forme d'un morceau est son titre seul ; un texte qui la CONTIENT
+   recevait l'inclusion franche (0,86 et plus), au-dessus du seuil
+   ET du garde-fou de l'artiste. Avec « Adele - Hello » en
+   bibliotheque, le deck qui annonce « Lionel Richie - Hello » —
+   absent — affichait Adele ; « Arcade Fire - Wake Up » devenait
+   « Kasabian - Fire », « Whitney Houston - I Will Always Love You »
+   devenait « Lana Del Rey - Love ». Une liste de client « Lionel
+   Richie Hello » se croyait servie. Love, Home, Fire, Intro, Hello :
+   les titres d'un mot sont partout, et ils attrapaient tout.
+
+   L'inclusion du titre seul n'est donc accordee que si ce qui
+   l'entoure dans le texte s'explique : rien d'autre, l'artiste du
+   morceau, ou un faux artiste (« Compilation Disco 1978 »,
+   « Various Artists »). Sinon le titre est note comme les autres
+   mots — un indice, pas une preuve.
+
+   LE MEME PIEGE, AVEC L'ARTISTE.
+
+   « Сплин - ночь песня дождь » contient mot pour mot « Сплин - ночь »,
+   autre chanson du meme groupe : l'inclusion franche la reconnaissait.
+   Des mots EN PLUS du titre font un autre titre. Ce qui n'en fait
+   pas un, c'est ce que les logiciels ajoutent autour : une
+   parenthese (« (Alive 2007) », « (Skrillex Remix) »), un crochet,
+   un featuring, un « - Radio Edit ». On calcule donc le NOYAU du
+   texte annonce, sans ces ajouts : si le noyau porte le morceau ET
+   d'autres mots, l'inclusion n'est pas franche.
+   ------------------------------------------------------------ */
+const PSEUDO_ARTISTE = /(^| )(various artists|various|va|compilation|compil|best of|greatest hits|top \d+|vol \d+|volume \d+|cd \d+|disc \d+|unknown artist|artiste inconnu|artistes divers|playlist|megamix)( |$)/;
+const SUFFIXE_VERSION = /\s[-–—]\s*(?:radio|extended|club|original|edit|mix|remix|version|remaster(?:ed)?|\d{4}\s*remaster(?:ed)?|live|clean|dirty|explicit|instrumental|acoustic|acapella|intro|outro|short)\b.*$/i;
+/** Le texte sans ce que les logiciels ajoutent autour du titre. */
+function noyau(texte) {
+  return String(texte || '')
+    .replace(/\([^)]*\)|\[[^\]]*\]|\{[^}]*\}/g, ' ')
+    .replace(/\s(?:feat\.?|ft\.?|featuring)\s[^-–—]*/gi, ' ')
+    .replace(SUFFIXE_VERSION, ' ');
+}
+const contientMot = (s, m) => (' ' + s + ' ').includes(' ' + m + ' ');
+/* Ce qui reste autour du titre ressemble-t-il a l'artiste ? Assez
+   pour le nommer, pas seulement quelques lettres en commun : la
+   moitie des mots ne suffit pas (« Kırmızı Ses » / « ses »). */
+function entourageOk(q, titre, artiste) {
+  const reste = (' ' + q + ' ').replace(' ' + titre + ' ', ' ').replace(/\s+/g, ' ').trim();
+  if (!reste || !artiste) return true;
+  if (PSEUDO_ARTISTE.test(reste)) return true;
+  return dice(reste, artiste) >= 0.6 || partDesMots(reste, artiste) >= 0.75;
+}
 function noteDe(P, t, plafond) {
   const f = formesDe(t), b = triesDe(t);
-  return Math.max(combineP(P, f[0], plafond, b[0]), combineP(P, f[1], plafond, b[1]), combineP(P, f[2], plafond, b[2]));
+  const N = P.noyau || P.q;
+  /* artiste + titre, dans un ordre ou dans l'autre : franche, sauf si
+     le noyau du texte porte d'autres mots */
+  const enPlus = x => x && N.length > x.length && contientMot(N, x);
+  const s = Math.max(combineP(P, f[0], plafond, b[0], enPlus(f[0])),
+                     combineP(P, f[1], plafond, b[1], enPlus(f[1])));
+  /* le titre seul : il doit etre un mot du texte (« voyage » n'est pas
+     annonce par « les voyageurs »), et ce qui l'entoure doit
+     s'expliquer. Quand l'artiste contient lui-meme le titre
+     (« Kırmızı Ses - Kırmızı »), le titre doit figurer une deuxieme
+     fois : la premiere, c'est l'artiste. */
+  let sansInclusion = false;
+  if (f[2] && P.q.length > f[2].length && P.q.includes(f[2])) {
+    const art = artisteDe(t);
+    const fois = (' ' + N + ' ').split(' ' + f[2] + ' ').length - 1;
+    const besoin = art && contientMot(art, f[2]) ? 2 : 1;
+    sansInclusion = fois < besoin || !entourageOk(N, f[2], art);
+  }
+  return Math.max(s, combineP(P, f[2], plafond, b[2], sansInclusion));
 }
 
 /**
@@ -2065,7 +2265,53 @@ function accordArtiste(text, cible, note) {
   const annonce = normalize(text.slice(0, i));
   const sien = normalize(cible && cible.artist);
   if (!annonce || !sien) return true;            /* rien a comparer */
-  return Math.max(dice(annonce, sien), partDesMots(annonce, sien)) >= ACCORD_MINI;
+  /* Les lettres en commun comptent a partir de 0,3 : a 0,2, deux noms
+     sans rapport (« Arcade Fire » / « Artiste de Animals », 0,23) se
+     ressemblaient deja. « P!nk » / « Pink » (0,33) passe toujours. */
+  return dice(annonce, sien) >= 0.3 || partDesMots(annonce, sien) >= ACCORD_MINI;
+}
+
+/* ------------------------------------------------------------
+   Et l'autre moitie : le TITRE annonce doit ressembler a quelque
+   chose.
+
+   Audit du 5 octobre 2026. « Khaled - وهران », absent de la
+   bibliotheque, se rapprochait de « Khaled - ديدي » a 0,60 : tout
+   le score venait de l'artiste, le titre ne partageait pas une
+   lettre. Le meme defaut vit en latin, a quelques centiemes du
+   seuil : un nom d'artiste long et un titre court suffisent. Un
+   artiste qui colle ne dit pas QUEL morceau tourne.
+
+   Sauf rapprochement exact, on demande donc qu'une des deux moities
+   du texte — le titre peut etre a gauche ou a droite selon le
+   logiciel — DESIGNE le titre du candidat, une fois retire de part
+   et d'autre ce que les logiciels ajoutent (parentheses, crochets,
+   featuring, « - Radio Edit ») :
+     — soit la meme chose autrement ecrite (lettres a 0,8 et plus) ;
+     — soit les memes mots, aux trois quarts au moins DANS LES DEUX
+       SENS.
+   Partager UN mot ne suffit pas : « Daft Punk - One More Night »
+   n'est pas « One More Time », et un titre qui en contient un autre
+   plus des mots a lui (« Paradise Stranger » / « Paradise ») est un
+   autre titre.
+   ------------------------------------------------------------ */
+function accordTitre(text, cible, note) {
+  if (note >= 1) return true;                    /* le texte EST le morceau */
+  const s = String(text);
+  const i = s.indexOf(' - ');
+  if (i <= 0) return true;                       /* rien d'annonce a part */
+  const brut = cible && cible.title;
+  const titre = normalize(noyau(brut)) || normalize(brut);
+  if (!titre) return true;
+  const motsT = motsUtiles(titre);
+  const designe = x => {
+    if (!x) return false;
+    if (dice(x, titre) >= 0.8) return true;
+    const mx = motsUtiles(x);
+    return Math.min(partMots(mx, motsT), partMots(motsT, mx)) >= 0.75;
+  };
+  const cote = p => normalize(noyau(p)) || normalize(p);
+  return designe(cote(s.slice(0, i))) || designe(cote(s.slice(i + 3)));
 }
 
 function match(text, library, threshold) {
@@ -2073,14 +2319,23 @@ function match(text, library, threshold) {
   const q = normalize(text);
   if (q.length < 3 || !Array.isArray(library)) return null;
   let best = null, bestScore = 0;
-  const P = preparer(q);
-  for (const i of candidats(q, library)) {
+  const P = preparer(q, text);
+  /* Le noyau du texte, note aussi : « 아이유 feat. Quelqu'un - 밤 »
+     n'avait plus de mot assez long pour etre retrouve — le titre d'un
+     signe se perdait derriere le featuring. Sans ses ajouts, le texte
+     EST le morceau. */
+  const Pn = P.noyau !== q && P.noyau.length >= 2 ? preparer(P.noyau) : null;
+  const vus = candidats(q, library);
+  if (Pn) for (const i of candidats(Pn.q, library)) vus.add(i);
+  for (const i of vus) {
     if (!library[i]) continue;
-    const sc = noteDe(P, library[i], bestScore);
+    let sc = noteDe(P, library[i], bestScore);
+    if (Pn) sc = Math.max(sc, noteDe(Pn, library[i], bestScore));
     if (sc > bestScore) { bestScore = sc; best = library[i]; }
   }
   if (bestScore < threshold) return null;
   if (!accordArtiste(text, best, bestScore)) return null;
+  if (!accordTitre(text, best, bestScore)) return null;
   return { track: best, score: bestScore };
 }
 
@@ -2091,7 +2346,7 @@ function search(text, library, limit, threshold) {
   const seuil = threshold == null ? 0.34 : threshold;
   const k = borneLimite(limit, 8);
   const out = [];
-  const P = preparer(q);
+  const P = preparer(q, text);
   /* Les k meilleures notes vues jusqu'ici, de la plus haute a la plus
      basse. Un candidat qui ne peut pas depasser la k-ieme n'entrera
      pas dans la liste rendue : a egalite, le tri stable le place

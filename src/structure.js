@@ -23,9 +23,24 @@ const HOP = 256;       // 43 trames par seconde
 const WIN = 512;
 
 /* ---------- decodage integral ---------- */
+/* ------------------------------------------------------------
+   Vingt minutes, jamais plus.
+
+   main.js evite le decodage des fichiers de plus de vingt minutes
+   — mais seulement quand il CONNAIT la duree. Une sonde ratee rend
+   0, et un mix enregistre de deux heures etait alors decode en
+   entier : 1,4 Go de memoire mesures pour un seul fil (audit du 5
+   octobre 2026), avec trois fils en parallele. Au-dela de trois
+   heures, Math.max.apply depassait meme la limite d'arguments.
+
+   La borne vit donc ici, au seul endroit qui decode : 20 min a
+   11 025 Hz, c'est 53 Mo au plus, quoi que dise la duree.
+   ------------------------------------------------------------ */
+const DECODE_MAX_S = 1200;
 function decodeAll(file) {
   return new Promise((resolve, reject) => {
-    const args = ['-v', 'error', '-i', file, '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'];
+    const args = ['-v', 'error', '-i', file, '-t', String(DECODE_MAX_S),
+                  '-ac', '1', '-ar', String(SR), '-f', 'f32le', '-'];
     const p = spawn(ffmpegPath(), args, { windowsHide: true });
     basse(p);
     const chunks = [];
@@ -286,7 +301,11 @@ async function structure(file, bpm) {
   /* courbe d'energie, 48 points */
   const curve = [];
   const rmsSm = smooth(env.rms, Math.round(env.rate * 2));
-  const peak = Math.max.apply(null, Array.from(rmsSm)) || 1;
+  /* Une boucle, pas Math.max.apply : au-dela de quelques centaines
+     de milliers de trames, l'appel depasse la limite d'arguments. */
+  let peak = 0;
+  for (let i = 0; i < rmsSm.length; i++) if (rmsSm[i] > peak) peak = rmsSm[i];
+  peak = peak || 1;
   for (let i = 0; i < 48; i++) {
     const f = Math.floor((i / 48) * env.frames);
     curve.push(Math.round((rmsSm[f] / peak) * 100) / 100);
@@ -388,13 +407,14 @@ class StructureCache {
     }
     if (this._minuteur) { clearTimeout(this._minuteur); this._minuteur = null; }
     try {
-      fs.mkdirSync(path.dirname(this.file), { recursive: true });
       const obj = {};
       /* on ne garde que les 4000 dernieres entrees */
       const keys = Array.from(this.map.keys()).slice(-4000);
       for (const k of keys) obj[k] = this.map.get(k);
-      fs.writeFileSync(this.file, JSON.stringify(obj));
-      this.dirty = false;
+      /* Ecriture atomique (ecrire.js), sans copie : c'est un cache.
+         L'ecriture directe interrompue laissait un JSON tronque, et
+         tous les points de mix etaient a recalculer. */
+      if (require('./ecrire').ecrireSur(this.file, JSON.stringify(obj), { copie: false })) this.dirty = false;
     } catch (e) {}
   }
 }

@@ -111,14 +111,26 @@ function resoudre(p, base, opt) {
  * fabrique donc les racines plausibles, et resoudre() tranche sur
  * l'existence du fichier.
  */
-function racinesTraktor(volume, plateforme) {
+function racinesTraktor(volume, plateforme, estRacine) {
   const v = String(volume || '').trim();
   if (!v) return [];
   const win = (plateforme || process.platform) === 'win32';
   if (win) return [/^[A-Za-z]:$/.test(v) ? v + '\\' : v];
   /* macOS : « Macintosh HD » est le disque de demarrage, les autres
-     sont montes sous /Volumes. On propose les deux, dans cet ordre. */
-  return ['/Volumes/' + v, ''];
+     sont montes sous /Volumes. On propose les deux, dans cet ordre.
+
+     Sauf quand /Volumes/<nom> EST le disque de demarrage : c'est un
+     lien vers « / », il existe toujours, et resoudre() le prenait —
+     tous les chemins sortaient en « /Volumes/Macintosh HD/Users/… »,
+     un doublon de chaque morceau lu ailleurs, et le deck annonce par
+     rekordbox (« /Users/… ») ne retrouvait plus l'entree Traktor
+     (audit du 5 octobre 2026). externalVolumes() fait deja ce test. */
+  const ext = '/Volumes/' + v;
+  if ((typeof estRacine === 'function' ? estRacine : estLaRacine)(ext)) return [''];
+  return [ext, ''];
+}
+function estLaRacine(p) {
+  try { return fs.realpathSync(p) === '/'; } catch (e) { return false; }
 }
 
 /* ============================================================

@@ -37,14 +37,18 @@ const genres = require('./genres');
 /* Ce qu'une famille fait a une piste, quand on ne sait rien d'autre.
    Volontairement moyen pour la variete et la pop : ces deux-la
    contiennent tout et leur contraire. C'est au signal de trancher. */
-const FAMILLE = {
+/* Une table SANS prototype : un tag de genre « Constructor » lisait
+   Object.prototype.constructor ici, et le plancher valait NaN pour
+   ce morceau — et pour toute la liste quand c'etait le morceau en
+   cours (audit du 5 octobre 2026). */
+const FAMILLE = Object.assign(Object.create(null), {
   'hymne': 92, 'edm': 90, 'disco': 88, 'tech house': 86, 'house': 84,
   'funk': 82, 'afro': 82, 'techno': 82, 'dancehall': 80, 'reggaeton': 80,
   'garage': 80, 'drum and bass': 78, 'trance': 78, 'french touch': 78,
   'motown': 76, 'latin': 74, 'schlager': 72, 'rock': 62, 'zouk': 60,
   'hip hop': 60, 'rap fr': 58, 'drill': 56, 'pop': 58, 'variete': 55,
   'rnb': 46, 'country': 44, 'jazz': 30, 'ambient': 12
-};
+});
 
 /** Ce que le tempo seul dit du plancher, de 0 a 100. */
 function parTempo(bpm) {

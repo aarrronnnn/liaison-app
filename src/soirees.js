@@ -24,9 +24,8 @@
    bibliotheque ni au moteur. Il ne fait que ranger des reglages
    et les rendre interchangeables.
    ============================================================ */
-const fs = require('fs');
-const path = require('path');
 const crypto = require('crypto');
+const ecrire = require('./ecrire');
 /* « Artiste - Titre » coupe comme le fait la liste du client : une
    fiche activee doit donner EXACTEMENT les memes entrees qu'un
    collage dans « Le client », sinon le meme titre compte double. */
@@ -80,20 +79,28 @@ class Soirees {
     this.fichier = fichier;
     this.d = this._charger();
   }
+  /* ------------------------------------------------------------
+     Par ecrire.js, comme tout fichier de donnees.
+
+     Ce fichier avait sa propre ecriture : pas de vidage disque, pas
+     de copie de secours, et une lecture qui repartait d'une liste
+     vide au moindre octet abime. La fiche suivante effacait alors
+     TOUTES les soirees preparees — listes du client comprises —
+     alors qu'une copie aurait pu les rendre (audit du 5 octobre
+     2026). Une fiche nulle dans le fichier est ecartee, elle aussi :
+     elle faisait jeter liste() et active().
+     ------------------------------------------------------------ */
   _charger() {
-    try {
-      const j = JSON.parse(fs.readFileSync(this.fichier, 'utf8'));
-      if (j && Array.isArray(j.liste)) return { v: 1, liste: j.liste, active: j.active || null };
-    } catch (e) {}
+    const j = this.fichier ? ecrire.lireJSON(this.fichier, null) : null;
+    if (j && Array.isArray(j.liste)) {
+      const liste = j.liste.filter(s => s && typeof s === 'object' && !Array.isArray(s));
+      return { v: 1, liste: liste, active: j.active || null };
+    }
     return { v: 1, liste: [], active: null };
   }
   _ranger() {
-    try {
-      fs.mkdirSync(path.dirname(this.fichier), { recursive: true });
-      const tmp = this.fichier + '.tmp';
-      fs.writeFileSync(tmp, JSON.stringify(this.d, null, 1));
-      fs.renameSync(tmp, this.fichier);
-    } catch (e) {}
+    if (!this.fichier) return;
+    ecrire.ecrireJSON(this.fichier, this.d);
   }
 
   liste() {

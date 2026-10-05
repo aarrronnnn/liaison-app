@@ -242,6 +242,7 @@ const unesc = s => require('./library').xmlDecode(s);
 function parseTraktor(file, opt) {
   const xml = fs.readFileSync(file, 'utf8');
   const out = [];
+  const racines = new Map();
   const re = /<ENTRY\b([\s\S]*?)<\/ENTRY>/g;
   let m;
   while ((m = re.exec(xml))) {
@@ -277,7 +278,9 @@ function parseTraktor(file, opt) {
     const bpm = parseFloat(attr(e, 'BPM')) || 0;
     out.push({
       path: (function () {
-        const r = vol.racinesTraktor(volume, opt && opt.plateforme);
+        /* une fois par volume, pas par morceau : la reponse ne change pas */
+        let r = racines.get(volume);
+        if (!r) { r = vol.racinesTraktor(volume, opt && opt.plateforme, opt && opt.estRacine); racines.set(volume, r); }
         return vol.resoudre((dir || '/') + f, r[0],
           { autres: r.slice(1), existe: opt && opt.existe, plateforme: opt && opt.plateforme });
       })(),

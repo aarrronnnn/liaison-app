@@ -65,6 +65,9 @@ function temposEnDesaccord(a, b) {
    289 s se voient. Il faut donc grouper par nom, puis comparer
    les durees deux a deux avec un vrai ecart. */
 function cleDoublon(t) {
+  /* Un titre sans aucune lettre (« ??? ») ne dit pas quelle chanson
+     c'est : deux de ses fichiers ne sont pas « la meme ». */
+  if (!normalize(t.title || '')) return null;
   const n = normalize((t.artist || '') + ' ' + (t.title || ''));
   return n.length < 4 ? null : n;
 }

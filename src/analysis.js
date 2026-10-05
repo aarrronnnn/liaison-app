@@ -45,6 +45,8 @@ const lib = require('./library');
    d'ecriture par nuit. Il est vide aussi a la fermeture (stop). */
 const SAUVE_MS = 30000;        /* on n'ecrit jamais plus souvent que ca */
 const RELANCE_MS = 60000;      /* delai avant de reessayer un fichier absent */
+const BUDGET_PASSE_MS = 8;     /* temps de fil principal qu'une passe peut perdre en absents */
+const PAUSE_PASSE_MS = 300;    /* et la reprise de la passe interrompue */
 
 /* ------------------------------------------------------------
    Le cache sur disque.
@@ -417,17 +419,61 @@ class AnalysisService {
     this._pousser();
   }
 
-  /** Choisit le prochain morceau : priorite d'abord, ordre ensuite. */
+  /* ------------------------------------------------------------
+     Choisit le prochain morceau : priorite d'abord, ordre ensuite —
+     et, a priorite egale, ce qui n'a jamais rate passe devant ce
+     qui a deja ete introuvable une fois.
+
+     Audit du 5 octobre 2026. Les fichiers morts gardaient leur
+     place en tete de la Map : a l'expiration de leur minute, ils
+     repassaient avant les vivants, faisaient echouer la passe, et
+     la file s'arretait la. Un absent qu'on reessaie ne doit jamais
+     faire attendre un morceau qu'on peut lire.
+     ------------------------------------------------------------ */
   _suivant() {
     const maintenant = Date.now();
-    let best = null, bestP = -1;
+    let best = null, bestP = -1, revu = null, revuP = -1;
     for (const [id, e] of this.file) {
       if (this.encours.has(id)) continue;
       const retry = this.absents.get(id);
-      if (retry != null && retry > maintenant) continue;     /* disque encore absent */
+      if (retry != null) {
+        if (retry > maintenant) continue;                    /* disque encore absent */
+        if (e.priorite > revuP) { revuP = e.priorite; revu = id; }
+        continue;
+      }
       if (e.priorite > bestP) { bestP = e.priorite; best = id; if (bestP >= 2) break; }
     }
-    return best;
+    return best != null && bestP >= revuP ? best : revu;
+  }
+
+  /* Le prochain reessai d'un absent encore en file, ou null. */
+  _prochainReessai() {
+    let min = null;
+    for (const [id, quand] of this.absents) {
+      if (!this.file.has(id) || this.encours.has(id)) continue;
+      if (min == null || quand < min) min = quand;
+    }
+    return min;
+  }
+
+  /* ------------------------------------------------------------
+     Relancer la file plus tard, une seule fois.
+
+     Toute sortie anticipee de _pousser() qui laisse du travail en
+     file DOIT dire quand elle reprend. Sinon la reprise depend d'un
+     evenement — un resultat, un changement de morceau — qui peut ne
+     jamais venir : c'est exactement ce qui gelait l'analyse.
+     Le minuteur est relache (unref) : il ne retient pas l'app.
+     ------------------------------------------------------------ */
+  _relancer(dansMs) {
+    if (this.arrete) return;
+    const delai = Math.max(0, dansMs);
+    const quand = Date.now() + delai;
+    if (this._relance && this._relanceA <= quand) return;
+    if (this._relance) clearTimeout(this._relance);
+    this._relanceA = quand;
+    this._relance = setTimeout(() => { this._relance = null; this._relanceA = 0; this._pousser(); }, delai);
+    if (this._relance.unref) this._relance.unref();
   }
 
   _pousser() {
@@ -447,24 +493,37 @@ class AnalysisService {
        changement de morceau — donc la traversee complete recommence,
        toute la nuit.
 
-       On borne donc le nombre d'echecs consecutifs par passe : au
-       troisieme fichier introuvable, on arrete et on reessaiera plus
-       tard. Le disque revenu, tout repart tout seul.
+       On borne donc le travail d'une passe : passe trois fichiers
+       introuvables ET quelques millisecondes, on rend la main — et,
+       c'est ce qui manquait (audit du 5 octobre 2026), on REPLANIFIE
+       la suite. Sans ce rappel, la passe interrompue n'etait reprise
+       que par un evenement qui pouvait ne jamais venir : la file
+       restait figee pour le reste de la soiree. Le disque revenu,
+       tout repart tout seul.
        ------------------------------------------------------------ */
     let echecs = 0;
+    const debut = Date.now();
+    const assez = () => ++echecs >= 3 && Date.now() - debut >= BUDGET_PASSE_MS;
     while (this.libres.length && this.encours.size < this.cadence()) {
       const id = this._suivant();
-      if (id == null) return;
+      if (id == null) {
+        /* Plus rien de lisible maintenant : on revient a l'expiration
+           du premier absent, pas avant. */
+        const r = this._prochainReessai();
+        if (r != null) this._relancer(r - Date.now() + 50);
+        return;
+      }
       const t = this.tracks.get(id);
       const e = this.file.get(id);
-      if (!t || !e) { this.file.delete(id); if (++echecs >= 3) return; continue; }
+      if (!t || !e) { this.file.delete(id); if (assez()) { this._relancer(PAUSE_PASSE_MS); return; } continue; }
 
       /* le disque est-il revenu ? */
       const st = AnalysisCache.stamp(t.path);
       if (st === null) {
         t.offline = true;
         this.absents.set(id, Date.now() + RELANCE_MS);
-        if (++echecs >= 3) return;    /* le volume est parti : on n'insiste pas */
+        /* le volume est parti : on n'insiste pas, on revient bientot */
+        if (assez()) { this._relancer(PAUSE_PASSE_MS); return; }
         continue;
       }
       echecs = 0;
@@ -834,6 +893,7 @@ class AnalysisService {
   stop() {
     this.arrete = true;
     if (this.rapportTimer) { clearTimeout(this.rapportTimer); this.rapportTimer = null; }
+    if (this._relance) { clearTimeout(this._relance); this._relance = null; }
     this.cache.save();
     for (const w of this.workers) { try { w.terminate(); } catch (e) {} }
     this.workers = []; this.libres = [];

@@ -54,20 +54,125 @@ function newest(dir) {
   return best;
 }
 
+/* ============================================================
+   LES TEXTES DE L'HISTORIQUE.
+
+   Une session Serato est faite de blocs « oent » qui contiennent un
+   bloc « adat » ; dans celui-ci, chaque champ s'ecrit identifiant
+   (4 octets) + longueur (4 octets) + valeur, les textes en UTF-16
+   gros-boutiste, les dates et les numeros en entiers de 4 octets,
+   certains drapeaux sur UN octet.
+
+   La lecture d'origine balayait le tampon deux octets par deux
+   octets et gardait les suites de caracteres LATINS. Audit du
+   5 octobre 2026, trois defauts :
+
+     — un titre cyrillique, arabe, grec, coreen ou japonais etait
+       coupe a la premiere lettre : il n'arrivait jamais au moteur ;
+     — l'octet bas de la LONGUEUR du champ, quand il tombe sur une
+       lettre (titre de 33 a 61 caracteres), se collait devant le
+       premier mot : « hMr. Brightside… » ;
+     — un drapeau d'un octet decale tout ce qui suit d'un octet, et
+       un balayage par paires lit alors des caracteres faux.
+
+   On lit donc la STRUCTURE quand elle est la : on cherche les blocs
+   « oent » octet par octet (le decalage ne gene plus), on suit les
+   longueurs, et on garde les champs qui se lisent comme du texte.
+   Le sens des identifiants n'est pas utilise : l'ordre et le choix
+   des textes restent ceux d'avant, seulement entiers et justes.
+   Si la structure n'est pas reconnue (format futur), l'ancien
+   balayage reprend, elargi aux autres ecritures.
+   ============================================================ */
+function lettre(c) {
+  return c === 32 || (c >= 0x21 && c <= 0x24f) || (c >= 0x2018 && c <= 0x201d) ||
+         (c >= 0x370 && c <= 0x52f) ||                   /* grec, cyrillique */
+         (c >= 0x590 && c <= 0x5ff) ||                   /* hebreu */
+         (c >= 0x600 && c <= 0x6ff) || (c >= 0x750 && c <= 0x77f) ||   /* arabe */
+         (c >= 0xe00 && c <= 0xe7f) ||                   /* thai */
+         (c >= 0x1e00 && c <= 0x1eff) ||                 /* latin etendu (vietnamien) */
+         (c >= 0x3040 && c <= 0x30ff) ||                 /* kana */
+         (c >= 0x4e00 && c <= 0x9fff) ||                 /* han */
+         (c >= 0xac00 && c <= 0xd7a3);                   /* hangul */
+}
+
+/* Un champ qui se lit comme du texte UTF-16BE, ou null. */
+function texteDe(buf, debut, fin) {
+  if ((fin - debut) % 2 || fin <= debut) return null;
+  let s = '';
+  for (let i = debut; i + 1 < fin; i += 2) {
+    const c = (buf[i] << 8) | buf[i + 1];
+    if (c === 0) { if (i + 2 >= fin) break; return null; }   /* zero final toléré */
+    if (c >= 0xd800 && c <= 0xdbff) {                        /* emoji : une paire complete */
+      const d = i + 3 < fin ? (buf[i + 2] << 8) | buf[i + 3] : 0;
+      if (d < 0xdc00 || d > 0xdfff) return null;
+      s += String.fromCharCode(c, d); i += 2; continue;
+    }
+    if (c < 0x20 || (c >= 0x7f && c < 0xa0) || (c >= 0xdc00 && c <= 0xdfff) || c === 0xfffe || c === 0xffff) return null;
+    s += String.fromCharCode(c);
+  }
+  return s;
+}
+
+/* Les champs texte des blocs « oent » > « adat ». coherent : au moins
+   un bloc lu de bout en bout, champ apres champ — la preuve que la
+   structure est bien celle qu'on croit. */
+function champs(buf, min) {
+  const out = [];
+  let coherent = false;
+  let i = buf.indexOf('oent', 0, 'latin1');
+  while (i >= 0 && i + 16 <= buf.length) {
+    const len = buf.readUInt32BE(i + 4);
+    const finE = Math.min(buf.length, i + 8 + len);
+    const j = i + 8;
+    if (buf.toString('latin1', j, j + 4) === 'adat') {
+      const finA = Math.min(finE, j + 8 + buf.readUInt32BE(j + 4));
+      let k = j + 8;
+      const lus = [];
+      while (k + 8 <= finA) {
+        const l = buf.readUInt32BE(k + 4);
+        if (l > finA - (k + 8)) break;                       /* champ tronque : bloc en cours d'ecriture */
+        const t = texteDe(buf, k + 8, k + 8 + l);
+        if (t != null && t.trim().length >= min) lus.push(t.trim());
+        k += 8 + l;
+      }
+      if (k === finA && finA === j + 8 + buf.readUInt32BE(j + 4)) coherent = true;
+      out.push(...lus);
+    }
+    i = buf.indexOf('oent', Math.max(i + 4, finE), 'latin1');
+  }
+  return { textes: out, coherent: coherent };
+}
+
+/* L'ancien balayage, par paires d'octets — le repli. */
+function balayage(buf, min) {
+  const out = [];
+  let cur = '';
+  const pousser = () => {
+    let s = cur;
+    /* l'octet bas d'une longueur colle devant le texte : il vaut
+       exactement la longueur, en octets, de ce qui suit */
+    if (s.length > 1) {
+      const c = s.charCodeAt(0), reste = s.length - 1;
+      if (c === reste * 2 || c === (reste + 1) * 2) s = s.slice(1);
+    }
+    if (s.trim().length >= min) out.push(s.trim());
+    cur = '';
+  };
+  for (let i = 0; i + 1 < buf.length; i += 2) {
+    const code = (buf[i] << 8) | buf[i + 1];
+    if (lettre(code)) cur += String.fromCharCode(code);
+    else pousser();
+  }
+  pousser();
+  return out;
+}
+
 /* Extrait les chaines UTF-16BE lisibles d'un buffer binaire. */
 function strings(buf, min) {
   min = min || 4;
-  const out = [];
-  let cur = '';
-  for (let i = 0; i + 1 < buf.length; i += 2) {
-    const hi = buf[i], lo = buf[i + 1];
-    const code = (hi << 8) | lo;
-    const ok = code === 32 || (code >= 0x21 && code <= 0x24f) || (code >= 0x2018 && code <= 0x201d);
-    if (ok) cur += String.fromCharCode(code);
-    else { if (cur.trim().length >= min) out.push(cur.trim()); cur = ''; }
-  }
-  if (cur.trim().length >= min) out.push(cur.trim());
-  return out;
+  const c = champs(buf, min);
+  if (c.coherent && c.textes.length) return c.textes;
+  return balayage(buf, min);
 }
 
 function start(opts, cb) {

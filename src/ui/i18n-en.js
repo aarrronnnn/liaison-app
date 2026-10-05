@@ -2037,6 +2037,16 @@
  "Aperçu de la carte de soirée": "Night card preview",
  "Enregistrer la carte de soirée": "Save the night card",
  "Ta carte de soirée est prête": "Your night card is ready",
+ "Tempo à vérifier": "Check the tempo",
+ "Tonalités compatibles, mais un des deux tempos n'est pas encore mesuré : cale au casque avant de lancer.": "Compatible keys, but one of the two tempos hasn't been measured yet: beatmatch in your headphones before you go.",
+ "Tempo inconnu": "Unknown tempo",
+ "Un des deux tempos n'est pas encore mesuré : écoute au casque, ou coupe net sur une fin de phrase.": "One of the two tempos hasn't been measured yet: check in your headphones, or cut cleanly at the end of a phrase.",
+ "Liaison n'arrive pas à enregistrer sur ce disque": "Liaison can't save to this disk",
+ "Le journal de la soirée, tes listes et ce que Liaison apprend ne sont pas gardés.": "Tonight's log, your lists and what Liaison learns aren't being saved.",
+ "Vérifie qu'il reste de la place sur le disque": "Check there's still free space on the disk",
+ "Si ton dossier utilisateur est dans OneDrive, mets OneDrive en pause pendant la soirée": "If your user folder is in OneDrive, pause OneDrive for the night",
+ "Relance Liaison après avoir libéré de la place": "Restart Liaison once you've freed up some space",
+ "Les suggestions continuent : seul ce qui doit être enregistré est perdu.": "Suggestions keep working: only what needs saving is lost.",
  "Format": "Format"
 };
   if (typeof module !== 'undefined' && module.exports) module.exports = EN; else r.LIAISON_EN = EN;

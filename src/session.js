@@ -173,9 +173,19 @@ class GuestServer {
       res.end(page);
     });
 
+    /* Un demarrage rate (port pris) ne laisse pas un serveur fantome :
+       enMarche() le disait vivant, et au reveil de veille le DJ
+       recevait « verifie le lien des invites » pour un lien mort. */
+    const srv = this.server;
     return new Promise((resolve, reject) => {
-      this.server.on('error', reject);
-      this.server.listen(port, '0.0.0.0', () => { this.port = port; resolve(this.url()); });
+      let ecoute = false;
+      srv.on('error', e => {
+        if (ecoute) return;                 /* apres demarrage : on ne tombe pas pour autant */
+        if (this.server === srv) this.server = null;
+        try { srv.close(); } catch (e2) {}
+        reject(e);
+      });
+      srv.listen(port, '0.0.0.0', () => { ecoute = true; this.port = port; resolve(this.url()); });
     });
   }
 
@@ -326,7 +336,28 @@ const PAUSE_MAX_MS = 4 * 3600 * 1000;
 
 class SetLog {
   constructor(file) { this.file = file; this.sets = this._load(); }
-  _load() { return ecrire.lireJSON(this.file, []); }
+  /* ------------------------------------------------------------
+     Le journal relu est remis d'aplomb UNE fois, ici.
+
+     Audit du 5 octobre 2026 : un sets.json lisible mais de travers
+     — « null », un objet, une entree nulle, un set sans « played » —
+     faisait jeter play() et lastPlay() a CHAQUE changement de
+     morceau. Le widget restait sur l'ancien titre toute la nuit,
+     sans une suggestion. list() se protegeait deja ; les autres
+     methodes, non. Plutot que de garder chaque lecture, on garantit
+     la forme a l'entree : un tableau de sets, chacun avec un
+     tableau « played » de morceaux.
+     ------------------------------------------------------------ */
+  _load() {
+    const brut = ecrire.lireJSON(this.file, []);
+    return (Array.isArray(brut) ? brut : [])
+      .filter(s => s && typeof s === 'object' && !Array.isArray(s))
+      .map(s => {
+        s.played = (Array.isArray(s.played) ? s.played : [])
+          .filter(p => p && typeof p === 'object' && !Array.isArray(p));
+        return s;
+      });
+  }
   /* Ecriture atomique : ce fichier est reecrit a chaque morceau joue.
      Une coupure au mauvais moment effacait toute la nuit. */
   /* ------------------------------------------------------------

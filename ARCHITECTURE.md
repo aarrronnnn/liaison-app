@@ -775,6 +775,15 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 | `test-rekordbox` | contient aussi le temoin des accents echappes par `lsof` (§6bis) |
 | `test-widget` | le rendu reel du widget (Playwright) |
 | `test-licence-ui` | le parcours d'achat et d'activation (Playwright) |
+| `test-cas-limites` | audit du 5/10/2026 : le repli compte des chansons chargeables, tempo inconnu jamais « cale », genre « Constructor », titre de 20 000 caracteres, tonalites enharmoniques, la copie vivante rangee en alias, Traktor sur « Macintosh HD », et **un titre d'un mot n'attrape plus tout** (« Lionel Richie - Hello » n'est pas Adele) |
+| `test-alphabets` | toutes les ecritures : reconnaitre, chercher et dedoublonner en arabe, cyrillique, grec, coreen, japonais ; ø ß ł ı replies ; l'historique Serato lu par sa structure |
+| `test-donnees-abimees` | sets.json de travers ne gele plus la soiree ; soirees.json et gout.json par ecrire.js ; la copie de secours n'est jamais remplacee par un fichier abime ; une ecriture ratee est dite au DJ ; le serveur des invites qui n'a pas demarre ne se dit pas en marche |
+| `test-file-analyse` | la file d'analyse va au bout malgre des fichiers effaces ou un SSD debranche ; decodeAll borne a 20 minutes |
+
+Banc de mesure, hors `verifier` : `node build/banc-reconnaissance.js` —
+le jeu d'evaluation de la reconnaissance du deck (juste / rien / faux,
+par ecriture et par cas) et de la recherche des invites. La regle :
+**zero reconnaissance fausse**.
 
 **La discipline du temoin** : chaque suite contient au moins un cas qui
 reproduit un defaut rapporte par un vrai DJ, avec le symptome exact.
@@ -887,6 +896,29 @@ prix tout en facturant le nouveau.
 11. **L'axe energie est le plus faible** (42-59 % d'accord). Il ne peut
    pas etre ameliore honnetement sans de vrais `sets.json` de soirees
    jouees. Ne pas le « regler » a l'aveugle en bougeant des constantes.
+12. **L'identite d'un texte garde toutes les ecritures** (depuis la
+   1.5.6). `engine.normalize`, `library.aPlat`/`normaliserNom`/
+   `cleMorceau` et `health.cleDoublon` gardent `\p{L}\p{N}\p{M}` : ne
+   jamais revenir a `[^a-z0-9]`, qui effacait l'arabe, le cyrillique,
+   le grec, le coreen, le japonais — et faisait reconnaitre A TORT le
+   premier titre du meme artiste. Les quatre changent ensemble. Les
+   bigrammes tries sont des `Uint32Array` : en entier signe, tout
+   caractere au-dela de U+8000 (han, hangul) passait en negatif et
+   faussait le tri.
+13. **Le titre seul ne vaut pas une inclusion franche** quand le texte
+   nomme quelqu'un d'autre (`noteDe`, `entourageOk`). Sans cette
+   regle, « Lionel Richie - Hello » devenait « Adele - Hello », « Arcade
+   Fire - Wake Up » devenait « Kasabian - Fire ». Les titres d'un mot
+   sont partout. `node build/banc-reconnaissance.js` doit rester a
+   zero faux.
+14. **Toute sortie anticipee de `_pousser()` replanifie la suite**
+   (`_relancer`). Une file qui attend un evenement peut attendre toute
+   la nuit : c'est ce qui figeait l'analyse derriere trois fichiers
+   effaces.
+15. **Tout fichier de donnees passe par `ecrire.js`**, lecture comprise
+   (`lireJSON` rend la copie de secours). La copie `.bak` n'est faite
+   que d'un fichier qui se relit. Une ecriture ratee rend `false` —
+   ne pas l'ignorer : `ecrire.surEchec` la remonte au DJ.
 
 ---
 

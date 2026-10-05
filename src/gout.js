@@ -60,7 +60,6 @@
    Une machine qui apprend en cachette est une machine a laquelle
    on ne fait pas confiance.
    ============================================================ */
-const fs = require('fs');
 const ecrire = require('./ecrire');
 const engine = require('./engine');
 
@@ -134,7 +133,12 @@ class Gout {
   charger() {
     if (!this.fichier) return;
     try {
-      const j = JSON.parse(fs.readFileSync(this.fichier, 'utf8'));
+      /* Par ecrire.lireJSON : un gout.json tronque se relit depuis sa
+         copie de secours. La lecture directe ne la regardait jamais,
+         et l'ecriture suivante ecrasait la copie saine par le fichier
+         abime — tout l'apprentissage perdu en deux temps (audit du
+         5 octobre 2026). */
+      const j = ecrire.lireJSON(this.fichier, null);
       if (j && j.v === 1 && j.ema) {
         /* Un gout.json ecrit par une version qui avait le defaut
            ci-dessus contient « "fr": null ». Object.assign l'aurait

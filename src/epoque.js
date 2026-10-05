@@ -35,7 +35,9 @@ const genres = require('./genres');
    Ces valeurs ne sortent pas d'un calcul : elles sortent de ce
    qu'on entend en soiree. Elles sont faites pour etre discutees
    avec un DJ, pas pour etre exactes. */
-const PERISSABILITE = {
+/* Sans prototype : un genre « Constructor » ne lit pas Object ici
+   (fraicheur NaN, audit du 5 octobre 2026). */
+const PERISSABILITE = Object.assign(Object.create(null), {
   'edm': 0.95, 'drill': 0.80, 'trance': 0.70, 'rap fr': 0.62,
   'reggaeton': 0.60, 'pop': 0.50, 'tech house': 0.50, 'afro': 0.50,
   'dancehall': 0.45, 'hip hop': 0.45, 'garage': 0.42, 'drum and bass': 0.40,
@@ -44,7 +46,7 @@ const PERISSABILITE = {
   'variete': 0.10, 'rock': 0.10, 'country': 0.10, 'schlager': 0.10,
   'disco': 0.05, 'funk': 0.05,
   'motown': 0.00, 'hymne': 0.00, 'jazz': 0.00
-};
+});
 
 /* En dessous de ce nombre d'annees, un morceau est « d'aujourd'hui ». */
 const NEUF = 2;
