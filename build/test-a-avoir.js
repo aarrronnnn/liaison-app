@@ -75,6 +75,43 @@ function verifier(quoi, condition, detail) {
            e.soirees.length === 2 && e.n === 5, e.soirees.length + ' soirees, ' + e.n + ' demandes');
 }
 
+/* ------------------------------------------------------------
+   1quinquies. LE COMPTE NE GONFLE PAS.
+
+   majTendances() repasse sur toutes les demandes de la soiree a
+   chaque nouvelle demande, chacune avec son total du moment. Avant
+   le 6 octobre 2026, ce total etait ajoute a chaque passage : un
+   titre demande UNE fois, suivi de dix demandes sans rapport,
+   finissait a n = 11. On rejoue exactement cette boucle.
+   ------------------------------------------------------------ */
+{
+  let j = {};
+  const absent = { artist: 'Absent', title: 'Introuvable', n: 1, at: 10, lot: 500, soiree: 's1' };
+  for (let passage = 0; passage < 11; passage++) j = aavoir.noterEcart(j, absent);
+  const e = j[aavoir.cleDe('Absent', 'Introuvable')];
+  verifier('1quinquies. une demande, onze passages : compte 1',
+           e && e.n === 1, e && ('n = ' + e.n));
+
+  /* Deux autres personnes le demandent ensuite : le total de la ligne
+     passe a 3, on n'ajoute que l'ecart. */
+  for (let passage = 0; passage < 5; passage++)
+    j = aavoir.noterEcart(j, Object.assign({}, absent, { n: 3, at: 20 }));
+  verifier('1sexies. le total monte a 3, le compte suit sans doubler',
+           j[aavoir.cleDe('Absent', 'Introuvable')].n === 3, 'n = ' + j[aavoir.cleDe('Absent', 'Introuvable')].n);
+
+  /* Une autre soiree, une nouvelle ligne de demandes : elle s'ajoute. */
+  j = aavoir.noterEcart(j, { artist: 'Absent', title: 'Introuvable', n: 2, at: 99, lot: 900, soiree: 's2' });
+  const e2 = j[aavoir.cleDe('Absent', 'Introuvable')];
+  verifier('1septies. une autre soiree s\'ajoute (3 + 2) et se compte comme soiree',
+           e2.n === 5 && e2.soirees.length === 2, e2.n + ' demandes, ' + e2.soirees.length + ' soirees');
+
+  /* Le registre survit au journal relu depuis le disque. */
+  const relu = JSON.parse(JSON.stringify(j));
+  const apres = aavoir.noterEcart(relu, { artist: 'Absent', title: 'Introuvable', n: 2, at: 99, lot: 900, soiree: 's2' });
+  verifier('1octies. apres un redemarrage, rien n\'est recompte',
+           apres[aavoir.cleDe('Absent', 'Introuvable')].n === 5);
+}
+
 /* ---------- 2. une soiree vaut plus qu'une demande ---------- */
 {
   let j = {};

@@ -51,6 +51,12 @@ function newest(dir) {
       if (s.mtimeMs > bestT) { bestT = s.mtimeMs; best = p; }
     } catch (e) {}
   }
+  /* Sans cette ligne, le cache rendait null pendant les 30 s qui
+     suivent chaque relecture du dossier : le tour de boucle
+     s'arretait net, et le morceau pose sur la platine n'etait lu
+     qu'au releve suivant — jusqu'a une demi-minute de retard
+     (audit du 6 octobre 2026). virtualdj.js le faisait deja. */
+  _cacheDossier.best = best;
   return best;
 }
 
@@ -208,4 +214,4 @@ function start(opts, cb) {
   return { stop: () => clearInterval(iv) };
 }
 
-module.exports = { start, sessionsDir, strings };
+module.exports = { start, sessionsDir, strings, newest };

@@ -199,6 +199,49 @@ const dodo = ms => new Promise(r => setTimeout(r, ms));
     pool.close();
   }
 
+  /* ------------------------------------------------------------
+     7. DE BOUT EN BOUT AVEC UN LOGICIEL DE MIX : VIRTUALDJ.
+
+     Audit du 6 octobre 2026. On branche la vraie source VirtualDJ
+     sur un historique .m3u, dans l'app demarree :
+
+       7.   un morceau de la bibliotheque est retrouve par son
+            FICHIER, meme quand ses tags ne ressemblent a rien ;
+       7bis. un morceau absent de la bibliotheque ne laisse plus le
+            bandeau « en cours de calcul… » a vie : il dit pourquoi
+            il n'y a pas de reperes.
+     ------------------------------------------------------------ */
+  {
+    const HIST = path.join(BAC, 'History');
+    fs.mkdirSync(HIST, { recursive: true });
+    const m3u = path.join(HIST, 'session.m3u');
+    const deux = path.join(MUSIQUE, 'deux.wav');
+    fs.writeFileSync(m3u, '#EXTVDJ:<artist>Inconnu au bataillon</artist><title>Zzz sans rapport</title>\n' + deux + '\n');
+    await H['config:set'](null, { source: 'virtualdj', sourceOpts: { dir: HIST } });
+    let n = null;
+    const t7 = Date.now();
+    while (Date.now() - t7 < 6000) {
+      n = await H['now:get'](null);
+      if (n && /deux/i.test(n.title || '') && !n.horsBiblio) break;
+      await dodo(200);
+    }
+    verifier('7. VirtualDJ : retrouve par son fichier, tags trompeurs ou pas',
+             n && /deux/i.test(n.title || '') && !n.horsBiblio, n ? n.title + (n.horsBiblio ? ' (hors)' : '') : 'rien');
+
+    fs.appendFileSync(m3u, '#EXTVDJ:<artist>Groupe Absent</artist><title>Titre Introuvable</title>\n/nulle/part/absent.mp3\n');
+    let etat = null, note = '';
+    const t8 = Date.now();
+    while (Date.now() - t8 < 8000) {
+      n = await H['now:get'](null);
+      const s8 = await H['suggest'](null);
+      const avec = s8.find(r => r.plan);
+      if (n && n.horsBiblio && avec) { etat = avec.plan.etat; note = avec.plan.note || ''; if (etat !== 'calcul') break; }
+      await dodo(250);
+    }
+    verifier('7bis. hors bibliotheque : le bandeau le dit, il n\'attend plus',
+             etat === 'echec' && /hors biblioth/i.test(note), (etat || 'rien') + ' — ' + note);
+  }
+
   try { fs.rmSync(BAC, { recursive: true, force: true }); } catch (e) {}
   if (echecs) {
     console.error('\n' + echecs + ' cas de points de mix en echec.');

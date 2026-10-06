@@ -445,8 +445,10 @@ function majTendances() {
          nombre de demandes, qui distingue un trou dans la
          bibliotheque d'une tablee insistante.
          ------------------------------------------------------------ */
-      aavoir.noter(chargerJournal(), {
-        artist: r.artist, title: r.title, n: r.n, at: r.at,
+      /* noterEcart, pas noter : cette boucle repasse sur toutes les
+         demandes a CHAQUE nouvelle demande. Voir aavoir.js. */
+      aavoir.noterEcart(chargerJournal(), {
+        artist: r.artist, title: r.title, n: r.n, at: r.at, lot: r.first,
         soiree: (setlog && setlog.current && setlog.current.id) || soireeActiveId() || 'hors-soiree'
       });
       journalSale = true;
@@ -1401,6 +1403,14 @@ function scheduleStructRefresh() {
    ============================================================ */
 function planFor(nextTrack) {
   if (!current) return null;
+  /* Un morceau sans fichier (annonce par le logiciel de mix, absent
+     de la bibliotheque) n'aura JAMAIS de structure : ensureStructure
+     s'arrete net sans chemin. On le disait « en cours de calcul »,
+     indefiniment — exactement l'attente sans fin que ce bandeau
+     devait faire disparaitre (audit du 6 octobre 2026). */
+  if (!current.path) {
+    return { ok: false, etat: 'echec', note: 'Morceau hors bibliothèque : pas de repères de mix' };
+  }
   const a = structures.get(current.id), b = structures.get(nextTrack.id);
   /* Pas encore la : c'est la seule situation ou « en cours » est vrai. */
   if (!a || !b) return { ok: false, etat: 'calcul' };
@@ -2211,7 +2221,18 @@ function payloadNow() {
 function envoyerNow() { send('now', payloadNow()); }
 
 /* ---------------- source now-playing ---------------- */
-now.on('text', text => {
+now.on('text', (text, meta) => {
+  /* Une source qui connait le FICHIER (VirtualDJ) le donne : il
+     designe le morceau sans ambiguite, avant tout rapprochement de
+     texte. Le cas des copies sur deux disques passe par les alias. */
+  if (meta && meta.chemin) {
+    const t = chemins().get(libmod.cleChemin(meta.chemin));
+    if (t) {
+      if (!current || t.id !== current.id) setCurrent(t, 'detect');
+      send('raw', { text: text, matched: t.title });
+      return;
+    }
+  }
   const m = engine.match(text, library);
   if (m) {
     if (!current || m.track.id !== current.id) setCurrent(m.track, 'detect');
@@ -4444,7 +4465,11 @@ function regarderLEssai() {
     if (quoi.rappel) {
       license.state.vuRappelEssai = Date.now();
       license._save();
-      send('toast', { texte: moments.phraseRappel(st.trialLeft, b0) });
+      /* Tant que les vraies soirees ne sont pas faites, l'essai ne
+         se ferme pas : le rappel le dit, au lieu de compter des
+         jours qui ne decident de rien (voir moments.phraseRappel). */
+      const manque = Math.max(0, (st.trialSoireesRequis || 2) - (st.trialSoirees || 0));
+      send('toast', { texte: moments.phraseRappel(st.trialLeft, b0, manque) });
     }
     if (quoi.fin) {
       license.state.vuFinEssai = Date.now();

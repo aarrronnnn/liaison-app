@@ -33,6 +33,26 @@ if (!/^1 set plus tard, il te reste 1 jour /.test(p2)) { ko++; console.log('  EC
 if (!/^il te reste 3 jours/.test(p3)) { ko++; console.log('  ECHEC  phrase : sans bilan — ' + p3); }
 if (/perd|perdre|expire/i.test(p1 + p2 + p3)) { ko++; console.log('  ECHEC  phrase : vocabulaire de la peur'); }
 
+/* ------------------------------------------------------------
+   Le rappel ne contredit pas la regle des soirees.
+
+   Avant le 6 octobre 2026, un DJ qui n'avait encore joue aucune
+   vraie soiree lisait vers le cinquieme jour « il te reste 2 jours
+   d'essai » — alors que l'essai ne se ferme pas avant ses deux
+   soirees, et que le site et les mails le promettent. Tant qu'il
+   manque une soiree, la phrase ne compte pas de jours.
+   ------------------------------------------------------------ */
+const s2 = m.phraseRappel(2, { sets: 3 }, 2);
+const s1 = m.phraseRappel(2, { sets: 3 }, 1);
+const s0 = m.phraseRappel(2, { sets: 3 }, 0);
+if (/jours? d'essai|il te reste \d/.test(s2 + s1)) {
+  ko++; console.log('  ECHEC  rappel : des jours annonces alors que des soirees manquent — ' + s2);
+}
+if (!/ne se ferme pas avant tes deux/.test(s2)) { ko++; console.log('  ECHEC  rappel : deux soirees a jouer — ' + s2); }
+if (!/reste ouvert jusqu'à la deuxième/.test(s1)) { ko++; console.log('  ECHEC  rappel : une soiree a jouer — ' + s1); }
+if (!/il te reste 2 jours/.test(s0)) { ko++; console.log('  ECHEC  rappel : soirees faites, les jours comptent — ' + s0); }
+if (/perd|perdre|expire/i.test(s2 + s1)) { ko++; console.log('  ECHEC  rappel soirees : vocabulaire de la peur'); }
+
 /* Le premier debrief offert */
 function deb(nom, e, attendu) {
   const r = m.debriefAutorise(e);

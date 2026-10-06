@@ -2488,7 +2488,7 @@ let C = null, PACK = null, share = null, qrData = null;
 const HELP = {
   prolink: "rekordbox en mode PERFORMANCE avec Pro DJ Link actif, ou des CDJ sur le même réseau. C'est la seule source qui annonce le morceau CHARGÉ sur un deck, avant même qu'il soit joué. Le titre est retrouvé en croisant l'identifiant rekordbox avec un export XML.",
   serato: "Serato écrit sa session en direct. Rien à configurer : lance Serato, joue un morceau, Liaison suit.",
-  virtualdj: "VirtualDJ écrit la tracklist du jour dans Documents/VirtualDJ/Tracklists. Rien à configurer.",
+  virtualdj: "VirtualDJ écrit son historique dans son dossier History : Liaison le lit en direct. Si rien n'arrive, dans VirtualDJ : Réglages › Options, writeHistory sur Yes.",
   traktor: "Dans Traktor : Préférences > Broadcasting. Address 127.0.0.1, Port 8000, Mount /liaison, Format Ogg. Clique Broadcast : Traktor envoie le titre à chaque changement."
 };
 
@@ -5566,8 +5566,8 @@ window.liaison.clientGet().then(st => {
          Traktor, donc un DJ sur Serato qui cherche « port » ne
          trouverait rien du tout. La rubrique, elle, existe
          toujours, et c'est bien la reponse. */
-      ['Serato', 'Traktor', 'VirtualDJ', 'rekordbox : CDJ requis', 'port d\'écoute'],
-      'Liaison surveille les logiciels ouverts : le widget apparaît quand tu lances le tien, disparaît quand tu le fermes. <b>Serato, Traktor et VirtualDJ</b> sont lus sans matériel. <b>rekordbox</b> demande un CDJ, un XDJ ou un DJM sur le réseau — sinon, la loupe du widget.'],
+      ['Serato', 'Traktor', 'VirtualDJ', 'rekordbox : CDJ requis sous Windows', 'port d\'écoute'],
+      'Liaison surveille les logiciels ouverts : le widget apparaît quand tu lances le tien, disparaît quand tu le fermes. <b>Serato, Traktor et VirtualDJ</b> sont lus sans matériel. <b>rekordbox</b> aussi sur Mac ; sous Windows, il demande un CDJ, un XDJ ou un DJM sur le réseau — sinon, la loupe du widget.'],
     [/contexte/i, 'Contexte', 'Le pays et le type de soirée', 'contexte',
       'Un mariage à Lille et un club à Berlin n\'appellent pas les mêmes titres.',
       ['pays', 'type de soirée', '30 secondes'],

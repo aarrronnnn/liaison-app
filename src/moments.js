@@ -54,9 +54,25 @@ function aMontrer(e) {
 /**
  * La phrase du rappel. Elle parle de ce que la personne a fait,
  * pas de ce qu'elle va perdre.
+ *
+ * `soireesRestantes` : vraies soirees qui manquent encore pour que
+ * l'essai puisse se fermer (license.js). Tant qu'il en manque,
+ * l'essai NE SE FERME PAS : annoncer « il te reste 2 jours » vers
+ * le cinquieme jour etait faux, et contredisait mot pour mot ce
+ * que promettent le site et les mails (audit du 6 octobre 2026).
+ * On dit donc ce qui est vrai : ce qui reste a jouer.
  */
-function phraseRappel(jours, bilan) {
+function phraseRappel(jours, bilan, soireesRestantes) {
   const b = bilan || {};
+  const pass = 'Ensuite, un pass soirée à 4,95 € rouvre tout pour 48 h — ou un abonnement, si tu joues souvent.';
+  const reste = soireesRestantes | 0;
+  if (reste >= 2) {
+    return 'Ton essai ne se ferme pas avant tes deux premières vraies soirées avec Liaison ' +
+      '(8 titres et 45 minutes chacune). ' + pass;
+  }
+  if (reste === 1) {
+    return 'Une vraie soirée jouée avec Liaison : ton essai reste ouvert jusqu\'à la deuxième. ' + pass;
+  }
   let fait = '';
   if (b.enchainements >= 20) fait = b.enchainements + ' enchaînements plus tard, ';
   else if (b.sets) fait = b.sets + (b.sets > 1 ? ' sets plus tard, ' : ' set plus tard, ');

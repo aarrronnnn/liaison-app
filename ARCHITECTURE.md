@@ -748,7 +748,7 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 
 ## 13. Les tests
 
-`npm run verifier` enchaine vingt-deux suites. Toutes doivent passer.
+`npm run verifier` enchaine toutes les suites de `package.json` (53 en 1.5.7). Toutes doivent passer.
 
 | Suite | Ce qu'elle protege |
 |---|---|
@@ -779,6 +779,7 @@ Tout dans `app.getPath('userData')`, tout ecrit par `ecrire.js`.
 | `test-alphabets` | toutes les ecritures : reconnaitre, chercher et dedoublonner en arabe, cyrillique, grec, coreen, japonais ; ø ß ł ı replies ; l'historique Serato lu par sa structure |
 | `test-donnees-abimees` | sets.json de travers ne gele plus la soiree ; soirees.json et gout.json par ecrire.js ; la copie de secours n'est jamais remplacee par un fichier abime ; une ecriture ratee est dite au DJ ; le serveur des invites qui n'a pas demarre ne se dit pas en marche |
 | `test-file-analyse` | la file d'analyse va au bout malgre des fichiers effaces ou un SSD debranche ; decodeAll borne a 20 minutes |
+| `test-sources-decks` | audit du 6/10/2026 (1.5.7) : ce que le mail promet. **Traktor** — un vrai flux Ogg Vorbis fabrique, pousse octet par octet, sur une vraie prise : le titre arrive, la connexion reste ouverte, branche en route il se recale, le port se libere en pleine diffusion. **VirtualDJ** — l'historique `History/*.m3u` (`#EXTVDJ`), dans Documents, Application Support (Mac) et `%LOCALAPPDATA%` (Windows), avec le chemin du fichier ; l'historique de la veille n'est pas « en cours ». **Serato** — le morceau suivant en moins de 4 s (il fallait jusqu'a 30) |
 
 Banc de mesure, hors `verifier` : `node build/banc-reconnaissance.js` —
 le jeu d'evaluation de la reconnaissance du deck (juste / rien / faux,
@@ -919,6 +920,23 @@ prix tout en facturant le nouveau.
    (`lireJSON` rend la copie de secours). La copie `.bak` n'est faite
    que d'un fichier qui se relit. Une ecriture ratee rend `false` —
    ne pas l'ignorer : `ecrire.surEchec` la remonte au DJ.
+16. **Une source de deck n'est vraie que testee contre ce que le
+   logiciel ECRIT vraiment** (1.5.7). Traktor diffuse en Ogg Vorbis et
+   met le titre DANS le flux (commentaires Vorbis, un flux logique par
+   morceau) : `/admin/metadata` n'est que le canal MP3, Traktor ne
+   l'appelle jamais, et repondre « OK » puis fermer coupe la diffusion.
+   VirtualDJ ecrit `History/*.m3u`, pas `Tracklists`. Les deux etaient
+   muettes depuis le premier jour sans qu'aucun essai ne le voie.
+   `newest()` dans `serato.js` doit memoriser `best` : sans ca, la
+   boucle s'arretait 30 s apres chaque relecture.
+17. **`aavoir.noterEcart`, pas `noter`, dans `majTendances()`** : la
+   boucle repasse sur toutes les demandes a chaque nouvelle demande ;
+   `noter` y ajoutait le total a chaque passage (un titre demande une
+   fois finissait a n = 11). Le registre `verse` est garde par ligne de
+   demandes (`r.first`) dans le journal lui-meme.
+18. **Le rappel d'essai ne compte pas de jours tant que des vraies
+   soirees manquent** : l'essai ne se ferme pas avant elles, et le site
+   le promet. `moments.phraseRappel(jours, bilan, soireesRestantes)`.
 
 ---
 

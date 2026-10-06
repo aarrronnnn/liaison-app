@@ -79,6 +79,46 @@ function noter(journal, entree) {
   return j;
 }
 
+/* ------------------------------------------------------------
+   Ce que la soiree en cours a DEJA verse au journal.
+
+   majTendances() repasse sur TOUTES les demandes de la soiree a
+   chaque nouvelle demande, et chacune porte son total du moment
+   (r.n). noter() ajoutait ce total a chaque passage : un titre
+   demande une fois, suivi de dix autres demandes sans rapport,
+   finissait a n = 11 (audit du 6 octobre 2026). Le chiffre affiche
+   etait faux et l'ordre de la liste avec.
+
+   On ne verse donc que l'ECART depuis le dernier passage. Le
+   compteur r.n appartient a UNE ligne de demandes (`lot` : sa date
+   de creation dans le serveur des invites) ; c'est par lot qu'on
+   retient ce qui a deja ete verse. Le registre est garde dans
+   l'entree elle-meme : il survit a un redemarrage de l'app en
+   pleine soiree, la ou un registre en memoire aurait tout
+   recompte. Sans lot, on retombe sur l'identifiant de soiree.
+   ------------------------------------------------------------ */
+function noterEcart(journal, entree) {
+  const cle = cleDe(entree.artist, entree.title);
+  if (!cle.replace('|', '').trim()) return journal;
+  const lot = String(entree.lot || entree.soiree || '');
+  const j = journal || {};
+  const avant = j[cle];
+  const deja = (avant && avant.verse && lot && avant.verse[lot]) || 0;
+  const total = Math.max(1, entree.n || 1);
+  if (total <= deja) return j;
+  const out = noter(j, Object.assign({}, entree, { n: total - deja }));
+  const e = out[cle];
+  if (lot) {
+    e.verse = e.verse || {};
+    e.verse[lot] = total;
+    /* Le registre ne garde que les derniers lots : au-dela, une
+       ligne de demandes close ne recevra plus jamais de demande. */
+    const ids = Object.keys(e.verse);
+    if (ids.length > 8) for (const k of ids.slice(0, ids.length - 8)) delete e.verse[k];
+  }
+  return out;
+}
+
 /* Le journal ne grandit pas sans fin : au-dela du plafond, on
    oublie ce qui a ete demande une seule fois et il y a longtemps.
    Un titre reclame une fois il y a huit mois n'est pas un manque,
@@ -207,4 +247,4 @@ function tamiser(classement, opt) {
   });
 }
 
-module.exports = { cleDe, noter, elaguer, poids, manques, tamiser };
+module.exports = { cleDe, noter, noterEcart, elaguer, poids, manques, tamiser };
